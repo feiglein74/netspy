@@ -357,6 +357,10 @@ func getHostname(host scanner.Host) string {
 	if host.Hostname != "" {
 		return host.Hostname
 	}
+	return "-"
+}
+
+func getVendor(host scanner.Host) string {
 	if host.Vendor != "" {
 		return host.Vendor
 	}
@@ -403,9 +407,9 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 
 	// Clear and print header
 	clearLine()
-	color.Cyan("IP Address      Status    Hostname/Vendor           First Seen    Uptime/Downtime  MAC Address\n")
+	color.Cyan("IP Address      Status    Hostname                  MAC Address        Vendor            First Seen    Uptime/Downtime\n")
 	clearLine()
-	color.White("%s\n", strings.Repeat("─", 100))
+	color.White("%s\n", strings.Repeat("─", 120))
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -440,17 +444,23 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 			mac = "-"
 		}
 
+		vendor := getVendor(state.Host)
+		if len(vendor) > 16 {
+			vendor = vendor[:13] + "..."
+		}
+
 		firstSeen := state.FirstSeen.Format("15:04:05")
 		statusDuration := formatDuration(time.Since(state.StatusSince))
 
-		fmt.Printf("%-15s %s %-7s %-25s %-13s %-16s %s\n",
+		fmt.Printf("%-15s %s %-7s %-25s %-18s %-17s %-13s %s\n",
 			ipStr,
 			statusIcon,
 			statusColor(statusText),
 			hostname,
+			mac,
+			vendor,
 			firstSeen,
 			statusDuration,
-			mac,
 		)
 	}
 
@@ -543,12 +553,6 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 			if err == nil && len(names) > 0 {
 				s.Host.Hostname = names[0]
 				s.Host.HostnameSource = "dns"
-				return
-			}
-
-			// If we have a vendor, use that as fallback and mark it
-			if s.Host.Vendor != "" {
-				s.Host.HostnameSource = "vendor"
 			}
 		}(ipStr, state)
 	}
