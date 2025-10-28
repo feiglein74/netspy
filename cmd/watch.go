@@ -615,8 +615,8 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			if int(elapsed.Seconds())%5 == 0 {
 				moveCursorUp(tableLines)
 				redrawTable(states, scanCount, scanDuration)
-				// After redraw, we're at the end of the table, add status line
-				clearLine()
+				// After redraw, cursor is at start of new line, clear it
+				fmt.Print("\033[2K")  // Clear line without \r (we're already at line start)
 			} else {
 				// Not redrawing, just update status line in place
 				fmt.Print("\r")
