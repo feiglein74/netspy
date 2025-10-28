@@ -115,12 +115,15 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		currentIPs := make(map[string]bool)
 
 		for _, host := range hosts {
-			if !host.Online {
+			ipStr := host.IP.String()
+
+			// Mark as seen if online
+			if host.Online {
+				currentIPs[ipStr] = true
+			} else {
+				// Skip offline hosts from this scan, but don't mark as seen
 				continue
 			}
-
-			ipStr := host.IP.String()
-			currentIPs[ipStr] = true
 
 			state, exists := deviceStates[ipStr]
 			now := time.Now()
@@ -242,7 +245,87 @@ func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.
 
 	// Read refreshed ARP table
 	finalHosts := readCurrentARPTable(netCIDR)
+
+	// Add localhost if it's in the network range
+	localhostIP := getLocalhostIP(netCIDR)
+	if localhostIP != nil {
+		finalHosts = append(finalHosts, scanner.Host{
+			IP:     localhostIP,
+			MAC:    getLocalMAC(),
+			Vendor: "localhost",
+			Online: true,
+		})
+	}
+
 	return finalHosts, nil
+}
+
+// getLocalhostIP returns the local IP address in the given network, or nil if not found
+func getLocalhostIP(network *net.IPNet) net.IP {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+
+	for _, iface := range interfaces {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+
+			// Check if IP is in the target network
+			if ip != nil && network.Contains(ip) && ip.To4() != nil {
+				return ip
+			}
+		}
+	}
+	return nil
+}
+
+// getLocalMAC returns the MAC address of the primary network interface
+func getLocalMAC() string {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+
+	for _, iface := range interfaces {
+		// Skip loopback and interfaces without MAC
+		if iface.Flags&net.FlagLoopback != 0 || len(iface.HardwareAddr) == 0 {
+			continue
+		}
+
+		// Get addresses for this interface
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		// Check if interface has a valid IP
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+
+			if ip != nil && ip.To4() != nil {
+				return iface.HardwareAddr.String()
+			}
+		}
+	}
+	return ""
 }
 
 func performARPScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.Host, error) {
