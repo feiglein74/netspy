@@ -113,6 +113,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		}
 
 		// Update device states
+		// Use scanStart for all timestamps to ensure consistency across all devices in the same scan
 		currentIPs := make(map[string]bool)
 
 		for _, host := range hosts {
@@ -127,11 +128,10 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			}
 
 			state, exists := deviceStates[ipStr]
-			now := time.Now()
 
 			if exists {
 				// Update existing device
-				state.LastSeen = now
+				state.LastSeen = scanStart
 
 				// Preserve hostname and source if already resolved
 				oldHostname := state.Host.Hostname
@@ -148,17 +148,17 @@ func runWatch(cmd *cobra.Command, args []string) error {
 				if state.Status == "offline" {
 					// Device came back online
 					state.Status = "online"
-					state.StatusSince = now
+					state.StatusSince = scanStart
 					state.FlapCount++ // Increment flap counter
 				}
 			} else {
-				// New device
+				// New device - use scanStart so all devices in this scan have same FirstSeen
 				deviceStates[ipStr] = &DeviceState{
 					Host:        host,
-					FirstSeen:   now,
-					LastSeen:    now,
+					FirstSeen:   scanStart,
+					LastSeen:    scanStart,
 					Status:      "online",
-					StatusSince: now,
+					StatusSince: scanStart,
 				}
 			}
 		}
@@ -166,9 +166,9 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		// Check for devices that went offline
 		for ipStr, state := range deviceStates {
 			if !currentIPs[ipStr] && state.Status == "online" {
-				// Device went offline
+				// Device went offline - use scanStart for consistency
 				state.Status = "offline"
-				state.StatusSince = time.Now()
+				state.StatusSince = scanStart
 				state.FlapCount++ // Increment flap counter
 			}
 		}
