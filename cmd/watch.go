@@ -616,25 +616,25 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			if int(elapsed.Seconds())%5 == 0 {
 				moveCursorUp(tableLines)
 				redrawTable(states, scanCount, scanDuration)
-			} else {
-				// Normal countdown update - just update the status line
-				fmt.Print("\r")
-				clearLine()
-
-				// Count stats
-				onlineCount := 0
-				offlineCount := 0
-				for _, state := range states {
-					if state.Status == "online" {
-						onlineCount++
-					} else {
-						offlineCount++
-					}
-				}
-
-				fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: %s",
-					scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
 			}
+
+			// Always update countdown (whether table was redrawn or not)
+			fmt.Print("\r")
+			clearLine()
+
+			// Count stats
+			onlineCount := 0
+			offlineCount := 0
+			for _, state := range states {
+				if state.Status == "online" {
+					onlineCount++
+				} else {
+					offlineCount++
+				}
+			}
+
+			fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: %s",
+				scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
 		}
 	}
 }
