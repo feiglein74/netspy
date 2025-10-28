@@ -176,15 +176,16 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		// If first scan, just print table
 		// Otherwise, move cursor up and redraw
 		if scanCount > 1 {
-			// Move cursor up to table start
-			linesToClear := len(deviceStates) + 3 // header + separator + devices + status line
+			// Move cursor up from status line to table header
+			linesToClear := len(deviceStates) + 2 // separator + devices (we're ON status line)
 			moveCursorUp(linesToClear)
 		}
 
 		// Redraw entire table
 		redrawTable(deviceStates, scanCount, time.Since(scanStart))
-		// Total lines to move back: header + separator + devices + status line
-		tableStartLine = len(deviceStates) + 3
+		// Lines to move UP from status line to header: separator + devices + status line
+		// (We're ON the status line, need to go up to reach header)
+		tableStartLine = len(deviceStates) + 2
 
 		// Calculate next scan time
 		scanDuration := time.Since(scanStart)

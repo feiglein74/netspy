@@ -28,7 +28,8 @@
       "Write",
       "Read",
       "Bash(timeout 15 go run:*)",
-      "Bash(timeout 12 go run:*)"
+      "Bash(timeout 12 go run:*)",
+      "Bash(timeout 18 go run:*)"
     ],
     "deny": [],
     "ask": []
