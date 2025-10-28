@@ -19,7 +19,16 @@
       "Bash(timeout 60 go run:*)",
       "WebFetch(domain:api.macvendors.com)",
       "WebSearch",
-      "Bash(timeout 45 go run:*)"
+      "Bash(timeout 45 go run:*)",
+      "Bash(git reset:*)",
+      "WebFetch(domain:maclookup.app)",
+      "Bash(timeout 25 go run:*)",
+      "Bash(rm:*)",
+      "Edit",
+      "Write",
+      "Read",
+      "Bash(timeout 15 go run:*)",
+      "Bash(timeout 12 go run:*)"
     ],
     "deny": [],
     "ask": []

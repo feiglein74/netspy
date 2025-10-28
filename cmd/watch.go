@@ -573,10 +573,8 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		)
 	}
 
-	// Print status line (no newline - cursor stays on status line)
-	clearLine()
-	fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: calculating...",
-		scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration))
+	// Don't print status line here - showCountdownWithTableUpdates handles it
+	// This prevents "calculating..." from appearing during table redraws
 }
 
 func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, tableLines int) {
@@ -616,11 +614,13 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			if int(elapsed.Seconds())%5 == 0 {
 				moveCursorUp(tableLines)
 				redrawTable(states, scanCount, scanDuration)
+				// After redraw, we're at the end of the table, add status line
+				clearLine()
+			} else {
+				// Not redrawing, just update status line in place
+				fmt.Print("\r")
+				clearLine()
 			}
-
-			// Always update countdown (whether table was redrawn or not)
-			fmt.Print("\r")
-			clearLine()
 
 			// Count stats
 			onlineCount := 0
