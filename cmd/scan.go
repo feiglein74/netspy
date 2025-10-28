@@ -310,7 +310,7 @@ func readCurrentARPTable(network *net.IPNet) []scanner.Host {
 					host := scanner.Host{
 						IP:     ip,
 						MAC:    macFormatted,
-						Vendor: getMACVendor(macFormatted),
+						Vendor: discovery.GetMACVendor(macFormatted),
 						Online: true,
 					}
 
@@ -377,45 +377,6 @@ func populateARPTable(network *net.IPNet) error {
 	return nil
 }
 
-func getMACVendor(mac string) string {
-	if len(mac) < 8 {
-		return ""
-	}
-
-	oui := strings.ToUpper(mac[:8]) // First 3 octets: "AA:BB:CC"
-
-	vendors := map[string]string{
-		"00:50:56": "VMware",
-		"08:00:27": "VirtualBox",
-		"52:54:00": "QEMU",
-		"00:0C:29": "VMware",
-		"00:1C:42": "Parallels",
-		"00:03:FF": "Microsoft",
-		"00:15:5D": "Microsoft Hyper-V",
-		"D4:3D:7E": "Amazon",
-		"02:00:4C": "Docker",
-		"F4:8E:38": "Apple",
-		"3C:07:54": "Apple",
-		"B8:E8:56": "Apple",
-		"68:5B:35": "Apple",
-		"00:1B:63": "Apple",
-		"7C:D1:C3": "Apple",
-		"A4:83:E7": "Apple",
-		"DC:A6:32": "Raspberry Pi",
-		"B8:27:EB": "Raspberry Pi",
-		"E4:5F:01": "Raspberry Pi",
-		"28:CD:C1": "Raspberry Pi",
-		"00:50:B6": "Intel",
-		"AC:1F:6B": "Intel",
-		"00:E0:4C": "Realtek",
-	}
-
-	if vendor, exists := vendors[oui]; exists {
-		return vendor
-	}
-
-	return ""
-}
 
 func getModeName() string {
 	if arp {
