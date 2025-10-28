@@ -391,7 +391,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 
 	// Clear and print header
 	clearLine()
-	color.Cyan("IP Address      Status   Hostname/Vendor           First Seen    Uptime/Downtime  MAC Address\n")
+	color.Cyan("IP Address      Status    Hostname/Vendor           First Seen    Uptime/Downtime  MAC Address\n")
 	clearLine()
 	color.White("%s\n", strings.Repeat("─", 100))
 
@@ -431,7 +431,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		firstSeen := state.FirstSeen.Format("15:04:05")
 		statusDuration := formatDuration(time.Since(state.StatusSince))
 
-		fmt.Printf("%-15s %s %-6s %-25s %-13s %-16s %s\n",
+		fmt.Printf("%-15s %s %-7s %-25s %-13s %-16s %s\n",
 			ipStr,
 			statusIcon,
 			statusColor(statusText),
