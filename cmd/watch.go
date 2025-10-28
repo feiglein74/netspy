@@ -659,7 +659,8 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 }
 
 func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState) {
-	// Perform DNS and NetBIOS lookups for all online hosts in the background
+	// Perform comprehensive hostname lookups for all online hosts in the background
+	// Uses: DNS, mDNS/Bonjour, NetBIOS, and LLMNR
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 10) // Limit concurrent lookups
 
@@ -681,21 +682,14 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 				defer func() { <-semaphore }()
 			}
 
-			// Try NetBIOS first (faster for Windows hosts)
+			// Use the new comprehensive hostname resolution
 			parsedIP := net.ParseIP(ip)
 			if parsedIP != nil {
-				if name, err := discovery.QueryNetBIOSName(parsedIP, 500*time.Millisecond); err == nil && name != "" {
-					s.Host.Hostname = name
-					s.Host.HostnameSource = "netbios"
-					return
+				result := discovery.ResolveBackground(parsedIP, 1*time.Second)
+				if result.Hostname != "" {
+					s.Host.Hostname = result.Hostname
+					s.Host.HostnameSource = result.Source
 				}
-			}
-
-			// Fallback to DNS lookup
-			names, err := net.LookupAddr(ip)
-			if err == nil && len(names) > 0 {
-				s.Host.Hostname = names[0]
-				s.Host.HostnameSource = "dns"
 			}
 
 			// Update device type after hostname is resolved

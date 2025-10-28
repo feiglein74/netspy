@@ -286,10 +286,12 @@ func enhanceHost(host scanner.Host) scanner.Host {
 		enhanced.RTT = time.Since(start)
 	}
 
-	// Add hostname if not already present
+	// Add hostname if not already present - use fast resolution for scans
 	if enhanced.Hostname == "" {
-		if names, err := net.LookupAddr(host.IP.String()); err == nil && len(names) > 0 {
-			enhanced.Hostname = names[0]
+		result := discovery.ResolveFast(host.IP, 500*time.Millisecond)
+		if result.Hostname != "" {
+			enhanced.Hostname = result.Hostname
+			enhanced.HostnameSource = result.Source
 		}
 	}
 
