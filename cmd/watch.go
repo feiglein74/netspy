@@ -183,6 +183,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 		// Redraw entire table
 		redrawTable(deviceStates, scanCount, time.Since(scanStart))
+		// Total lines to move back: header + separator + devices + status line
 		tableStartLine = len(deviceStates) + 3
 
 		// Calculate next scan time
