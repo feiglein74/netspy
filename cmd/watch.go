@@ -462,15 +462,21 @@ func isLocallyAdministered(mac string) bool {
 }
 
 // formatMAC formats MAC address with color coding for locally-administered addresses
+// Returns the formatted string with proper padding to maintain column alignment
 func formatMAC(mac string) string {
 	if mac == "" || mac == "-" {
 		return "-"
 	}
+
+	// Pad the MAC address to 18 characters first, then apply color
+	// This ensures ANSI color codes don't affect column alignment
+	paddedMAC := fmt.Sprintf("%-18s", mac)
+
 	if isLocallyAdministered(mac) {
 		// Yellow color for locally-administered MACs
-		return color.YellowString(mac)
+		return color.YellowString(paddedMAC)
 	}
-	return mac
+	return paddedMAC
 }
 
 func formatDuration(d time.Duration) string {
@@ -556,12 +562,12 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		firstSeen := state.FirstSeen.Format("15:04:05")
 		statusDuration := formatDuration(time.Since(state.StatusSince))
 
-		fmt.Printf("%-15s %s %-7s %-25s %-18s %-17s %-13s %s\n",
+		fmt.Printf("%-15s %s %-7s %-25s %s %-17s %-13s %s\n",
 			ipStr,
 			statusIcon,
 			statusColor(statusText),
 			hostname,
-			mac,
+			mac, // Already padded by formatMAC
 			vendor,
 			firstSeen,
 			statusDuration,
