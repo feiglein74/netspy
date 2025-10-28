@@ -620,16 +620,26 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				return
 			}
 
-			// Every 5 seconds, redraw entire table to catch DNS updates
-			// But only once per 5-second mark (avoid double-redraw if processing is slow)
+			// Every 5 seconds, do something useful: alternate between DNS updates and reachability checks
+			// But only once per 5-second mark (avoid double-processing if slow)
 			if currentSecond%5 == 0 && currentSecond != lastRedraw {
 				lastRedraw = currentSecond
-				moveCursorUp(tableLines)
-				redrawTable(states, scanCount, scanDuration)
-				// After redraw, cursor is at start of new line, clear it
-				fmt.Print("\033[2K")  // Clear line without \r (we're already at line start)
+
+				// Alternate: DNS update on odd multiples (5, 15, 25...), reachability on even (10, 20, 30...)
+				if (currentSecond/5)%2 == 1 {
+					// DNS update: just redraw table
+					moveCursorUp(tableLines)
+					redrawTable(states, scanCount, scanDuration)
+					fmt.Print("\033[2K")
+				} else {
+					// Reachability check: quickly check if devices are still online
+					performQuickReachabilityCheck(states)
+					moveCursorUp(tableLines)
+					redrawTable(states, scanCount, scanDuration)
+					fmt.Print("\033[2K")
+				}
 			} else {
-				// Not redrawing, just update status line in place
+				// Not doing anything special, just update status line in place
 				fmt.Print("\r")
 				clearLine()
 			}
@@ -655,6 +665,60 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
 		}
 	}
+}
+
+// performQuickReachabilityCheck quickly checks if online devices are still reachable
+// Updates RTT and online/offline status without full ARP scan
+func performQuickReachabilityCheck(deviceStates map[string]*DeviceState) {
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 30) // Limit concurrent checks
+
+	for ipStr, state := range deviceStates {
+		// Only check devices that were online
+		if state.Status != "online" {
+			continue
+		}
+
+		wg.Add(1)
+		go func(ip string, s *DeviceState) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			// Quick RTT check on the most likely port
+			parsedIP := net.ParseIP(ip)
+			if parsedIP == nil {
+				return
+			}
+
+			// Try to measure RTT (same logic as measureRTTForHosts but faster timeout)
+			measured := false
+			start := time.Now()
+
+			// Try common ports with short timeout
+			ports := []string{"80", "443", "22", "445", "135"}
+			for _, port := range ports {
+				if conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, port), 200*time.Millisecond); err == nil {
+					conn.Close()
+					s.Host.RTT = time.Since(start)
+					measured = true
+					break
+				}
+			}
+
+			// Update RTT and LastSeen if reachable
+			// NOTE: We don't change online/offline status here - that's only done by full ARP scans
+			// This is because many devices (IoT, phones with privacy) have no open ports
+			if measured {
+				now := time.Now()
+				s.LastSeen = now
+				// RTT already updated above
+			}
+			// If not measured, we just keep the old RTT - device might still be online but with no open ports
+		}(ipStr, state)
+	}
+
+	wg.Wait()
 }
 
 func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState) {
