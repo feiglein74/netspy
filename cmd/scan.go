@@ -314,10 +314,8 @@ func readCurrentARPTable(network *net.IPNet) []scanner.Host {
 						Online: true,
 					}
 
-					// Try hostname lookup
-					if names, err := net.LookupAddr(ip.String()); err == nil && len(names) > 0 {
-						host.Hostname = names[0]
-					}
+					// SKIP hostname lookup here - it's too slow (blocks for 2-5 seconds per host!)
+					// Hostname lookups should be done asynchronously if needed
 
 					hosts = append(hosts, host)
 				}

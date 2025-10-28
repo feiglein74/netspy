@@ -29,6 +29,7 @@ type Config struct {
 	RateLimit   time.Duration
 	Fast        bool
 	Thorough    bool
+	Quiet       bool // Suppress progress output
 }
 
 // Scanner performs network discovery
@@ -39,17 +40,19 @@ type Scanner struct {
 
 // New creates a new scanner instance
 func New(config Config) *Scanner {
-	fmt.Printf("🔧 Scanner mode: ")
-	if config.Fast {
-		fmt.Printf("Fast (speed over accuracy)\n")
-	} else if config.Thorough {
-		fmt.Printf("Thorough (accuracy over speed)\n")
-	} else {
-		fmt.Printf("Balanced (good speed + accuracy)\n")
-	}
+	if !config.Quiet {
+		fmt.Printf("🔧 Scanner mode: ")
+		if config.Fast {
+			fmt.Printf("Fast (speed over accuracy)\n")
+		} else if config.Thorough {
+			fmt.Printf("Thorough (accuracy over speed)\n")
+		} else {
+			fmt.Printf("Balanced (good speed + accuracy)\n")
+		}
 
-	fmt.Printf("🔧 Config: %d workers, %v timeout\n",
-		config.Concurrency, config.Timeout)
+		fmt.Printf("🔧 Config: %d workers, %v timeout\n",
+			config.Concurrency, config.Timeout)
+	}
 
 	return &Scanner{
 		config: config,
@@ -69,7 +72,9 @@ func (s *Scanner) ScanHosts(ips []net.IP) ([]Host, error) {
 	semaphore := make(chan struct{}, s.config.Concurrency)
 	total := len(ips)
 
-	fmt.Printf("🚀 Scanning %d hosts...\n", total)
+	if !s.config.Quiet {
+		fmt.Printf("🚀 Scanning %d hosts...\n", total)
+	}
 	start := time.Now()
 
 	// Pre-allocate results
@@ -93,21 +98,23 @@ func (s *Scanner) ScanHosts(ips []net.IP) ([]Host, error) {
 				mutex.Unlock()
 			}
 
-			// Progress tracking
-			done := atomic.AddInt64(&completed, 1)
-			if done%20 == 0 || done == int64(total) {
-				elapsed := time.Since(start)
-				rate := float64(done) / elapsed.Seconds()
-				online := 0
-				mutex.Lock()
-				for _, h := range results {
-					if h.Online {
-						online++
+			// Progress tracking (only if not quiet)
+			if !s.config.Quiet {
+				done := atomic.AddInt64(&completed, 1)
+				if done%20 == 0 || done == int64(total) {
+					elapsed := time.Since(start)
+					rate := float64(done) / elapsed.Seconds()
+					online := 0
+					mutex.Lock()
+					for _, h := range results {
+						if h.Online {
+							online++
+						}
 					}
+					mutex.Unlock()
+					fmt.Printf("⏳ %d/%d scanned, %d found (%.0f/sec)\n",
+						done, total, online, rate)
 				}
-				mutex.Unlock()
-				fmt.Printf("⏳ %d/%d scanned, %d found (%.0f/sec)\n",
-					done, total, online, rate)
 			}
 		}(ip)
 	}
@@ -122,9 +129,11 @@ func (s *Scanner) ScanHosts(ips []net.IP) ([]Host, error) {
 		}
 	}
 
-	fmt.Printf("✅ Scan completed in %.1fs (%.0f hosts/sec)\n",
-		elapsed.Seconds(), float64(total)/elapsed.Seconds())
-	fmt.Printf("📊 Found %d online hosts out of %d scanned\n\n", onlineCount, total)
+	if !s.config.Quiet {
+		fmt.Printf("✅ Scan completed in %.1fs (%.0f hosts/sec)\n",
+			elapsed.Seconds(), float64(total)/elapsed.Seconds())
+		fmt.Printf("📊 Found %d online hosts out of %d scanned\n\n", onlineCount, total)
+	}
 
 	return results, nil
 }
