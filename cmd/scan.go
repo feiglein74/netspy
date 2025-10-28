@@ -16,6 +16,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -88,6 +89,11 @@ func init() {
 	}
 }
 
+// isQuiet checks if quiet mode is enabled
+func isQuiet() bool {
+	return viper.GetBool("quiet")
+}
+
 func runScan(cmd *cobra.Command, args []string) error {
 	network := args[0]
 
@@ -111,10 +117,12 @@ func runScan(cmd *cobra.Command, args []string) error {
 	config := createScanConfig()
 	s := scanner.New(config)
 
-	// Print scan info
-	mode := getModeName()
-	color.Cyan("🔍 Scanning %s (%d hosts) in %s mode\n", network, len(hosts), mode)
-	color.White("⚙️  Workers: %d, Timeout: %v\n\n", config.Concurrency, config.Timeout)
+	// Print scan info (unless quiet mode)
+	if !isQuiet() {
+		mode := getModeName()
+		color.Cyan("🔍 Scanning %s (%d hosts) in %s mode\n", network, len(hosts), mode)
+		color.White("⚙️  Workers: %d, Timeout: %v\n\n", config.Concurrency, config.Timeout)
+	}
 
 	// Perform scan
 	results, err := s.ScanHosts(hosts)
@@ -127,8 +135,12 @@ func runScan(cmd *cobra.Command, args []string) error {
 }
 
 func runHybridScan(network string) error {
-	color.Cyan("🚀 Hybrid scan: ARP discovery + ping/port details\n")
-	color.Yellow("💡 This combines accuracy of ARP with details from ping/ports\n\n")
+	quiet := isQuiet()
+
+	if !quiet {
+		color.Cyan("🚀 Hybrid scan: ARP discovery + ping/port details\n")
+		color.Yellow("💡 This combines accuracy of ARP with details from ping/ports\n\n")
+	}
 
 	// Parse network
 	_, netCIDR, err := net.ParseCIDR(network)
@@ -137,35 +149,53 @@ func runHybridScan(network string) error {
 	}
 
 	// Step 1: ARP Discovery
-	color.Cyan("📋 Step 1: ARP-based host discovery...\n")
+	if !quiet {
+		color.Cyan("📋 Step 1: ARP-based host discovery...\n")
+	}
 
 	// Populate ARP table first
-	color.Cyan("🔄 Populating ARP table...\n")
+	if !quiet {
+		color.Cyan("🔄 Populating ARP table...\n")
+	}
 	if err := populateARPTable(netCIDR); err != nil {
-		color.Yellow("⚠️  Warning: %v\n", err)
+		if !quiet {
+			color.Yellow("⚠️  Warning: %v\n", err)
+		}
 	}
 
 	// Read ARP table
 	arpHosts := readCurrentARPTable(netCIDR)
-	color.Green("✅ ARP found %d active hosts\n\n", len(arpHosts))
+	if !quiet {
+		color.Green("✅ ARP found %d active hosts\n\n", len(arpHosts))
+	}
 
 	if len(arpHosts) == 0 {
-		color.Red("❌ No hosts found via ARP\n")
+		if !quiet {
+			color.Red("❌ No hosts found via ARP\n")
+		}
 		return nil
 	}
 
 	// Step 2: Ping + Port details for ARP-discovered hosts
-	color.Cyan("📡 Step 2: Getting ping/port details for discovered hosts...\n")
+	if !quiet {
+		color.Cyan("📡 Step 2: Getting ping/port details for discovered hosts...\n")
+	}
 	enhancedHosts := enhanceHostsWithDetails(arpHosts)
 
-	color.Green("✅ Enhanced %d hosts with ping/port details\n\n", len(enhancedHosts))
+	if !quiet {
+		color.Green("✅ Enhanced %d hosts with ping/port details\n\n", len(enhancedHosts))
+	}
 
 	// Output results
 	return output.PrintResults(enhancedHosts, format)
 }
 
 func runARPScan(network string) error {
-	color.Yellow("🔧 ARP scan started for %s\n", network)
+	quiet := isQuiet()
+
+	if !quiet {
+		color.Yellow("🔧 ARP scan started for %s\n", network)
+	}
 
 	// Parse network
 	_, netCIDR, err := net.ParseCIDR(network)
@@ -173,24 +203,38 @@ func runARPScan(network string) error {
 		return fmt.Errorf("invalid CIDR: %v", err)
 	}
 
-	color.Yellow("🔧 Network parsed successfully: %s\n", netCIDR.String())
+	if !quiet {
+		color.Yellow("🔧 Network parsed successfully: %s\n", netCIDR.String())
+	}
 
 	// Step 1: Check current ARP table
-	color.Cyan("📋 Step 1: Checking current ARP table...\n")
+	if !quiet {
+		color.Cyan("📋 Step 1: Checking current ARP table...\n")
+	}
 	currentHosts := readCurrentARPTable(netCIDR)
-	color.Green("Found %d hosts in current ARP table\n", len(currentHosts))
+	if !quiet {
+		color.Green("Found %d hosts in current ARP table\n", len(currentHosts))
+	}
 
 	// Step 2: Populate ARP table by pinging all IPs
-	color.Cyan("🔄 Step 2: Populating ARP table (pinging subnet)...\n")
+	if !quiet {
+		color.Cyan("🔄 Step 2: Populating ARP table (pinging subnet)...\n")
+	}
 	if err := populateARPTable(netCIDR); err != nil {
-		color.Yellow("⚠️  Warning: %v\n", err)
+		if !quiet {
+			color.Yellow("⚠️  Warning: %v\n", err)
+		}
 	}
 
 	// Step 3: Read ARP table again
-	color.Cyan("📋 Step 3: Reading refreshed ARP table...\n")
+	if !quiet {
+		color.Cyan("📋 Step 3: Reading refreshed ARP table...\n")
+	}
 	finalHosts := readCurrentARPTable(netCIDR)
 
-	color.Green("✅ Final result: %d hosts found after ARP refresh\n", len(finalHosts))
+	if !quiet {
+		color.Green("✅ Final result: %d hosts found after ARP refresh\n", len(finalHosts))
+	}
 
 	// Output results
 	return output.PrintResults(finalHosts, format)
@@ -327,10 +371,14 @@ func readCurrentARPTable(network *net.IPNet) []scanner.Host {
 }
 
 func populateARPTable(network *net.IPNet) error {
+	quiet := isQuiet()
+
 	// Generate all IPs in the network
 	ips := discovery.GenerateIPsFromCIDR(network)
 
-	color.Cyan("🔄 Pinging %d addresses to populate ARP table...\n", len(ips))
+	if !quiet {
+		color.Cyan("🔄 Pinging %d addresses to populate ARP table...\n", len(ips))
+	}
 
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 50) // Limit concurrent pings
@@ -359,11 +407,13 @@ func populateARPTable(network *net.IPNet) error {
 			}
 
 			// Progress tracking
-			done := atomic.AddInt64(&completed, 1)
-			if done%50 == 0 || done == int64(len(ips)) {
-				elapsed := time.Since(start)
-				rate := float64(done) / elapsed.Seconds()
-				color.White("   Progress: %d/%d (%.0f/sec)\n", done, len(ips), rate)
+			if !quiet {
+				done := atomic.AddInt64(&completed, 1)
+				if done%50 == 0 || done == int64(len(ips)) {
+					elapsed := time.Since(start)
+					rate := float64(done) / elapsed.Seconds()
+					color.White("   Progress: %d/%d (%.0f/sec)\n", done, len(ips), rate)
+				}
 			}
 		}(ip)
 	}
@@ -371,7 +421,9 @@ func populateARPTable(network *net.IPNet) error {
 	wg.Wait()
 
 	// Wait a moment for ARP entries to be written
-	color.Cyan("⏳ Waiting for ARP table to update...\n")
+	if !quiet {
+		color.Cyan("⏳ Waiting for ARP table to update...\n")
+	}
 	time.Sleep(1 * time.Second)
 
 	return nil
@@ -398,6 +450,7 @@ func createScanConfig() scanner.Config {
 		Ports:       ports,
 		Fast:        fast,
 		Thorough:    thorough,
+		Quiet:       isQuiet(),
 	}
 
 	// Conservative defaults to avoid false positives
