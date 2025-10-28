@@ -31,6 +31,7 @@ type DeviceState struct {
 	LastSeen    time.Time
 	Status      string // "online" or "offline"
 	StatusSince time.Time
+	FlapCount   int    // Number of times status has changed (flapping counter)
 }
 
 // watchCmd represents the watch command
@@ -148,6 +149,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 					// Device came back online
 					state.Status = "online"
 					state.StatusSince = now
+					state.FlapCount++ // Increment flap counter
 				}
 			} else {
 				// New device
@@ -167,6 +169,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 				// Device went offline
 				state.Status = "offline"
 				state.StatusSince = time.Now()
+				state.FlapCount++ // Increment flap counter
 			}
 		}
 
@@ -519,9 +522,9 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 
 	// Clear and print header
 	clearLine()
-	color.Cyan("IP Address      Status    Hostname                  MAC Address        Vendor            First Seen    Uptime/Downtime\n")
+	color.Cyan("IP Address      Status    Hostname                  MAC Address        Vendor            First Seen    Uptime/Downtime  Flaps\n")
 	clearLine()
-	color.White("%s\n", strings.Repeat("─", 120))
+	color.White("%s\n", strings.Repeat("─", 127))
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -539,7 +542,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 
 		statusIcon := "🟢"
 		statusColor := color.GreenString
-		statusText := "online"
+		statusText := "online "  // Extra space to match "offline" length
 		if state.Status == "offline" {
 			statusIcon = "🔴"
 			statusColor = color.RedString
@@ -562,7 +565,13 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		firstSeen := state.FirstSeen.Format("15:04:05")
 		statusDuration := formatDuration(time.Since(state.StatusSince))
 
-		fmt.Printf("%-15s %s %-7s %-25s %s %-17s %-13s %s\n",
+		// Format flap count with warning color if > 0
+		flapText := fmt.Sprintf("%d", state.FlapCount)
+		if state.FlapCount > 0 {
+			flapText = color.YellowString(flapText)
+		}
+
+		fmt.Printf("%-15s %s %-7s %-25s %s %-17s %-13s %-16s %s\n",
 			ipStr,
 			statusIcon,
 			statusColor(statusText),
@@ -571,6 +580,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 			vendor,
 			firstSeen,
 			statusDuration,
+			flapText,
 		)
 	}
 
