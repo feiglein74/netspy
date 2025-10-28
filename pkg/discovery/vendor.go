@@ -966,4 +966,7 @@ var ouiDatabase = map[string]string{
 
 	// Inventec Corporation
 	"7C:D3:0A": "Inventec",
+
+	// Gigabyte Technology
+	"D8:5E:D3": "Gigabyte",
 }
