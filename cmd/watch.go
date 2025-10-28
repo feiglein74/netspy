@@ -96,7 +96,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	for {
 		// Check if context is cancelled before starting new scan
 		if ctx.Err() != nil {
-			printFinalSummary(deviceStates)
+			fmt.Println("\n✅ Shutdown complete")
 			return nil
 		}
 
@@ -108,7 +108,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 		// Check if cancelled during scan
 		if ctx.Err() != nil {
-			printFinalSummary(deviceStates)
+			fmt.Println("\n✅ Shutdown complete")
 			return nil
 		}
 
@@ -401,48 +401,6 @@ func performNormalScan(network string) ([]scanner.Host, error) {
 }
 
 // Old print functions removed - now using redrawTable() for static table updates
-
-func printFinalSummary(states map[string]*DeviceState) {
-	// Clear the shutdown progress line
-	fmt.Print("\r" + strings.Repeat(" ", 60) + "\r")
-
-	color.Green("✅ Shutdown complete!\n\n")
-	color.Cyan("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	color.Cyan("📊 Final Summary\n")
-	color.Cyan("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
-
-	onlineDevices := []string{}
-	offlineDevices := []string{}
-
-	for ipStr, state := range states {
-		if state.Status == "online" {
-			onlineDevices = append(onlineDevices, ipStr)
-		} else {
-			offlineDevices = append(offlineDevices, ipStr)
-		}
-	}
-
-	color.Green("✅ Online devices: %d\n", len(onlineDevices))
-	if len(onlineDevices) > 0 {
-		sort.Strings(onlineDevices)
-		for _, ip := range onlineDevices {
-			state := states[ip]
-			fmt.Printf("  - %s (%s) - Online for %s\n", ip, getHostname(state.Host), formatDuration(time.Since(state.StatusSince)))
-		}
-	}
-
-	fmt.Println()
-	color.Red("❌ Offline devices: %d\n", len(offlineDevices))
-	if len(offlineDevices) > 0 {
-		sort.Strings(offlineDevices)
-		for _, ip := range offlineDevices {
-			state := states[ip]
-			fmt.Printf("  - %s (%s) - Offline for %s\n", ip, getHostname(state.Host), formatDuration(time.Since(state.StatusSince)))
-		}
-	}
-
-	fmt.Println()
-}
 
 func getHostname(host scanner.Host) string {
 	if host.Hostname != "" {
