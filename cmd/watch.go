@@ -551,8 +551,16 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 			flapText = color.YellowString(flapText)
 		}
 
-		fmt.Printf("%-15s %s %-7s %-25s %s %-17s %-8s %-13s %-16s %s\n",
+		// Check if this is the gateway
+		gatewayMarker := " "
+		parsedIP := net.ParseIP(ipStr)
+		if parsedIP != nil && discovery.IsGateway(parsedIP) {
+			gatewayMarker = "G"
+		}
+
+		fmt.Printf("%-15s %s%s %-7s %-25s %s %-17s %-8s %-13s %-16s %s\n",
 			ipStr,
+			gatewayMarker,
 			statusIcon,
 			statusColor(statusText),
 			hostname,
