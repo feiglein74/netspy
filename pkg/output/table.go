@@ -59,9 +59,9 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 
 	// Hybrid mode: show everything
 	if hasMAC && hasRTT {
-		color.Cyan("%-15s %-30s %-8s %-18s %-15s %-12s\n",
-			"IP Address", "Hostname", "RTT", "MAC Address", "Vendor", "Ports")
-		color.White("%s\n", strings.Repeat("-", 105))
+		color.Cyan("%-15s %-30s %-8s %-18s %-20s %-12s\n",
+			"IP Address", "Hostname", "RTT", "MAC Address", "Device Type", "Ports")
+		color.White("%s\n", strings.Repeat("-", 110))
 
 		for _, host := range hosts {
 			hostname := host.Hostname
@@ -83,9 +83,17 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 				mac = "-"
 			}
 
-			vendor := host.Vendor
-			if vendor == "" {
-				vendor = "-"
+			// Show device type if available, otherwise show vendor
+			deviceInfo := host.DeviceType
+			if deviceInfo == "" || deviceInfo == "Unknown" {
+				deviceInfo = host.Vendor
+			}
+			if deviceInfo == "" {
+				deviceInfo = "-"
+			}
+			// Truncate if too long
+			if len(deviceInfo) > 18 {
+				deviceInfo = deviceInfo[:15] + "..."
 			}
 
 			ports := "-"
@@ -101,19 +109,19 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 				}
 			}
 
-			fmt.Printf("%-15s %-30s %-8s %-18s %-15s %-12s\n",
+			fmt.Printf("%-15s %-30s %-8s %-18s %-20s %-12s\n",
 				host.IP.String(),
 				hostname,
 				rtt,
 				mac,
-				vendor,
+				deviceInfo,
 				ports,
 			)
 		}
 	} else if hasMAC {
 		// ARP-only mode
-		color.Cyan("%-15s %-25s %-18s %-15s\n", "IP Address", "Hostname", "MAC Address", "Vendor")
-		color.White("%s\n", strings.Repeat("-", 80))
+		color.Cyan("%-15s %-25s %-18s %-20s\n", "IP Address", "Hostname", "MAC Address", "Device Type")
+		color.White("%s\n", strings.Repeat("-", 85))
 
 		for _, host := range hosts {
 			hostname := host.Hostname
@@ -126,16 +134,20 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 				mac = "-"
 			}
 
-			vendor := host.Vendor
-			if vendor == "" {
-				vendor = "-"
+			// Show device type if available, otherwise show vendor
+			deviceInfo := host.DeviceType
+			if deviceInfo == "" || deviceInfo == "Unknown" {
+				deviceInfo = host.Vendor
+			}
+			if deviceInfo == "" {
+				deviceInfo = "-"
 			}
 
-			fmt.Printf("%-15s %-25s %-18s %-15s\n",
+			fmt.Printf("%-15s %-25s %-18s %-20s\n",
 				host.IP.String(),
 				hostname,
 				mac,
-				vendor,
+				deviceInfo,
 			)
 		}
 	} else {
@@ -176,7 +188,7 @@ func printJSON(hosts []scanner.Host) error {
 }
 
 func printCSV(hosts []scanner.Host) error {
-	fmt.Println("IP,Hostname,RTT,MAC,Vendor,Ports")
+	fmt.Println("IP,Hostname,RTT,MAC,Vendor,DeviceType,Ports")
 	for _, host := range hosts {
 		hostname := host.Hostname
 		if hostname == "" {
@@ -190,6 +202,7 @@ func printCSV(hosts []scanner.Host) error {
 
 		mac := host.MAC
 		vendor := host.Vendor
+		deviceType := host.DeviceType
 
 		ports := ""
 		if len(host.Ports) > 0 {
@@ -200,12 +213,13 @@ func printCSV(hosts []scanner.Host) error {
 			ports = strings.Join(portStrs, ";")
 		}
 
-		fmt.Printf("%s,%s,%s,%s,%s,%s\n",
+		fmt.Printf("%s,%s,%s,%s,%s,%s,%s\n",
 			host.IP.String(),
 			hostname,
 			rtt,
 			mac,
 			vendor,
+			deviceType,
 			ports,
 		)
 	}
