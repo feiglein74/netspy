@@ -15,7 +15,8 @@
       "Bash(git commit:*)",
       "Bash(git log:*)",
       "Bash(wc:*)",
-      "Bash(exit 0)"
+      "Bash(exit 0)",
+      "Bash(timeout 60 go run:*)"
     ],
     "deny": [],
     "ask": []

@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"netspy/pkg/discovery"
 	"netspy/pkg/scanner"
 
 	"github.com/fatih/color"
@@ -494,9 +495,9 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 }
 
 func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState) {
-	// Perform DNS lookups for all online hosts in the background
+	// Perform DNS and NetBIOS lookups for all online hosts in the background
 	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, 10) // Limit concurrent lookups to avoid overwhelming DNS
+	semaphore := make(chan struct{}, 10) // Limit concurrent lookups
 
 	for ipStr, state := range deviceStates {
 		// Only lookup for online hosts that don't have a hostname yet
@@ -516,7 +517,16 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 				defer func() { <-semaphore }()
 			}
 
-			// Perform DNS lookup with timeout
+			// Try NetBIOS first (faster for Windows hosts)
+			parsedIP := net.ParseIP(ip)
+			if parsedIP != nil {
+				if name, err := discovery.QueryNetBIOSName(parsedIP, 500*time.Millisecond); err == nil && name != "" {
+					s.Host.Hostname = name
+					return
+				}
+			}
+
+			// Fallback to DNS lookup
 			names, err := net.LookupAddr(ip)
 			if err == nil && len(names) > 0 {
 				// Update hostname in the device state
