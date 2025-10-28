@@ -16,7 +16,10 @@
       "Bash(git log:*)",
       "Bash(wc:*)",
       "Bash(exit 0)",
-      "Bash(timeout 60 go run:*)"
+      "Bash(timeout 60 go run:*)",
+      "WebFetch(domain:api.macvendors.com)",
+      "WebSearch",
+      "Bash(timeout 45 go run:*)"
     ],
     "deny": [],
     "ask": []
