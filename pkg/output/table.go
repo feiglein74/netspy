@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"netspy/pkg/discovery"
 	"netspy/pkg/scanner"
 
 	"github.com/fatih/color"
@@ -59,9 +60,9 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 
 	// Hybrid mode: show everything
 	if hasMAC && hasRTT {
-		color.Cyan("%-15s %-30s %-8s %-18s %-20s %-12s\n",
+		color.Cyan("%-20s %-30s %-8s %-18s %-20s %-12s\n",
 			"IP Address", "Hostname", "RTT", "MAC Address", "Device Type", "Ports")
-		color.White("%s\n", strings.Repeat("-", 110))
+		color.White("%s\n", strings.Repeat("-", 115))
 
 		for _, host := range hosts {
 			hostname := host.Hostname
@@ -109,8 +110,14 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 				}
 			}
 
-			fmt.Printf("%-15s %-30s %-8s %-18s %-20s %-12s\n",
-				host.IP.String(),
+			// Check if this is the gateway
+			ipStr := host.IP.String()
+			if discovery.IsGateway(host.IP) {
+				ipStr = ipStr + " [G]"
+			}
+
+			fmt.Printf("%-20s %-30s %-8s %-18s %-20s %-12s\n",
+				ipStr,
 				hostname,
 				rtt,
 				mac,
@@ -120,8 +127,8 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 		}
 	} else if hasMAC {
 		// ARP-only mode
-		color.Cyan("%-15s %-25s %-18s %-20s\n", "IP Address", "Hostname", "MAC Address", "Device Type")
-		color.White("%s\n", strings.Repeat("-", 85))
+		color.Cyan("%-20s %-25s %-18s %-20s\n", "IP Address", "Hostname", "MAC Address", "Device Type")
+		color.White("%s\n", strings.Repeat("-", 90))
 
 		for _, host := range hosts {
 			hostname := host.Hostname
@@ -143,8 +150,14 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 				deviceInfo = "-"
 			}
 
-			fmt.Printf("%-15s %-25s %-18s %-20s\n",
-				host.IP.String(),
+			// Check if this is the gateway
+			ipStr := host.IP.String()
+			if discovery.IsGateway(host.IP) {
+				ipStr = ipStr + " [G]"
+			}
+
+			fmt.Printf("%-20s %-25s %-18s %-20s\n",
+				ipStr,
 				hostname,
 				mac,
 				deviceInfo,
