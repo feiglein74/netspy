@@ -332,10 +332,12 @@ var ouiDatabase = map[string]string{
 	"18:60:24": "Microsoft",
 	"7C:ED:8D": "Microsoft",
 	"AC:22:0B": "Microsoft",
+	"C4:9D:ED": "Microsoft",
 	"D0:50:99": "Microsoft",
 
 	// Intel
 	"00:50:B6": "Intel",
+	"44:85:00": "Intel",
 	"AC:1F:6B": "Intel",
 	"00:02:B3": "Intel",
 	"00:03:47": "Intel",
@@ -385,6 +387,8 @@ var ouiDatabase = map[string]string{
 	"F4:E9:D4": "Intel",
 
 	// Amazon/AWS
+	"58:9A:3E": "Amazon",
+	"74:A7:EA": "Amazon",
 	"F0:9F:C2": "Amazon",
 	"02:07:72": "Amazon AWS",
 	"02:0B:77": "Amazon AWS",
@@ -542,6 +546,7 @@ var ouiDatabase = map[string]string{
 	// TP-Link
 	"00:27:19": "TP-Link",
 	"14:CC:20": "TP-Link",
+	"B0:19:21": "TP-Link",
 	"1C:3B:F3": "TP-Link",
 	"30:B5:C2": "TP-Link",
 	"50:C7:BF": "TP-Link",
@@ -903,4 +908,36 @@ var ouiDatabase = map[string]string{
 	"60:01:94": "Espressif",
 	"84:F3:EB": "Espressif",
 	"98:F4:AB": "Espressif",
+	"8C:CE:4E": "Espressif",
+
+	// MikroTik / Routerboard
+	"00:1A:22": "MikroTik",
+	"08:55:31": "MikroTik",
+	"4C:5E:0C": "MikroTik",
+	"6C:3B:6B": "MikroTik",
+	"D4:CA:6D": "MikroTik",
+	"E7:48:C7": "MikroTik",
+
+	// iRobot
+	"50:14:79": "iRobot",
+	"74:DA:38": "iRobot",
+
+	// HUMAX
+	"CC:AB:2C": "HUMAX",
+	"00:17:C8": "HUMAX",
+	"B0:7F:B9": "HUMAX",
+
+	// Foxconn / Hon Hai
+	"F8:DA:0C": "Foxconn",
+	"00:1F:C6": "Foxconn",
+	"38:2C:4A": "Foxconn",
+	"88:A6:C6": "Foxconn",
+
+	// High-Flying Electronics (IoT)
+	"34:EA:E7": "High-Flying IoT",
+
+	// Samsung Electro-Mechanics
+	"24:18:1D": "Samsung",
+	"7C:0A:3F": "Samsung",
+	"E4:E0:C5": "Samsung",
 }
