@@ -17,7 +17,8 @@ type Host struct {
 	HostnameSource   string        `json:"hostname_source,omitempty"` // "netbios", "dns", "vendor"
 	MAC              string        `json:"mac,omitempty"`
 	Vendor           string        `json:"vendor,omitempty"`
-	DeviceType       string        `json:"device_type,omitempty"`     // "Smartphone", "Computer", "IoT", etc.
+	DeviceType       string        `json:"device_type,omitempty"` // "Smartphone", "Computer", "IoT", etc.
+	HTTPBanner       string        `json:"http_banner,omitempty"` // HTTP server banner (e.g., "nginx/1.18.0")
 	RTT              time.Duration `json:"rtt,omitempty"`
 	Ports            []int         `json:"ports,omitempty"`
 	Online           bool          `json:"online"`
