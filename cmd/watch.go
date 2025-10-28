@@ -590,6 +590,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 	defer ticker.Stop()
 
 	startTime := time.Now()
+	lastRedraw := -1 // Track last redraw second to avoid double-redraw
 
 	// Initial countdown display
 	fmt.Print("\r")
@@ -612,14 +613,17 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			return
 		case <-ticker.C:
 			elapsed := time.Since(startTime)
-			remaining := duration - elapsed
+			currentSecond := int(elapsed.Seconds())
 
-			if remaining <= 0 {
+			// Check if we're done BEFORE any processing
+			if elapsed >= duration {
 				return
 			}
 
 			// Every 5 seconds, redraw entire table to catch DNS updates
-			if int(elapsed.Seconds())%5 == 0 {
+			// But only once per 5-second mark (avoid double-redraw if processing is slow)
+			if currentSecond%5 == 0 && currentSecond != lastRedraw {
+				lastRedraw = currentSecond
 				moveCursorUp(tableLines)
 				redrawTable(states, scanCount, scanDuration)
 				// After redraw, cursor is at start of new line, clear it
@@ -628,6 +632,12 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				// Not redrawing, just update status line in place
 				fmt.Print("\r")
 				clearLine()
+			}
+
+			// ALWAYS calculate remaining time fresh (accounts for any processing delays)
+			remaining := duration - time.Since(startTime)
+			if remaining < 0 {
+				remaining = 0
 			}
 
 			// Count stats
