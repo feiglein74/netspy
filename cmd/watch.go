@@ -746,11 +746,36 @@ func measureRTTForHosts(hosts []scanner.Host) []scanner.Host {
 				}
 			}
 
+			// Try port 445 (SMB - Windows) if previous failed
+			if !measured {
+				start = time.Now()
+				if conn, err := net.DialTimeout("tcp", net.JoinHostPort(hosts[index].IP.String(), "445"), 300*time.Millisecond); err == nil {
+					conn.Close()
+					mutex.Lock()
+					hosts[index].RTT = time.Since(start)
+					mutex.Unlock()
+					measured = true
+				}
+			}
+
+			// Try port 135 (RPC - Windows) if previous failed
+			if !measured {
+				start = time.Now()
+				if conn, err := net.DialTimeout("tcp", net.JoinHostPort(hosts[index].IP.String(), "135"), 300*time.Millisecond); err == nil {
+					conn.Close()
+					mutex.Lock()
+					hosts[index].RTT = time.Since(start)
+					mutex.Unlock()
+					measured = true
+				}
+			}
+
 			// Fallback: If no port is open, try common closed ports to measure network RTT
 			// Even connection refused/filtered gives us RTT (time to get RST or timeout)
 			if !measured {
 				// Try several ports to maximize chance of getting a response
-				testPorts := []string{"445", "3389", "135", "139"}
+				// (445 and 135 already tried above, so use RDP and NetBIOS here)
+				testPorts := []string{"3389", "139", "8080", "5900"}
 				var bestRTT time.Duration
 
 				for _, port := range testPorts {
