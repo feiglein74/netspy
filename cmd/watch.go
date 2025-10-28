@@ -573,9 +573,9 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		)
 	}
 
-	// Print status line
+	// Print status line (no newline - cursor stays on status line)
 	clearLine()
-	fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: calculating...\n",
+	fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: calculating...",
 		scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration))
 }
 
@@ -585,43 +585,55 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 
 	startTime := time.Now()
 
+	// Initial countdown display
+	fmt.Print("\r")
+	clearLine()
+	onlineCount := 0
+	offlineCount := 0
+	for _, state := range states {
+		if state.Status == "online" {
+			onlineCount++
+		} else {
+			offlineCount++
+		}
+	}
+	fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: %s",
+		scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(duration))
+
 	for {
-		elapsed := time.Since(startTime)
-		remaining := duration - elapsed
-
-		if remaining <= 0 {
-			return
-		}
-
-		// Update only the status line (last line)
-		// Use \r to go to start of line instead of moving cursor up
-		fmt.Print("\r")
-		clearLine()
-
-		// Count stats
-		onlineCount := 0
-		offlineCount := 0
-		for _, state := range states {
-			if state.Status == "online" {
-				onlineCount++
-			} else {
-				offlineCount++
-			}
-		}
-
-		fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: %s",
-			scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
-
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			elapsed := time.Since(startTime)
+			remaining := duration - elapsed
+
+			if remaining <= 0 {
+				return
+			}
+
 			// Every 5 seconds, redraw entire table to catch DNS updates
 			if int(elapsed.Seconds())%5 == 0 {
 				moveCursorUp(tableLines)
 				redrawTable(states, scanCount, scanDuration)
-				// After redraw, cursor is on new line after status, move back up to status line
-				fmt.Print("\033[A") // Move cursor up 1 line to status line
+			} else {
+				// Normal countdown update - just update the status line
+				fmt.Print("\r")
+				clearLine()
+
+				// Count stats
+				onlineCount := 0
+				offlineCount := 0
+				for _, state := range states {
+					if state.Status == "online" {
+						onlineCount++
+					} else {
+						offlineCount++
+					}
+				}
+
+				fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: %s",
+					scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
 			}
 		}
 	}
