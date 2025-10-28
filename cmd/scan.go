@@ -273,8 +273,9 @@ func enhanceHost(host scanner.Host) scanner.Host {
 	// Start with ARP data (IP, MAC, Vendor)
 	enhanced := host
 
-	// Add RTT via ping
+	// Add RTT via TCP connect on common ports
 	start := time.Now()
+	// Try common web ports first (most devices)
 	if conn, err := net.DialTimeout("tcp", net.JoinHostPort(host.IP.String(), "80"), 500*time.Millisecond); err == nil {
 		conn.Close()
 		enhanced.RTT = time.Since(start)
@@ -282,6 +283,14 @@ func enhanceHost(host scanner.Host) scanner.Host {
 		conn.Close()
 		enhanced.RTT = time.Since(start)
 	} else if conn, err := net.DialTimeout("tcp", net.JoinHostPort(host.IP.String(), "22"), 500*time.Millisecond); err == nil {
+		conn.Close()
+		enhanced.RTT = time.Since(start)
+	} else if conn, err := net.DialTimeout("tcp", net.JoinHostPort(host.IP.String(), "445"), 500*time.Millisecond); err == nil {
+		// Port 445 (SMB) - always open on Windows systems
+		conn.Close()
+		enhanced.RTT = time.Since(start)
+	} else if conn, err := net.DialTimeout("tcp", net.JoinHostPort(host.IP.String(), "135"), 500*time.Millisecond); err == nil {
+		// Port 135 (RPC) - Windows RPC endpoint mapper
 		conn.Close()
 		enhanced.RTT = time.Since(start)
 	}
