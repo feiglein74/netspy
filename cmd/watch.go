@@ -260,6 +260,9 @@ func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.
 		})
 	}
 
+	// Measure RTT for all discovered hosts
+	finalHosts = measureRTTForHosts(finalHosts)
+
 	return finalHosts, nil
 }
 
@@ -522,9 +525,9 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 
 	// Clear and print header
 	clearLine()
-	color.Cyan("IP Address      Status    Hostname                  MAC Address        Vendor            First Seen    Uptime/Downtime  Flaps\n")
+	color.Cyan("IP Address      Status    Hostname                  MAC Address        Vendor            RTT      First Seen    Uptime/Downtime  Flaps\n")
 	clearLine()
-	color.White("%s\n", strings.Repeat("─", 127))
+	color.White("%s\n", strings.Repeat("─", 136))
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -565,19 +568,33 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		firstSeen := state.FirstSeen.Format("15:04:05")
 		statusDuration := formatDuration(time.Since(state.StatusSince))
 
+		// Format RTT
+		rttText := "-"
+		if state.Host.RTT > 0 {
+			rtt := state.Host.RTT
+			if rtt < time.Millisecond {
+				rttText = fmt.Sprintf("%.1fµs", float64(rtt.Microseconds()))
+			} else if rtt < time.Second {
+				rttText = fmt.Sprintf("%.1fms", float64(rtt.Microseconds())/1000.0)
+			} else {
+				rttText = fmt.Sprintf("%.2fs", rtt.Seconds())
+			}
+		}
+
 		// Format flap count with warning color if > 0
 		flapText := fmt.Sprintf("%d", state.FlapCount)
 		if state.FlapCount > 0 {
 			flapText = color.YellowString(flapText)
 		}
 
-		fmt.Printf("%-15s %s %-7s %-25s %s %-17s %-13s %-16s %s\n",
+		fmt.Printf("%-15s %s %-7s %-25s %s %-17s %-8s %-13s %-16s %s\n",
 			ipStr,
 			statusIcon,
 			statusColor(statusText),
 			hostname,
 			mac, // Already padded by formatMAC
 			vendor,
+			rttText,
 			firstSeen,
 			statusDuration,
 			flapText,
@@ -678,6 +695,61 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 	}
 
 	wg.Wait()
+}
+
+// measureRTTForHosts measures response time for each host
+func measureRTTForHosts(hosts []scanner.Host) []scanner.Host {
+	var wg sync.WaitGroup
+	var mutex sync.Mutex
+	semaphore := make(chan struct{}, 30) // Limit concurrent RTT measurements
+
+	for i := range hosts {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			// Measure RTT by trying common ports
+			start := time.Now()
+			measured := false
+
+			// Try port 80 (HTTP)
+			if conn, err := net.DialTimeout("tcp", net.JoinHostPort(hosts[index].IP.String(), "80"), 300*time.Millisecond); err == nil {
+				conn.Close()
+				mutex.Lock()
+				hosts[index].RTT = time.Since(start)
+				mutex.Unlock()
+				measured = true
+			}
+
+			// Try port 443 (HTTPS) if 80 failed
+			if !measured {
+				start = time.Now()
+				if conn, err := net.DialTimeout("tcp", net.JoinHostPort(hosts[index].IP.String(), "443"), 300*time.Millisecond); err == nil {
+					conn.Close()
+					mutex.Lock()
+					hosts[index].RTT = time.Since(start)
+					mutex.Unlock()
+					measured = true
+				}
+			}
+
+			// Try port 22 (SSH) if both failed
+			if !measured {
+				start = time.Now()
+				if conn, err := net.DialTimeout("tcp", net.JoinHostPort(hosts[index].IP.String(), "22"), 300*time.Millisecond); err == nil {
+					conn.Close()
+					mutex.Lock()
+					hosts[index].RTT = time.Since(start)
+					mutex.Unlock()
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	return hosts
 }
 
 func compareIPs(ip1, ip2 string) bool {
