@@ -1,7 +1,6 @@
 # NetSpy TODO
 
 ## High Priority
-- [ ] Expand MAC vendor database (currently ~20 vendors)
 - [ ] Add configuration file support (.netspy.yaml)
 
 ## Features
@@ -24,3 +23,5 @@
 - [x] Graceful shutdown with Ctrl+C
 - [x] Real-time uptime/downtime tracking
 - [x] Column alignment fix for online/offline status
+- [x] Expand MAC vendor database (900+ OUI entries)
+- [x] Fix hostname flickering with resolution caching
