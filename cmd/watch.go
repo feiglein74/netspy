@@ -181,8 +181,8 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			moveCursorUp(linesToClear)
 		}
 
-		// Redraw entire table
-		redrawTable(deviceStates, scanCount, time.Since(scanStart))
+		// Redraw entire table (use scanStart as reference time for consistent uptime display)
+		redrawTable(deviceStates, scanCount, time.Since(scanStart), scanStart)
 		// Lines to move UP from status line to header: separator + devices + status line
 		// (We're ON the status line, need to go up to reach header)
 		tableStartLine = len(deviceStates) + 2
@@ -198,8 +198,8 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		if nextScan > 0 {
 			go performBackgroundDNSLookups(ctx, deviceStates)
 
-			// Show countdown with periodic table updates
-			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, tableStartLine)
+			// Show countdown with periodic table updates (pass scanStart for consistent uptime)
+			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, tableStartLine, scanStart)
 		}
 	}
 }
@@ -473,7 +473,7 @@ func clearLine() {
 	fmt.Print("\033[2K\r") // Clear entire line and move to start
 }
 
-func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration time.Duration) {
+func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration time.Duration, referenceTime time.Time) {
 	// Hide cursor during redraw to prevent visible cursor jumping
 	fmt.Print("\033[?25l")
 	defer fmt.Print("\033[?25h") // Show cursor when done
@@ -536,7 +536,9 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		}
 
 		firstSeen := state.FirstSeen.Format("15:04:05")
-		statusDuration := formatDuration(time.Since(state.StatusSince))
+		// Calculate uptime/downtime from reference time (scanStart), not current time
+		// This ensures consistent display across all devices
+		statusDuration := formatDuration(referenceTime.Sub(state.StatusSince))
 
 		// Format RTT
 		rttText := "-"
@@ -585,7 +587,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 	// This prevents "calculating..." from appearing during table redraws
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, tableLines int) {
+func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, tableLines int, scanStart time.Time) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -629,13 +631,17 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				if (currentSecond/5)%2 == 1 {
 					// DNS update: just redraw table
 					moveCursorUp(tableLines)
-					redrawTable(states, scanCount, scanDuration)
+					// Use scanStart + elapsed as reference time for consistent uptime
+					currentRefTime := scanStart.Add(elapsed)
+					redrawTable(states, scanCount, scanDuration, currentRefTime)
 					fmt.Print("\033[2K")
 				} else {
 					// Reachability check: quickly check if devices are still online
 					performQuickReachabilityCheck(states)
 					moveCursorUp(tableLines)
-					redrawTable(states, scanCount, scanDuration)
+					// Use scanStart + elapsed as reference time for consistent uptime
+					currentRefTime := scanStart.Add(elapsed)
+					redrawTable(states, scanCount, scanDuration, currentRefTime)
 					fmt.Print("\033[2K")
 				}
 			} else {
