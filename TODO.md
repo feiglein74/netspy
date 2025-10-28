@@ -7,14 +7,13 @@
 - [ ] Add export functionality for watch mode results
 - [ ] Implement alert system for offline devices
 - [ ] Add web UI for watch mode
-- [ ] Add mDNS/Bonjour support for Apple/IoT devices
 - [ ] Add HTTP banner grabbing for web services
-- [ ] OS detection based on open ports (445/135 → Windows, 22 → Linux/Unix, 3389 → RDP)
 
 ## Improvements
 - [ ] Add IPv6 support
 - [ ] Cross-platform testing (Linux, macOS)
 - [ ] ICMP ping support for RTT measurement (requires admin rights)
+- [ ] Improve mDNS/LLMNR reliability (some devices don't respond)
 
 ## Done ✅
 - [x] Static table watch mode with live updates
@@ -33,3 +32,8 @@
 - [x] --quiet flag for clean piped output
 - [x] Remove redundant output summary
 - [x] Multi-port RTT fallback for devices without standard services
+- [x] **Device type detection** (Smartphone/Privacy, Computer, IoT, Network Equipment, etc.)
+- [x] **mDNS/Bonjour support** for Apple/IoT devices
+- [x] **LLMNR support** for Windows hostname resolution
+- [x] **OS detection** based on open ports (Windows, Linux, Server detection)
+- [x] **Gateway marker** (G indicator for default gateway)
