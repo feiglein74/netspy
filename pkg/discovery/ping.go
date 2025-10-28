@@ -38,7 +38,8 @@ func (p *Pinger) Ping(ip net.IP) (time.Duration, error) {
 // conservativePing uses only the most reliable detection methods
 func (p *Pinger) conservativePing(ip net.IP, start time.Time) (time.Duration, error) {
 	// Only try ports that give reliable results
-	reliablePorts := []string{"22", "80", "443"}
+	// 22=SSH, 80=HTTP, 443=HTTPS, 445=SMB(Windows), 135=RPC(Windows)
+	reliablePorts := []string{"22", "80", "443", "445", "135"}
 
 	// Use shorter timeouts to avoid hanging on filtered ports
 	portTimeout := p.timeout / time.Duration(len(reliablePorts))
@@ -58,14 +59,20 @@ func (p *Pinger) conservativePing(ip net.IP, start time.Time) (time.Duration, er
 
 // fastPing minimal detection for speed
 func (p *Pinger) fastPing(ip net.IP, start time.Time) (time.Duration, error) {
-	// Only try HTTP
+	// Try HTTP first (most common)
 	if conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip.String(), "80"), p.timeout); err == nil {
 		conn.Close()
 		return time.Since(start), nil
 	}
 
-	// Try HTTPS as backup
+	// Try HTTPS
 	if conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip.String(), "443"), p.timeout/2); err == nil {
+		conn.Close()
+		return time.Since(start), nil
+	}
+
+	// Try Windows SMB (common for Windows machines without web services)
+	if conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip.String(), "445"), p.timeout/2); err == nil {
 		conn.Close()
 		return time.Since(start), nil
 	}
@@ -76,7 +83,8 @@ func (p *Pinger) fastPing(ip net.IP, start time.Time) (time.Duration, error) {
 // thoroughPing tries more ports but with validation
 func (p *Pinger) thoroughPing(ip net.IP, start time.Time) (time.Duration, error) {
 	// Try common ports but validate responses
-	commonPorts := []string{"22", "23", "25", "53", "80", "110", "143", "443", "993", "995", "3389"}
+	// Added 135 (Windows RPC) and 445 (Windows SMB) for better Windows detection
+	commonPorts := []string{"22", "23", "25", "53", "80", "110", "135", "143", "445", "443", "993", "995", "3389"}
 
 	portTimeout := p.timeout / time.Duration(len(commonPorts))
 	if portTimeout < 100*time.Millisecond {
