@@ -485,7 +485,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		}
 	}
 
-	// Clear and print header
+	// Print header (clear immediately before printing to minimize flicker)
 	clearLine()
 	color.Cyan("IP Address      Status    Hostname                  MAC Address        Device Type       RTT      First Seen    Uptime/Downtime  Flaps\n")
 	clearLine()
@@ -502,9 +502,9 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 
 	// Print each device
 	for _, ipStr := range ips {
-		clearLine()
 		state := states[ipStr]
 
+		// Prepare ALL data BEFORE clearing the line (to minimize flicker)
 		statusIcon := "🟢"
 		statusColor := color.GreenString
 		statusText := "online "  // Extra space to match "offline" length
@@ -560,6 +560,8 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 			gatewayMarker = "G"
 		}
 
+		// NOW clear and print (atomic operation to minimize flicker)
+		clearLine()
 		fmt.Printf("%-15s %s%s %-7s %-25s %s %-17s %-8s %-13s %-16s %s\n",
 			ipStr,
 			gatewayMarker,
