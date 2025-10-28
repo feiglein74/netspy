@@ -44,9 +44,6 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 		return nil
 	}
 
-	// Print summary
-	color.Green("✅ Found %d active hosts (scanned %d addresses)\n\n", len(hosts), totalScanned)
-
 	// Check what data we have
 	hasMAC := false
 	hasRTT := false
