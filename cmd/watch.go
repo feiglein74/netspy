@@ -26,12 +26,13 @@ var (
 
 // DeviceState tracks the state of a discovered device over time
 type DeviceState struct {
-	Host        scanner.Host
-	FirstSeen   time.Time
-	LastSeen    time.Time
-	Status      string // "online" or "offline"
-	StatusSince time.Time
-	FlapCount   int    // Number of times status has changed (flapping counter)
+	Host               scanner.Host
+	FirstSeen          time.Time
+	LastSeen           time.Time
+	Status             string        // "online" or "offline"
+	StatusSince        time.Time     // When current status started
+	FlapCount          int           // Number of times status has changed (flapping counter)
+	TotalOfflineTime   time.Duration // Accumulated time spent offline (for continuous uptime calculation)
 }
 
 // watchCmd represents the watch command
@@ -146,7 +147,9 @@ func runWatch(cmd *cobra.Command, args []string) error {
 				}
 
 				if state.Status == "offline" {
-					// Device came back online
+					// Device came back online - accumulate the offline time
+					offlineDuration := scanStart.Sub(state.StatusSince)
+					state.TotalOfflineTime += offlineDuration
 					state.Status = "online"
 					state.StatusSince = scanStart
 					state.FlapCount++ // Increment flap counter
@@ -536,9 +539,17 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		}
 
 		firstSeen := state.FirstSeen.Format("15:04:05")
-		// Calculate uptime/downtime from reference time (scanStart), not current time
-		// This ensures consistent display across all devices
-		statusDuration := formatDuration(referenceTime.Sub(state.StatusSince))
+
+		// Calculate uptime/downtime based on status
+		var statusDuration time.Duration
+		if state.Status == "online" {
+			// Uptime = (time since first seen) - (total time spent offline)
+			totalTime := referenceTime.Sub(state.FirstSeen)
+			statusDuration = totalTime - state.TotalOfflineTime
+		} else {
+			// Downtime = time since went offline
+			statusDuration = referenceTime.Sub(state.StatusSince)
+		}
 
 		// Format RTT
 		rttText := "-"
