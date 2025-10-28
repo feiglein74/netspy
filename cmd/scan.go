@@ -300,6 +300,11 @@ func enhanceHost(host scanner.Host) scanner.Host {
 		enhanced.Ports = scanSpecificPorts(host.IP, ports)
 	}
 
+	// Grab HTTP banner from common web ports
+	if banner := discovery.GrabHTTPBanner(host.IP.String(), 2*time.Second); banner != nil {
+		enhanced.HTTPBanner = banner.String()
+	}
+
 	// Detect device type based on available information
 	enhanced.DeviceType = discovery.DetectDeviceType(
 		enhanced.Hostname,

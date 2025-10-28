@@ -60,9 +60,9 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 
 	// Hybrid mode: show everything
 	if hasMAC && hasRTT {
-		color.Cyan("%-20s %-30s %-8s %-18s %-20s %-12s\n",
-			"IP Address", "Hostname", "RTT", "MAC Address", "Device Type", "Ports")
-		color.White("%s\n", strings.Repeat("-", 115))
+		color.Cyan("%-20s %-30s %-8s %-18s %-20s %-25s %-12s\n",
+			"IP Address", "Hostname", "RTT", "MAC Address", "Device Type", "HTTP Banner", "Ports")
+		color.White("%s\n", strings.Repeat("-", 140))
 
 		for _, host := range hosts {
 			hostname := host.Hostname
@@ -116,12 +116,23 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 				ipStr = ipStr + " [G]"
 			}
 
-			fmt.Printf("%-20s %-30s %-8s %-18s %-20s %-12s\n",
+			// HTTP Banner
+			httpBanner := host.HTTPBanner
+			if httpBanner == "" {
+				httpBanner = "-"
+			}
+			// Truncate if too long
+			if len(httpBanner) > 23 {
+				httpBanner = httpBanner[:20] + "..."
+			}
+
+			fmt.Printf("%-20s %-30s %-8s %-18s %-20s %-25s %-12s\n",
 				ipStr,
 				hostname,
 				rtt,
 				mac,
 				deviceInfo,
+				httpBanner,
 				ports,
 			)
 		}
