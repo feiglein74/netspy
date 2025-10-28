@@ -743,6 +743,34 @@ func measureRTTForHosts(hosts []scanner.Host) []scanner.Host {
 					mutex.Lock()
 					hosts[index].RTT = time.Since(start)
 					mutex.Unlock()
+					measured = true
+				}
+			}
+
+			// Fallback: If no port is open, try common closed ports to measure network RTT
+			// Even connection refused/filtered gives us RTT (time to get RST or timeout)
+			if !measured {
+				// Try several ports to maximize chance of getting a response
+				testPorts := []string{"445", "3389", "135", "139"}
+				var bestRTT time.Duration
+
+				for _, port := range testPorts {
+					start = time.Now()
+					conn, err := net.DialTimeout("tcp", net.JoinHostPort(hosts[index].IP.String(), port), 300*time.Millisecond)
+					if err == nil {
+						conn.Close()
+					}
+					rtt := time.Since(start)
+					// Record RTT if we got any response (success or fast failure)
+					if rtt < 280*time.Millisecond && (bestRTT == 0 || rtt < bestRTT) {
+						bestRTT = rtt
+					}
+				}
+
+				if bestRTT > 0 {
+					mutex.Lock()
+					hosts[index].RTT = bestRTT
+					mutex.Unlock()
 				}
 			}
 		}(i)
