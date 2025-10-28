@@ -298,6 +298,14 @@ func enhanceHost(host scanner.Host) scanner.Host {
 		enhanced.Ports = scanSpecificPorts(host.IP, ports)
 	}
 
+	// Detect device type based on available information
+	enhanced.DeviceType = discovery.DetectDeviceType(
+		enhanced.Hostname,
+		enhanced.MAC,
+		enhanced.Vendor,
+		enhanced.Ports,
+	)
+
 	return enhanced
 }
 
@@ -350,12 +358,14 @@ func readCurrentARPTable(network *net.IPNet) []scanner.Host {
 					!strings.HasPrefix(macStr, "01-") {
 
 					macFormatted := strings.ReplaceAll(macStr, "-", ":")
+					vendor := discovery.GetMACVendor(macFormatted)
 
 					host := scanner.Host{
-						IP:     ip,
-						MAC:    macFormatted,
-						Vendor: discovery.GetMACVendor(macFormatted),
-						Online: true,
+						IP:         ip,
+						MAC:        macFormatted,
+						Vendor:     vendor,
+						Online:     true,
+						DeviceType: discovery.DetectDeviceType("", macFormatted, vendor, nil),
 					}
 
 					// SKIP hostname lookup here - it's too slow (blocks for 2-5 seconds per host!)

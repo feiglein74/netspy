@@ -252,11 +252,13 @@ func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.
 	// Add localhost if it's in the network range
 	localhostIP := getLocalhostIP(netCIDR)
 	if localhostIP != nil {
+		localMAC := getLocalMAC()
 		finalHosts = append(finalHosts, scanner.Host{
-			IP:     localhostIP,
-			MAC:    getLocalMAC(),
-			Vendor: "localhost",
-			Online: true,
+			IP:         localhostIP,
+			MAC:        localMAC,
+			Vendor:     "localhost",
+			DeviceType: "This Computer",
+			Online:     true,
 		})
 	}
 
@@ -525,7 +527,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 
 	// Clear and print header
 	clearLine()
-	color.Cyan("IP Address      Status    Hostname                  MAC Address        Vendor            RTT      First Seen    Uptime/Downtime  Flaps\n")
+	color.Cyan("IP Address      Status    Hostname                  MAC Address        Device Type       RTT      First Seen    Uptime/Downtime  Flaps\n")
 	clearLine()
 	color.White("%s\n", strings.Repeat("─", 136))
 
@@ -560,9 +562,13 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		// Format MAC address with color coding for local MACs
 		mac := formatMAC(state.Host.MAC)
 
-		vendor := getVendor(state.Host)
-		if len(vendor) > 16 {
-			vendor = vendor[:13] + "..."
+		// Show device type if available, otherwise show vendor
+		deviceInfo := state.Host.DeviceType
+		if deviceInfo == "" || deviceInfo == "Unknown" {
+			deviceInfo = getVendor(state.Host)
+		}
+		if len(deviceInfo) > 16 {
+			deviceInfo = deviceInfo[:13] + "..."
 		}
 
 		firstSeen := state.FirstSeen.Format("15:04:05")
@@ -593,7 +599,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 			statusColor(statusText),
 			hostname,
 			mac, // Already padded by formatMAC
-			vendor,
+			deviceInfo,
 			rttText,
 			firstSeen,
 			statusDuration,
@@ -690,6 +696,16 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 			if err == nil && len(names) > 0 {
 				s.Host.Hostname = names[0]
 				s.Host.HostnameSource = "dns"
+			}
+
+			// Update device type after hostname is resolved
+			if s.Host.Hostname != "" || s.Host.HostnameSource != "" {
+				s.Host.DeviceType = discovery.DetectDeviceType(
+					s.Host.Hostname,
+					s.Host.MAC,
+					s.Host.Vendor,
+					s.Host.Ports,
+				)
 			}
 		}(ipStr, state)
 	}
