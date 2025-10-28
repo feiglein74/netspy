@@ -474,6 +474,10 @@ func clearLine() {
 }
 
 func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration time.Duration) {
+	// Hide cursor during redraw to prevent visible cursor jumping
+	fmt.Print("\033[?25l")
+	defer fmt.Print("\033[?25h") // Show cursor when done
+
 	// Count stats
 	onlineCount := 0
 	offlineCount := 0
