@@ -620,6 +620,8 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			if int(elapsed.Seconds())%5 == 0 {
 				moveCursorUp(tableLines)
 				redrawTable(states, scanCount, scanDuration)
+				// After redraw, cursor is on new line after status, move back up to status line
+				fmt.Print("\033[A") // Move cursor up 1 line to status line
 			}
 		}
 	}
