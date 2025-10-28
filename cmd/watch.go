@@ -594,7 +594,8 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 		}
 
 		// Update only the status line (last line)
-		moveCursorUp(1) // Move to status line
+		// Use \r to go to start of line instead of moving cursor up
+		fmt.Print("\r")
 		clearLine()
 
 		// Count stats
@@ -608,7 +609,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			}
 		}
 
-		fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: %s\n",
+		fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: %s",
 			scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
 
 		select {
