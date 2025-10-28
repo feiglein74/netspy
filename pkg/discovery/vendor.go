@@ -218,6 +218,7 @@ var ouiDatabase = map[string]string{
 	"AC:61:EA": "Apple",
 	"AC:87:A3": "Apple",
 	"AC:BC:32": "Apple",
+	"AC:FD:EC": "Apple",
 	"B0:34:95": "Apple",
 	"B0:65:BD": "Apple",
 	"B0:9F:BA": "Apple",
@@ -905,6 +906,7 @@ var ouiDatabase = map[string]string{
 	// Shelly IoT / Espressif
 	"A4:CF:12": "Shelly/Espressif",
 	"84:CC:A8": "Shelly",
+	"44:17:93": "Espressif",
 	"60:01:94": "Espressif",
 	"84:F3:EB": "Espressif",
 	"98:F4:AB": "Espressif",
@@ -940,4 +942,28 @@ var ouiDatabase = map[string]string{
 	"24:18:1D": "Samsung",
 	"7C:0A:3F": "Samsung",
 	"E4:E0:C5": "Samsung",
+
+	// Amazon Technologies (Echo, Fire TV, etc.)
+	"44:00:49": "Amazon",
+
+	// ASUSTek Computer
+	"10:7B:44": "ASUSTek",
+
+	// NetApp (Storage Systems)
+	"00:80:E5": "NetApp",
+
+	// Philips Lighting (Hue, etc.)
+	"EC:B5:FA": "Philips Hue",
+
+	// Dell Inc.
+	"58:8A:5A": "Dell",
+
+	// Hewlett Packard Enterprise
+	"20:67:7C": "HP Enterprise",
+
+	// Hewlett Packard
+	"3C:A8:2A": "HP",
+
+	// Inventec Corporation
+	"7C:D3:0A": "Inventec",
 }
