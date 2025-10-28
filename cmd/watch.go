@@ -450,6 +450,29 @@ func getVendor(host scanner.Host) string {
 	return "-"
 }
 
+// isLocallyAdministered checks if a MAC address is locally administered
+// The second hex digit being 2, 6, A, or E indicates a locally administered address
+func isLocallyAdministered(mac string) bool {
+	if len(mac) < 2 {
+		return false
+	}
+	// Check the second character of the MAC address
+	secondChar := strings.ToUpper(string(mac[1]))
+	return secondChar == "2" || secondChar == "6" || secondChar == "A" || secondChar == "E"
+}
+
+// formatMAC formats MAC address with color coding for locally-administered addresses
+func formatMAC(mac string) string {
+	if mac == "" || mac == "-" {
+		return "-"
+	}
+	if isLocallyAdministered(mac) {
+		// Yellow color for locally-administered MACs
+		return color.YellowString(mac)
+	}
+	return mac
+}
+
 func formatDuration(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
@@ -522,10 +545,8 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 			hostname = hostname[:20] + "..."
 		}
 
-		mac := state.Host.MAC
-		if mac == "" {
-			mac = "-"
-		}
+		// Format MAC address with color coding for local MACs
+		mac := formatMAC(state.Host.MAC)
 
 		vendor := getVendor(state.Host)
 		if len(vendor) > 16 {
