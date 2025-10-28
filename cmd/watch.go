@@ -128,7 +128,18 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			if exists {
 				// Update existing device
 				state.LastSeen = now
-				state.Host = host // Update host info (MAC, hostname, etc.)
+
+				// Preserve hostname and source if already resolved
+				oldHostname := state.Host.Hostname
+				oldSource := state.Host.HostnameSource
+
+				state.Host = host // Update host info (MAC, RTT, etc.)
+
+				// Restore hostname if it was already resolved
+				if oldSource != "" {
+					state.Host.Hostname = oldHostname
+					state.Host.HostnameSource = oldSource
+				}
 
 				if state.Status == "offline" {
 					// Device came back online
@@ -500,8 +511,8 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 	semaphore := make(chan struct{}, 10) // Limit concurrent lookups
 
 	for ipStr, state := range deviceStates {
-		// Only lookup for online hosts that don't have a hostname yet
-		if state.Status != "online" || state.Host.Hostname != "" {
+		// Only lookup for online hosts that don't have a hostname yet AND haven't been resolved before
+		if state.Status != "online" || state.Host.Hostname != "" || state.Host.HostnameSource != "" {
 			continue
 		}
 
@@ -522,6 +533,7 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 			if parsedIP != nil {
 				if name, err := discovery.QueryNetBIOSName(parsedIP, 500*time.Millisecond); err == nil && name != "" {
 					s.Host.Hostname = name
+					s.Host.HostnameSource = "netbios"
 					return
 				}
 			}
@@ -529,8 +541,14 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 			// Fallback to DNS lookup
 			names, err := net.LookupAddr(ip)
 			if err == nil && len(names) > 0 {
-				// Update hostname in the device state
 				s.Host.Hostname = names[0]
+				s.Host.HostnameSource = "dns"
+				return
+			}
+
+			// If we have a vendor, use that as fallback and mark it
+			if s.Host.Vendor != "" {
+				s.Host.HostnameSource = "vendor"
 			}
 		}(ipStr, state)
 	}

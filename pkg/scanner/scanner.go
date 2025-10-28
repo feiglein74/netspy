@@ -12,13 +12,14 @@ import (
 
 // Host represents a discovered network host
 type Host struct {
-	IP       net.IP        `json:"ip"`
-	Hostname string        `json:"hostname,omitempty"`
-	MAC      string        `json:"mac,omitempty"`
-	Vendor   string        `json:"vendor,omitempty"`
-	RTT      time.Duration `json:"rtt,omitempty"`
-	Ports    []int         `json:"ports,omitempty"`
-	Online   bool          `json:"online"`
+	IP               net.IP        `json:"ip"`
+	Hostname         string        `json:"hostname,omitempty"`
+	HostnameSource   string        `json:"hostname_source,omitempty"` // "netbios", "dns", "vendor"
+	MAC              string        `json:"mac,omitempty"`
+	Vendor           string        `json:"vendor,omitempty"`
+	RTT              time.Duration `json:"rtt,omitempty"`
+	Ports            []int         `json:"ports,omitempty"`
+	Online           bool          `json:"online"`
 }
 
 // Config holds scanner configuration
