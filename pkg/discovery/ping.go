@@ -105,14 +105,42 @@ func (p *Pinger) thoroughPing(ip net.IP, start time.Time) (time.Duration, error)
 	return 0, fmt.Errorf("no validated response")
 }
 
+// incrementIP increments an IP address by offset
+func incrementIP(ip net.IP, offset int) net.IP {
+	result := make(net.IP, len(ip))
+	copy(result, ip)
+
+	for j := len(result) - 1; j >= 0 && offset > 0; j-- {
+		add := offset & 0xFF
+		sum := int(result[j]) + add
+		result[j] = byte(sum & 0xFF)
+		offset = (offset >> 8) + (sum >> 8)
+	}
+
+	return result
+}
+
 // GenerateIPsFromCIDR generates IP addresses
 func GenerateIPsFromCIDR(network *net.IPNet) []net.IP {
 	ip := network.IP.Mask(network.Mask)
 	ones, bits := network.Mask.Size()
 	hostBits := bits - ones
 	numHosts := 1 << hostBits
-	maxHosts := numHosts - 2
 
+	// Handle /32 edge case (single host)
+	if ones == 32 || ones == 128 {
+		return []net.IP{ip}
+	}
+
+	// Handle /31 edge case (point-to-point)
+	if numHosts == 2 {
+		return []net.IP{
+			incrementIP(ip, 0),
+			incrementIP(ip, 1),
+		}
+	}
+
+	maxHosts := numHosts - 2
 	ips := make([]net.IP, 0, maxHosts)
 
 	if maxHosts > 254 {

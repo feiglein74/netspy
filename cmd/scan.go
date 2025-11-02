@@ -3,9 +3,6 @@ package cmd
 import (
 	"fmt"
 	"net"
-	"os/exec"
-	"regexp"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -348,49 +345,27 @@ func scanSpecificPorts(ip net.IP, portList []int) []int {
 }
 
 func readCurrentARPTable(network *net.IPNet) []scanner.Host {
-	cmd := exec.Command("arp", "-a")
-	cmdOutput, err := cmd.Output()
+	// Use the ARPScanner from discovery package (which has proper platform-specific parsing)
+	arpScanner := discovery.NewARPScanner(500 * time.Millisecond)
+	arpEntries, err := arpScanner.ScanARPTable(network)
 	if err != nil {
-		color.Red("❌ Failed to run arp command: %v\n", err)
+		color.Red("❌ Failed to read ARP table: %v\n", err)
 		return nil
 	}
 
-	lines := strings.Split(string(cmdOutput), "\n")
+	// Convert ARPEntry to scanner.Host
 	var hosts []scanner.Host
-
-	// Windows ARP format: "  192.168.1.1          aa-bb-cc-dd-ee-ff     dynamic"
-	arpRegex := regexp.MustCompile(`(\d+\.\d+\.\d+\.\d+)\s+([a-fA-F0-9\-]{17})\s+\w+`)
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if matches := arpRegex.FindStringSubmatch(line); matches != nil {
-			ipStr := matches[1]
-			macStr := matches[2]
-
-			ip := net.ParseIP(ipStr)
-			if ip != nil && network.Contains(ip) {
-				// Skip broadcast and multicast MACs
-				if !strings.Contains(macStr, "ff-ff-ff-ff-ff-ff") &&
-					!strings.HasPrefix(macStr, "01-") {
-
-					macFormatted := strings.ReplaceAll(macStr, "-", ":")
-					vendor := discovery.GetMACVendor(macFormatted)
-
-					host := scanner.Host{
-						IP:         ip,
-						MAC:        macFormatted,
-						Vendor:     vendor,
-						Online:     true,
-						DeviceType: discovery.DetectDeviceType("", macFormatted, vendor, nil),
-					}
-
-					// SKIP hostname lookup here - it's too slow (blocks for 2-5 seconds per host!)
-					// Hostname lookups should be done asynchronously if needed
-
-					hosts = append(hosts, host)
-				}
-			}
+	for _, entry := range arpEntries {
+		vendor := discovery.GetMACVendor(entry.MAC.String())
+		host := scanner.Host{
+			IP:         entry.IP,
+			MAC:        entry.MAC.String(),
+			Vendor:     vendor,
+			RTT:        entry.RTT,
+			Online:     entry.Online,
+			DeviceType: discovery.DetectDeviceType("", entry.MAC.String(), vendor, nil),
 		}
+		hosts = append(hosts, host)
 	}
 
 	return hosts
