@@ -52,6 +52,25 @@ func (a *ARPScanner) ScanARPTable(network *net.IPNet) ([]ARPEntry, error) {
 	return filteredEntries, nil
 }
 
+// ScanARPTableQuiet reads the actual system ARP table without output (for watch mode)
+func (a *ARPScanner) ScanARPTableQuiet(network *net.IPNet) ([]ARPEntry, error) {
+	// Get ARP table entries
+	arpEntries, err := a.getSystemARPTable()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read ARP table: %v", err)
+	}
+
+	// Filter entries that are in our target network
+	var filteredEntries []ARPEntry
+	for _, entry := range arpEntries {
+		if network.Contains(entry.IP) {
+			filteredEntries = append(filteredEntries, entry)
+		}
+	}
+
+	return filteredEntries, nil
+}
+
 // getSystemARPTable reads the system's ARP table
 func (a *ARPScanner) getSystemARPTable() ([]ARPEntry, error) {
 	switch runtime.GOOS {
@@ -185,8 +204,76 @@ func (a *ARPScanner) parseLinuxARPOutput(output string) ([]ARPEntry, error) {
 
 // getMacARPTable reads ARP table on macOS
 func (a *ARPScanner) getMacARPTable() ([]ARPEntry, error) {
-	// macOS uses similar format to Linux
-	return a.getLinuxARPTable()
+	cmd := exec.Command("arp", "-a")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to run arp command: %v", err)
+	}
+
+	return a.parseMacARPOutput(string(output))
+}
+
+// parseMacARPOutput parses macOS arp -a output
+func (a *ARPScanner) parseMacARPOutput(output string) ([]ARPEntry, error) {
+	var entries []ARPEntry
+
+	// macOS arp -a format:
+	// ? (10.10.1.1) at 24:5a:4c:95:bf:f5 on en0 ifscope [ethernet]
+	// hostname (10.10.1.51) at 70:3:9f:60:e8:a4 on en0 ifscope [ethernet]
+	// Note: macOS sometimes omits leading zeros in MAC addresses
+
+	lines := strings.Split(output, "\n")
+	// Match IP and MAC, allowing for shorter MAC addresses (missing leading zeros)
+	arpRegex := regexp.MustCompile(`\((\d+\.\d+\.\d+\.\d+)\) at ([a-fA-F0-9:]+)`)
+
+	for _, line := range lines {
+		if matches := arpRegex.FindStringSubmatch(line); matches != nil {
+			ipStr := matches[1]
+			macStr := matches[2]
+
+			// Skip incomplete entries
+			if strings.Contains(line, "incomplete") {
+				continue
+			}
+
+			ip := net.ParseIP(ipStr)
+			if ip == nil {
+				continue
+			}
+
+			// Normalize MAC address by padding missing zeros
+			macStr = normalizeMacAddress(macStr)
+			mac, err := net.ParseMAC(macStr)
+			if err != nil {
+				continue
+			}
+
+			// Skip multicast MACs
+			if mac[0]&0x01 != 0 {
+				continue
+			}
+
+			entries = append(entries, ARPEntry{
+				IP:     ip,
+				MAC:    mac,
+				RTT:    0,
+				Online: true,
+			})
+		}
+	}
+
+	return entries, nil
+}
+
+// normalizeMacAddress pads MAC address segments with leading zeros
+func normalizeMacAddress(mac string) string {
+	parts := strings.Split(mac, ":")
+	for i, part := range parts {
+		if len(part) == 1 {
+			parts[i] = "0" + part
+		}
+	}
+	return strings.Join(parts, ":")
 }
 
 // RefreshARPTable tries to populate ARP table by pinging broadcast/common IPs

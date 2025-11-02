@@ -82,14 +82,15 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		<-sigChan
+		sig := <-sigChan
+		fmt.Printf("\n\n🛑 Received signal %v, shutting down...\n", sig)
 		cancel()
 	}()
 
 	// Print header once
 	color.Cyan("🔍 NetSpy Watch Mode\n")
 	color.White("Network: %s | Interval: %v | Mode: %s\n", network, watchInterval, watchMode)
-	color.Yellow("Press Ctrl+C to stop\n\n")
+	color.Yellow("Press Ctrl+C (^C) to stop\n\n")
 
 	scanCount := 0
 	tableStartLine := 0 // Track where table starts for repainting
@@ -104,8 +105,35 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		scanCount++
 		scanStart := time.Now()
 
+		// Show scanning indicator with spinner
+		var scanDone chan bool
+		if scanCount == 1 {
+			scanDone = make(chan bool)
+			go func() {
+				spinner := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+				i := 0
+				for {
+					select {
+					case <-scanDone:
+						fmt.Print("\r\033[2K") // Clear the line
+						return
+					default:
+						color.Cyan("\r%s Scanning network... ", spinner[i])
+						i = (i + 1) % len(spinner)
+						time.Sleep(100 * time.Millisecond)
+					}
+				}
+			}()
+		}
+
 		// Perform scan quietly (no output during scan)
 		hosts := performScanQuiet(ctx, network, netCIDR, watchMode)
+
+		// Stop spinner on first scan
+		if scanCount == 1 {
+			close(scanDone)
+			time.Sleep(150 * time.Millisecond) // Wait for spinner to clean up
+		}
 
 		// Check if cancelled during scan
 		if ctx.Err() != nil {
@@ -242,8 +270,8 @@ func performScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, m
 func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.Host, error) {
 	allHosts := []scanner.Host{}
 
-	// Read existing ARP table first
-	existingHosts := readCurrentARPTable(netCIDR)
+	// Read existing ARP table first (quietly)
+	existingHosts := readCurrentARPTableQuiet(netCIDR)
 	allHosts = append(allHosts, existingHosts...)
 
 	// Populate ARP table
@@ -251,8 +279,8 @@ func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.
 		return allHosts, err
 	}
 
-	// Read refreshed ARP table
-	finalHosts := readCurrentARPTable(netCIDR)
+	// Read refreshed ARP table (quietly)
+	finalHosts := readCurrentARPTableQuiet(netCIDR)
 
 	// Add localhost if it's in the network range
 	localhostIP := getLocalhostIP(netCIDR)
@@ -267,9 +295,8 @@ func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.
 		})
 	}
 
-	// Measure RTT for all discovered hosts
-	finalHosts = measureRTTForHosts(finalHosts)
-
+	// Skip RTT measurement in watch mode - we'll get RTT from reachability checks
+	// This makes the first scan much faster
 	return finalHosts, nil
 }
 
@@ -347,9 +374,34 @@ func performARPScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.Hos
 		return nil, err
 	}
 
-	// Read ARP table
-	hosts := readCurrentARPTable(netCIDR)
+	// Read ARP table quietly
+	hosts := readCurrentARPTableQuiet(netCIDR)
 	return hosts, nil
+}
+
+// readCurrentARPTableQuiet reads ARP table without any output (for watch mode)
+func readCurrentARPTableQuiet(network *net.IPNet) []scanner.Host {
+	arpScanner := discovery.NewARPScanner(500 * time.Millisecond)
+	arpEntries, err := arpScanner.ScanARPTableQuiet(network)
+	if err != nil {
+		return nil
+	}
+
+	var hosts []scanner.Host
+	for _, entry := range arpEntries {
+		vendor := discovery.GetMACVendor(entry.MAC.String())
+		host := scanner.Host{
+			IP:         entry.IP,
+			MAC:        entry.MAC.String(),
+			Vendor:     vendor,
+			RTT:        entry.RTT,
+			Online:     entry.Online,
+			DeviceType: discovery.DetectDeviceType("", entry.MAC.String(), vendor, nil),
+		}
+		hosts = append(hosts, host)
+	}
+
+	return hosts
 }
 
 func populateARPTableQuiet(ctx context.Context, network *net.IPNet) error {
@@ -589,7 +641,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 			deviceInfo,
 			rttText,
 			firstSeen,
-			statusDuration,
+			formatDuration(statusDuration),
 			flapText,
 		)
 	}
@@ -927,29 +979,6 @@ func compareIPs(ip1, ip2 string) bool {
 // populateAndStreamARP removed - now using populateARPTableQuiet() for batch scanning
 
 func parseNetworkInputSimple(network *net.IPNet) []net.IP {
-	ip := network.IP.Mask(network.Mask)
-	ones, bits := network.Mask.Size()
-	hostBits := bits - ones
-	numHosts := 1 << hostBits
-	maxHosts := numHosts - 2
-
-	ips := make([]net.IP, 0, maxHosts)
-
-	for i := 1; i < numHosts-1; i++ {
-		currentIP := make(net.IP, len(ip))
-		copy(currentIP, ip)
-
-		for j := len(currentIP) - 1; j >= 0; j-- {
-			currentIP[j] += byte(i >> (8 * (len(currentIP) - 1 - j)))
-			if currentIP[j] != 0 {
-				break
-			}
-		}
-
-		if network.Contains(currentIP) {
-			ips = append(ips, currentIP)
-		}
-	}
-
-	return ips
+	// Use the already-fixed function from discovery package
+	return discovery.GenerateIPsFromCIDR(network)
 }
