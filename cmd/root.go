@@ -10,7 +10,7 @@ import (
 
 var cfgFile string
 
-// rootCmd represents the base command when called without any subcommands
+// rootCmd repräsentiert den Basis-Befehl wenn ohne Unterbefehle aufgerufen
 var rootCmd = &cobra.Command{
 	Use:   "netspy",
 	Short: "Modern network discovery tool",
@@ -25,7 +25,7 @@ Features:
 - Non-intrusive scanning`,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
+// Execute fügt alle Unterbefehle zum Root-Befehl hinzu und setzt Flags entsprechend
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
@@ -36,17 +36,17 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	// Global flags
+	// Globale Flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.netspy.yaml)")
 	rootCmd.PersistentFlags().Bool("verbose", false, "verbose output")
 	rootCmd.PersistentFlags().Bool("quiet", false, "quiet output")
 
-	// Bind flags to viper
+	// Flags an Viper binden
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 	viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
 }
 
-// initConfig reads in config file and ENV variables if set.
+// initConfig liest Konfig-Datei und ENV-Variablen ein falls gesetzt
 func initConfig() {
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)

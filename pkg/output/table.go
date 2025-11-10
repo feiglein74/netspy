@@ -12,9 +12,9 @@ import (
 	"github.com/fatih/color"
 )
 
-// PrintResults outputs scan results in the specified format
+// PrintResults gibt Scan-Ergebnisse im angegebenen Format aus
 func PrintResults(hosts []scanner.Host, format string) error {
-	// Filter only online hosts
+	// Nur online Hosts filtern
 	var onlineHosts []scanner.Host
 	for _, host := range hosts {
 		if host.Online {
@@ -22,7 +22,7 @@ func PrintResults(hosts []scanner.Host, format string) error {
 		}
 	}
 
-	// Sort by IP address
+	// Nach IP-Adresse sortieren
 	sort.Slice(onlineHosts, func(i, j int) bool {
 		return onlineHosts[i].IP.String() < onlineHosts[j].IP.String()
 	})
@@ -45,7 +45,7 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 		return nil
 	}
 
-	// Check what data we have
+	// Prüfen welche Daten vorhanden sind
 	hasMAC := false
 	hasRTT := false
 
@@ -58,7 +58,7 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 		}
 	}
 
-	// Hybrid mode: show everything
+	// Hybrid-Modus: alles anzeigen
 	if hasMAC && hasRTT {
 		color.Cyan("%-20s %-30s %-8s %-18s %-20s %-25s %-12s\n",
 			"IP Address", "Hostname", "RTT", "MAC Address", "Device Type", "HTTP Banner", "Ports")
@@ -137,7 +137,7 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 			)
 		}
 	} else if hasMAC {
-		// ARP-only mode
+		// Nur-ARP-Modus
 		color.Cyan("%-20s %-25s %-18s %-20s\n", "IP Address", "Hostname", "MAC Address", "Device Type")
 		color.White("%s\n", strings.Repeat("-", 90))
 
@@ -175,7 +175,7 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 			)
 		}
 	} else {
-		// Ping-only mode
+		// Nur-Ping-Modus
 		color.Cyan("%-15s %-30s %-10s\n", "IP Address", "Hostname", "RTT")
 		color.White("%s\n", strings.Repeat("-", 60))
 

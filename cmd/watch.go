@@ -24,7 +24,7 @@ var (
 	watchMode     string
 )
 
-// DeviceState tracks the state of a discovered device over time
+// DeviceState verfolgt den Zustand eines entdeckten Geräts über die Zeit
 type DeviceState struct {
 	Host               scanner.Host
 	FirstSeen          time.Time
@@ -35,7 +35,7 @@ type DeviceState struct {
 	TotalOfflineTime   time.Duration // Accumulated time spent offline (for continuous uptime calculation)
 }
 
-// watchCmd represents the watch command
+// watchCmd repräsentiert den watch-Befehl
 var watchCmd = &cobra.Command{
 	Use:   "watch [network]",
 	Short: "Continuously monitor a network for changes",
@@ -59,7 +59,7 @@ Examples:
 func init() {
 	rootCmd.AddCommand(watchCmd)
 
-	// Add flags for watch command
+	// Flags für watch-Befehl hinzufügen
 	watchCmd.Flags().DurationVar(&watchInterval, "interval", 60*time.Second, "Scan interval")
 	watchCmd.Flags().StringVar(&watchMode, "mode", "hybrid", "Scan mode (hybrid, arp, fast, thorough, conservative)")
 	watchCmd.Flags().IntSliceVarP(&ports, "ports", "p", []int{}, "Specific ports to scan")
@@ -68,7 +68,7 @@ func init() {
 func runWatch(cmd *cobra.Command, args []string) error {
 	var network string
 
-	// If no network specified, detect and prompt user to select
+	// Wenn kein Netzwerk angegeben, erkennen und Benutzer zur Auswahl auffordern
 	if len(args) == 0 {
 		detectedNetwork, err := detectAndSelectNetwork()
 		if err != nil {
@@ -79,16 +79,16 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		network = args[0]
 	}
 
-	// Parse network
+	// Netzwerk parsen
 	_, netCIDR, err := net.ParseCIDR(network)
 	if err != nil {
 		return fmt.Errorf("invalid CIDR: %v", err)
 	}
 
-	// Device state map - key is IP address string
+	// Geräte-Status-Map - Schlüssel ist IP-Adresse als String
 	deviceStates := make(map[string]*DeviceState)
 
-	// Setup signal handling for graceful shutdown
+	// Signal-Handling für graceful Shutdown einrichten
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

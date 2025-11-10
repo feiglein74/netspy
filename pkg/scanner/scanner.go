@@ -10,7 +10,7 @@ import (
 	"netspy/pkg/discovery"
 )
 
-// Host represents a discovered network host
+// Host repräsentiert einen entdeckten Netzwerk-Host
 type Host struct {
 	IP               net.IP        `json:"ip"`
 	Hostname         string        `json:"hostname,omitempty"`
@@ -24,7 +24,7 @@ type Host struct {
 	Online           bool          `json:"online"`
 }
 
-// Config holds scanner configuration
+// Config speichert die Scanner-Konfiguration
 type Config struct {
 	Concurrency int
 	Timeout     time.Duration
@@ -35,13 +35,13 @@ type Config struct {
 	Quiet       bool // Suppress progress output
 }
 
-// Scanner performs network discovery
+// Scanner führt Netzwerk-Discovery durch
 type Scanner struct {
 	config Config
 	pinger *discovery.Pinger
 }
 
-// New creates a new scanner instance
+// New erstellt eine neue Scanner-Instanz
 func New(config Config) *Scanner {
 	if !config.Quiet {
 		fmt.Printf("🔧 Scanner mode: ")
@@ -63,7 +63,7 @@ func New(config Config) *Scanner {
 	}
 }
 
-// ScanHosts scans with mode-appropriate strategy
+// ScanHosts scannt mit modus-angepasster Strategie
 func (s *Scanner) ScanHosts(ips []net.IP) ([]Host, error) {
 	var (
 		results   []Host
@@ -141,7 +141,7 @@ func (s *Scanner) ScanHosts(ips []net.IP) ([]Host, error) {
 	return results, nil
 }
 
-// scanHost with mode-appropriate detection
+// scanHost mit modus-angepasster Erkennung
 func (s *Scanner) scanHost(ip net.IP) Host {
 	host := Host{
 		IP:     ip,
@@ -169,7 +169,7 @@ func (s *Scanner) scanHost(ip net.IP) Host {
 	return host
 }
 
-// scanPorts performs port scanning
+// scanPorts führt Port-Scanning durch
 func (s *Scanner) scanPorts(ip net.IP, ports []int) []int {
 	var openPorts []int
 	var mutex sync.Mutex
