@@ -8,6 +8,7 @@
 - [ ] Implement alert system for offline devices
 - [ ] Add web UI for watch mode
 - [ ] Add HTTP banner grabbing for web services
+- [ ] Correct Redraw of the Table if it Grows, the Region Flaps is wrong
 
 ## Improvements
 - [ ] Add IPv6 support
