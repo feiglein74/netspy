@@ -33,7 +33,8 @@
       "Bash(timeout 22 go run:*)",
       "Bash(timeout 30 go run:*)",
       "Bash(./netspy scan:*)",
-      "Bash(./netspy watch:*)"
+      "Bash(./netspy watch:*)",
+      "Bash(sed:*)"
     ],
     "deny": [],
     "ask": []

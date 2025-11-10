@@ -24,7 +24,7 @@ var (
 	scanMode   string
 )
 
-// scanCmd represents the scan command
+// scanCmd repräsentiert den scan-Befehl
 var scanCmd = &cobra.Command{
 	Use:   "scan [network]",
 	Short: "Scan a network for active hosts",
@@ -57,7 +57,7 @@ func init() {
 	scanCmd.Flags().StringVar(&scanMode, "mode", "conservative", "Scan mode (conservative, fast, thorough, arp, hybrid)")
 }
 
-// isQuiet checks if quiet mode is enabled
+// isQuiet prüft ob quiet-Modus aktiviert ist
 func isQuiet() bool {
 	return viper.GetBool("quiet")
 }
@@ -65,7 +65,7 @@ func isQuiet() bool {
 func runScan(cmd *cobra.Command, args []string) error {
 	network := args[0]
 
-	// Validate mode
+	// Modus validieren
 	validModes := map[string]bool{
 		"conservative": true,
 		"fast":         true,
@@ -77,39 +77,39 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid scan mode: %s (valid: conservative, fast, thorough, arp, hybrid)", scanMode)
 	}
 
-	// Use hybrid scanning if requested
+	// Hybrid-Scanning verwenden falls gewünscht
 	if scanMode == "hybrid" {
 		return runHybridScan(network)
 	}
 
-	// Use ARP scanning if requested
+	// ARP-Scanning verwenden falls gewünscht
 	if scanMode == "arp" {
 		return runARPScan(network)
 	}
 
-	// Validate network input for normal scans
+	// Netzwerk-Eingabe für normale Scans validieren
 	hosts, err := parseNetworkInput(network)
 	if err != nil {
 		return fmt.Errorf("invalid network specification: %v", err)
 	}
 
-	// Create scanner configuration
+	// Scanner-Konfiguration erstellen
 	config := createScanConfig()
 	s := scanner.New(config)
 
-	// Print scan info (unless quiet mode)
+	// Scan-Info ausgeben (außer im quiet-Modus)
 	if !isQuiet() {
 		color.Cyan("🔍 Scanning %s (%d hosts) in %s mode\n", network, len(hosts), scanMode)
 		color.White("⚙️  Workers: %d, Timeout: %v\n\n", config.Concurrency, config.Timeout)
 	}
 
-	// Perform scan
+	// Scan durchführen
 	results, err := s.ScanHosts(hosts)
 	if err != nil {
 		return fmt.Errorf("scan failed: %v", err)
 	}
 
-	// Output results
+	// Ergebnisse ausgeben
 	return output.PrintResults(results, format)
 }
 
@@ -165,7 +165,7 @@ func runHybridScan(network string) error {
 		color.Green("✅ Enhanced %d hosts with ping/port details\n\n", len(enhancedHosts))
 	}
 
-	// Output results
+	// Ergebnisse ausgeben
 	return output.PrintResults(enhancedHosts, format)
 }
 
@@ -215,7 +215,7 @@ func runARPScan(network string) error {
 		color.Green("✅ Final result: %d hosts found after ARP refresh\n", len(finalHosts))
 	}
 
-	// Output results
+	// Ergebnisse ausgeben
 	return output.PrintResults(finalHosts, format)
 }
 
