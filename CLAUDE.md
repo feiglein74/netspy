@@ -1,133 +1,133 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit mit Code in diesem Repository.
 
-## Claude Code Preferences
+## Claude Code Präferenzen
 
-### Testing & Running
-- **ALWAYS use `go run main.go` for testing**, NOT the compiled exe
-- **Example**: `timeout 90 go run main.go watch 10.0.0.0/24 --interval 30s`
+### Testen & Ausführen
+- **IMMER `go run main.go` zum Testen verwenden**, NICHT die kompilierte exe
+- **Beispiel**: `timeout 90 go run main.go watch 10.0.0.0/24 --interval 30s`
 
 ### Git Workflow
-- **Auto-commit regularly** to track progress and prevent data loss
-- Before `/compact` or when approaching session limits, ALWAYS commit
-- Use descriptive commit messages following the project's commit style
-- Check `git status` and `git diff` before committing
+- **Regelmäßig auto-committen**, um Fortschritt zu tracken und Datenverlust zu vermeiden
+- Vor `/compact` oder beim Erreichen von Session-Limits IMMER committen
+- Aussagekräftige Commit-Messages im Projektstil verwenden
+- `git status` und `git diff` vor dem Committen prüfen
 
-### Permissions
-- All commonly used commands are pre-approved in `.claude/settings.local.json`
-- Includes: go build, go run, go test, git commands, ipconfig, arp, etc.
+### Berechtigungen
+- Alle häufig verwendeten Befehle sind in `.claude/settings.local.json` vorab genehmigt
+- Beinhaltet: go build, go run, go test, git commands, ipconfig, arp, etc.
 
-## Project Overview
+## Projekt-Übersicht
 
-NetSpy is a modern network discovery tool written in Go that helps monitor network infrastructure. It provides real-time subnet scanning with multiple discovery methods (ICMP, ARP, hybrid) and beautiful CLI output.
+NetSpy ist ein modernes Netzwerk-Discovery-Tool in Go, das bei der Überwachung von Netzwerkinfrastruktur hilft. Es bietet Echtzeit-Subnet-Scanning mit mehreren Discovery-Methoden (ICMP, ARP, hybrid) und schöner CLI-Ausgabe.
 
-## Development Commands
+## Entwicklungs-Befehle
 
-### Building
+### Bauen
 ```bash
 go build -o netspy
 ```
 
-### Running
+### Ausführen
 ```bash
-# Run the built binary
+# Kompilierte Binary ausführen
 ./netspy scan <network>
 
-# Or run directly with go
+# Oder direkt mit go ausführen
 go run main.go scan <network>
 ```
 
-### Testing
+### Testen
 ```bash
 go test ./...
 ```
 
-### Dependencies
+### Abhängigkeiten
 ```bash
-# Download dependencies
+# Abhängigkeiten herunterladen
 go mod download
 
-# Update dependencies
+# Abhängigkeiten aktualisieren
 go mod tidy
 ```
 
-## Architecture
+## Architektur
 
-### Project Structure
-- `main.go` - Entry point that calls cmd.Execute()
-- `cmd/` - Cobra commands (root, scan, watch)
-- `pkg/` - Core functionality packages
-  - `scanner/` - Host scanning logic and Host type definition
-  - `discovery/` - Network discovery methods (ARP, ping)
-  - `output/` - Result formatting (table, JSON, CSV)
+### Projektstruktur
+- `main.go` - Einstiegspunkt, ruft cmd.Execute() auf
+- `cmd/` - Cobra-Befehle (root, scan, watch)
+- `pkg/` - Kern-Funktionalitätspakete
+  - `scanner/` - Host-Scanning-Logik und Host-Typ-Definition
+  - `discovery/` - Netzwerk-Discovery-Methoden (ARP, ping)
+  - `output/` - Ergebnis-Formatierung (table, JSON, CSV)
 
-### Key Components
+### Kernkomponenten
 
 **Scanner Package (`pkg/scanner/scanner.go`)**
-- Core `Host` struct represents discovered network hosts with IP, Hostname, MAC, Vendor, RTT, Ports, and Online status
-- `Scanner` orchestrates concurrent host scanning with configurable workers and timeouts
-- Supports three modes: fast (speed over accuracy), thorough (accuracy over speed), balanced (default)
+- Kern-`Host`-Struct repräsentiert entdeckte Netzwerk-Hosts mit IP, Hostname, MAC, Vendor, RTT, Ports und Online-Status
+- `Scanner` orchestriert gleichzeitiges Host-Scanning mit konfigurierbaren Workers und Timeouts
+- Unterstützt drei Modi: fast (Geschwindigkeit über Genauigkeit), thorough (Genauigkeit über Geschwindigkeit), balanced (Standard)
 
 **Discovery Package**
-- `discovery/ping.go` - TCP-based ping using common ports (22, 80, 443) for reliable detection
-  - `conservativePing()` - Tries reliable ports (22, 80, 443) to minimize false positives
-  - `fastPing()` - Quick detection using only HTTP/HTTPS
-  - `thoroughPing()` - Tries many common ports with validation
-- `discovery/arp.go` - ARP table reading and parsing
-  - Platform-specific ARP table parsing (Windows, Linux, macOS)
-  - `RefreshARPTable()` populates ARP entries by triggering network traffic
+- `discovery/ping.go` - TCP-basiertes Ping mit gängigen Ports (22, 80, 443) für zuverlässige Erkennung
+  - `conservativePing()` - Versucht zuverlässige Ports (22, 80, 443) um False Positives zu minimieren
+  - `fastPing()` - Schnelle Erkennung nur mit HTTP/HTTPS
+  - `thoroughPing()` - Probiert viele gängige Ports mit Validierung
+- `discovery/arp.go` - ARP-Tabellen lesen und parsen
+  - Plattformspezifisches ARP-Tabellen-Parsing (Windows, Linux, macOS)
+  - `RefreshARPTable()` füllt ARP-Einträge durch Auslösen von Netzwerk-Traffic
 
-**Scan Modes (`cmd/scan.go`)**
-1. **Default**: Conservative TCP scan using reliable ports
-2. **--fast**: Quick scan (may miss devices)
-3. **--thorough**: Comprehensive scan (may have false positives)
-4. **--arp**: ARP-based scan (most accurate for local networks)
-5. **--hybrid**: ARP discovery + ping/port details (recommended for best accuracy + details)
+**Scan-Modi (`cmd/scan.go`)**
+1. **Default**: Konservativer TCP-Scan mit zuverlässigen Ports
+2. **--mode fast**: Schneller Scan (kann Geräte übersehen)
+3. **--mode thorough**: Umfassender Scan (kann False Positives haben)
+4. **--mode arp**: ARP-basierter Scan (am genauesten für lokale Netzwerke)
+5. **--mode hybrid**: ARP-Discovery + Ping/Port-Details (empfohlen für beste Genauigkeit + Details)
 
-Scan modes are mutually exclusive and validated in PreRun.
+Scan-Modi schließen sich gegenseitig aus und werden validiert.
 
-**Hybrid Scanning Workflow**
-1. Populate ARP table by pinging all IPs in subnet (`populateARPTable()`)
-2. Read system ARP table to find active hosts (`readCurrentARPTable()`)
-3. Enhance each ARP-discovered host with RTT and port data (`enhanceHostsWithDetails()`)
-4. Output combined results with MAC addresses and network details
+**Hybrid-Scanning-Workflow**
+1. ARP-Tabelle füllen durch Pingen aller IPs im Subnet (`populateARPTable()`)
+2. System-ARP-Tabelle lesen um aktive Hosts zu finden (`readCurrentARPTable()`)
+3. Jeden ARP-entdeckten Host mit RTT- und Port-Daten anreichern (`enhanceHostsWithDetails()`)
+4. Kombinierte Ergebnisse mit MAC-Adressen und Netzwerk-Details ausgeben
 
-### Configuration
-- Uses Viper for configuration management
-- Default config file: `$HOME/.netspy.yaml`
-- Global flags: `--config`, `--verbose`, `--quiet`
-- Scan flags: `-c` (concurrent), `-t` (timeout), `-f` (format), `-p` (ports)
+### Konfiguration
+- Verwendet Viper für Konfigurations-Management
+- Standard-Config-Datei: `$HOME/.netspy.yaml`
+- Globale Flags: `--config`, `--verbose`, `--quiet`
+- Scan-Flags: `-c` (concurrent), `-t` (timeout), `-f` (format), `-p` (ports)
 
-### Concurrency
-- Scanner uses semaphore pattern to limit concurrent scans
-- Default workers: 40 (conservative), 100 (fast), 20 (thorough)
-- Hybrid mode uses separate concurrency limits: 50 for ARP population, 20 for enhancement
-- Progress tracking with atomic counters
+### Nebenläufigkeit
+- Scanner verwendet Semaphore-Pattern um gleichzeitige Scans zu limitieren
+- Standard-Workers: 40 (conservative), 100 (fast), 20 (thorough)
+- Hybrid-Modus verwendet separate Nebenläufigkeits-Limits: 50 für ARP-Population, 20 für Enhancement
+- Fortschritts-Tracking mit atomaren Zählern
 
-### Platform Considerations
-- ARP scanning is platform-specific (Windows uses `arp -a` with different output format than Linux/macOS)
-- Windows ARP format: IP, MAC (aa-bb-cc-dd-ee-ff), type
-- Linux/macOS ARP format: hostname (IP) at MAC [ether] on interface
+### Plattform-Überlegungen
+- ARP-Scanning ist plattformspezifisch (Windows verwendet `arp -a` mit anderem Ausgabeformat als Linux/macOS)
+- Windows-ARP-Format: IP, MAC (aa-bb-cc-dd-ee-ff), type
+- Linux/macOS-ARP-Format: hostname (IP) at MAC [ether] on interface
 
-## Watch Mode (`cmd/watch.go`)
+## Watch-Modus (`cmd/watch.go`)
 
-**Current Implementation**: Static table with in-place updates using ANSI escape codes
+**Aktuelle Implementierung**: Statische Tabelle mit In-Place-Updates mittels ANSI-Escape-Codes
 
-### Key Features
-- **Static Table**: ONE table that updates in place (no scrolling)
-- **ANSI Cursor Control**: Uses `\033[A` (move up) and `\033[2K` (clear line)
-- **Live Updates**: Uptime/downtime counters, DNS lookups, status changes all update in the table
-- **Single Status Line**: Below table shows scan stats and countdown timer
-- **Table Refresh**: Full redraw every 5 seconds to catch DNS updates
+### Hauptfeatures
+- **Statische Tabelle**: EINE Tabelle die in-place aktualisiert wird (kein Scrollen)
+- **ANSI-Cursor-Steuerung**: Verwendet `\033[A` (nach oben) und `\033[2K` (Zeile löschen)
+- **Live-Updates**: Uptime/Downtime-Zähler, DNS-Lookups, Status-Änderungen - alles aktualisiert sich in der Tabelle
+- **Einzelne Status-Zeile**: Unter der Tabelle zeigt Scan-Stats und Countdown-Timer
+- **Tabellen-Refresh**: Vollständiges Redraw alle 5 Sekunden um DNS-Updates zu erfassen
 
-### Important Functions
-- `redrawTable()` - Redraws entire table in place
-- `moveCursorUp(n)` - Moves cursor up n lines
-- `clearLine()` - Clears current line
-- `showCountdownWithTableUpdates()` - Updates status line + periodic table refresh
-- `performScanQuiet()` - Scans without output (results processed by runWatch)
-- `performBackgroundDNSLookups()` - Async DNS resolution during countdown
+### Wichtige Funktionen
+- `redrawTable()` - Zeichnet gesamte Tabelle in-place neu
+- `moveCursorUp(n)` - Bewegt Cursor n Zeilen nach oben
+- `clearLine()` - Löscht aktuelle Zeile
+- `showCountdownWithTableUpdates()` - Aktualisiert Status-Zeile + periodisches Tabellen-Refresh
+- `performScanQuiet()` - Scannt ohne Output (Ergebnisse werden von runWatch verarbeitet)
+- `performBackgroundDNSLookups()` - Asynchrone DNS-Auflösung während Countdown
 
-### Design Principle
-**NO new lines after initial table draw** - Everything updates in place for a clean, dashboard-like experience
+### Design-Prinzip
+**KEINE neuen Zeilen nach initialem Tabellen-Draw** - Alles aktualisiert sich in-place für ein sauberes, Dashboard-artiges Erlebnis
