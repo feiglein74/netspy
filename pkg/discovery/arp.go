@@ -10,19 +10,19 @@ import (
 	"time"
 )
 
-// ARPScanner performs ARP-based host discovery
+// ARPScanner führt ARP-basierte Host-Discovery durch
 type ARPScanner struct {
 	timeout time.Duration
 }
 
-// NewARPScanner creates a new ARP scanner
+// NewARPScanner erstellt einen neuen ARP-Scanner
 func NewARPScanner(timeout time.Duration) *ARPScanner {
 	return &ARPScanner{
 		timeout: timeout,
 	}
 }
 
-// ARPEntry represents an ARP table entry
+// ARPEntry repräsentiert einen ARP-Tabellen-Eintrag
 type ARPEntry struct {
 	IP     net.IP
 	MAC    net.HardwareAddr
@@ -30,7 +30,7 @@ type ARPEntry struct {
 	Online bool
 }
 
-// ScanARPTable reads the actual system ARP table
+// ScanARPTable liest die tatsächliche System-ARP-Tabelle
 func (a *ARPScanner) ScanARPTable(network *net.IPNet) ([]ARPEntry, error) {
 	fmt.Printf("📋 Reading system ARP table...\n")
 
@@ -52,7 +52,7 @@ func (a *ARPScanner) ScanARPTable(network *net.IPNet) ([]ARPEntry, error) {
 	return filteredEntries, nil
 }
 
-// ScanARPTableQuiet reads the actual system ARP table without output (for watch mode)
+// ScanARPTableQuiet liest die System-ARP-Tabelle ohne Ausgabe (für watch-Modus)
 func (a *ARPScanner) ScanARPTableQuiet(network *net.IPNet) ([]ARPEntry, error) {
 	// Get ARP table entries
 	arpEntries, err := a.getSystemARPTable()
@@ -71,7 +71,7 @@ func (a *ARPScanner) ScanARPTableQuiet(network *net.IPNet) ([]ARPEntry, error) {
 	return filteredEntries, nil
 }
 
-// getSystemARPTable reads the system's ARP table
+// getSystemARPTable liest die System-ARP-Tabelle
 func (a *ARPScanner) getSystemARPTable() ([]ARPEntry, error) {
 	switch runtime.GOOS {
 	case "windows":
@@ -85,7 +85,7 @@ func (a *ARPScanner) getSystemARPTable() ([]ARPEntry, error) {
 	}
 }
 
-// getWindowsARPTable reads ARP table on Windows
+// getWindowsARPTable liest ARP-Tabelle unter Windows
 func (a *ARPScanner) getWindowsARPTable() ([]ARPEntry, error) {
 	cmd := exec.Command("arp", "-a")
 	output, err := cmd.Output()
@@ -96,7 +96,7 @@ func (a *ARPScanner) getWindowsARPTable() ([]ARPEntry, error) {
 	return a.parseWindowsARPOutput(string(output))
 }
 
-// parseWindowsARPOutput parses Windows arp -a output
+// parseWindowsARPOutput parst Windows arp -a Ausgabe
 func (a *ARPScanner) parseWindowsARPOutput(output string) ([]ARPEntry, error) {
 	var entries []ARPEntry
 
@@ -148,7 +148,7 @@ func (a *ARPScanner) parseWindowsARPOutput(output string) ([]ARPEntry, error) {
 	return entries, nil
 }
 
-// getLinuxARPTable reads ARP table on Linux
+// getLinuxARPTable liest ARP-Tabelle unter Linux
 func (a *ARPScanner) getLinuxARPTable() ([]ARPEntry, error) {
 	cmd := exec.Command("arp", "-a")
 	output, err := cmd.Output()
@@ -159,7 +159,7 @@ func (a *ARPScanner) getLinuxARPTable() ([]ARPEntry, error) {
 	return a.parseLinuxARPOutput(string(output))
 }
 
-// parseLinuxARPOutput parses Linux arp -a output
+// parseLinuxARPOutput parst Linux arp -a Ausgabe
 func (a *ARPScanner) parseLinuxARPOutput(output string) ([]ARPEntry, error) {
 	var entries []ARPEntry
 
@@ -202,7 +202,7 @@ func (a *ARPScanner) parseLinuxARPOutput(output string) ([]ARPEntry, error) {
 	return entries, nil
 }
 
-// getMacARPTable reads ARP table on macOS
+// getMacARPTable liest ARP-Tabelle unter macOS
 func (a *ARPScanner) getMacARPTable() ([]ARPEntry, error) {
 	cmd := exec.Command("arp", "-a")
 	output, err := cmd.Output()
@@ -213,7 +213,7 @@ func (a *ARPScanner) getMacARPTable() ([]ARPEntry, error) {
 	return a.parseMacARPOutput(string(output))
 }
 
-// parseMacARPOutput parses macOS arp -a output
+// parseMacARPOutput parst macOS arp -a Ausgabe
 func (a *ARPScanner) parseMacARPOutput(output string) ([]ARPEntry, error) {
 	var entries []ARPEntry
 
@@ -265,7 +265,7 @@ func (a *ARPScanner) parseMacARPOutput(output string) ([]ARPEntry, error) {
 	return entries, nil
 }
 
-// normalizeMacAddress pads MAC address segments with leading zeros
+// normalizeMacAddress füllt MAC-Adressen-Segmente mit führenden Nullen auf
 func normalizeMacAddress(mac string) string {
 	parts := strings.Split(mac, ":")
 	for i, part := range parts {
@@ -276,7 +276,7 @@ func normalizeMacAddress(mac string) string {
 	return strings.Join(parts, ":")
 }
 
-// RefreshARPTable tries to populate ARP table by pinging broadcast/common IPs
+// RefreshARPTable versucht ARP-Tabelle durch Pingen von Broadcast/üblichen IPs zu füllen
 func (a *ARPScanner) RefreshARPTable(network *net.IPNet) error {
 	fmt.Printf("🔄 Refreshing ARP table (this may take a moment)...\n")
 

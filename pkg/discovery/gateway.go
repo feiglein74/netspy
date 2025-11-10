@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// GetDefaultGateway returns the IP address of the default gateway
+// GetDefaultGateway gibt die IP-Adresse des Default-Gateways zurück
 func GetDefaultGateway() net.IP {
 	// Windows: route print or ipconfig
 	cmd := exec.Command("route", "print", "0.0.0.0")
@@ -34,7 +34,7 @@ func GetDefaultGateway() net.IP {
 	return nil
 }
 
-// IsGateway checks if the given IP is the default gateway
+// IsGateway prüft ob die angegebene IP das Default-Gateway ist
 func IsGateway(ip net.IP) bool {
 	gateway := GetDefaultGateway()
 	if gateway == nil {
