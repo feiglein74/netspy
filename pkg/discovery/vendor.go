@@ -2,7 +2,7 @@ package discovery
 
 import "strings"
 
-// GetMACVendor returns the vendor name for a given MAC address OUI
+// GetMACVendor gibt den Vendor-Namen für eine gegebene MAC-Adresse zurück OUI
 func GetMACVendor(mac string) string {
 	if len(mac) < 8 {
 		return ""

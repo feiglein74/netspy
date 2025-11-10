@@ -6,18 +6,18 @@ import (
 	"time"
 )
 
-// HostnameResult contains the resolved hostname and its source
+// HostnameResult enthält den aufgelösten Hostnamen und seine Quelle
 type HostnameResult struct {
 	Hostname string
 	Source   string // "dns", "mdns", "netbios", "llmnr"
 }
 
-// ResolveHostname attempts multiple methods to resolve a hostname
-// Tries methods in order of reliability and speed:
-// 1. DNS (fastest, most reliable)
-// 2. mDNS (Apple/IoT devices)
-// 3. NetBIOS (Windows devices)
-// 4. LLMNR (Windows fallback)
+// ResolveHostname versucht mehrere Methoden um einen Hostnamen aufzulösen
+// Versucht Methoden in Reihenfolge von Zuverlässigkeit und Geschwindigkeit:
+// 1. DNS (am schnellsten, zuverlässigsten)
+// 2. mDNS (Apple/IoT-Geräte)
+// 3. NetBIOS (Windows-Geräte)
+// 4. LLMNR (Windows-Fallback)
 func ResolveHostname(ip net.IP, timeout time.Duration) HostnameResult {
 	// Method 1: DNS reverse lookup (fastest, try first)
 	if names, err := net.LookupAddr(ip.String()); err == nil && len(names) > 0 {

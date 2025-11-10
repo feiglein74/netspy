@@ -4,7 +4,7 @@ import (
 	"strings"
 )
 
-// DeviceType constants
+// DeviceType-Konstanten
 const (
 	DeviceTypeSmartphone = "Smartphone"
 	DeviceTypeTablet     = "Tablet"
@@ -16,7 +16,7 @@ const (
 	DeviceTypeUnknown    = "Unknown"
 )
 
-// DetectDeviceType determines the type of device based on available information
+// DetectDeviceType bestimmt den Gerätetyp basierend auf verfügbaren Informationen
 func DetectDeviceType(hostname, mac, vendor string, ports []int) string {
 	hostname = strings.ToLower(hostname)
 	vendor = strings.ToLower(vendor)
@@ -52,7 +52,7 @@ func DetectDeviceType(hostname, mac, vendor string, ports []int) string {
 	return DeviceTypeUnknown
 }
 
-// detectByHostname identifies device type from hostname patterns
+// detectByHostname identifiziert Gerätetyp anhand von Hostname-Mustern
 func detectByHostname(hostname string) string {
 	// Apple devices
 	if containsAny(hostname, []string{"iphone"}) {
@@ -121,7 +121,7 @@ func detectByHostname(hostname string) string {
 	return DeviceTypeUnknown
 }
 
-// detectByVendor identifies device type from MAC vendor
+// detectByVendor identifiziert Gerätetyp anhand von MAC-Vendor
 func detectByVendor(vendor string) string {
 	// Apple devices (likely consumer devices)
 	if strings.Contains(vendor, "apple") {
@@ -159,7 +159,7 @@ func detectByVendor(vendor string) string {
 	return DeviceTypeUnknown
 }
 
-// detectByPorts performs OS fingerprinting based on open ports
+// detectByPorts führt OS-Fingerprinting basierend auf offenen Ports durch
 func detectByPorts(ports []int) string {
 	if len(ports) == 0 {
 		return DeviceTypeUnknown
@@ -208,7 +208,7 @@ func detectByPorts(ports []int) string {
 	return DeviceTypeUnknown
 }
 
-// isLocallyAdministeredMAC checks if MAC address has locally-administered bit set
+// isLocallyAdministeredMAC prüft ob MAC-Adresse locally-administered Bit gesetzt hat
 func isLocallyAdministeredMAC(mac string) bool {
 	if len(mac) < 2 {
 		return false
@@ -220,7 +220,7 @@ func isLocallyAdministeredMAC(mac string) bool {
 	       secondChar == "E" || secondChar == "F"
 }
 
-// containsAny checks if string contains any of the substrings
+// containsAny prüft ob String einen der Teilstrings enthält
 func containsAny(s string, substrs []string) bool {
 	for _, substr := range substrs {
 		if strings.Contains(s, substr) {
