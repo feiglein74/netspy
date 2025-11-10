@@ -1,6 +1,12 @@
 # NetSpy TODO
 
 ## High Priority
+- [ ] Fix failing tests (16 von 42 Tests schlagen fehl)
+  - [ ] `GenerateIPsFromCIDR` - IP-Range-Logik (erwartet alle IPs inkl. Netz/Broadcast)
+  - [ ] `DetectDeviceType` - Gibt leere Strings zurück statt Gerätetypen
+  - [ ] `GetMACVendor` - MAC-Format-Handling (Dashes, ohne Separator)
+  - [ ] `ScanARPTable` - Gibt nil statt leeres Array zurück
+  - [ ] `Scanner.Scan` - Localhost-Detection schlägt fehl
 - [ ] Add configuration file support (.netspy.yaml)
 
 ## Features
@@ -17,6 +23,11 @@
 - [ ] Improve mDNS/LLMNR reliability (some devices don't respond)
 
 ## Done ✅
+- [x] **Ginkgo/Gomega BDD Testing Framework** eingerichtet (11 Test-Dateien, 42 Specs)
+- [x] **Plattformspezifische Tests** (Windows, macOS, Linux) mit Build-Tags
+- [x] **Deutsche Code-Kommentare** in allen Dateien
+- [x] **Network Auto-Detection** für watch command
+- [x] **Unified Scan Mode Flags** (--mode statt separate Flags)
 - [x] Static table watch mode with live updates
 - [x] Hybrid ARP+ping scanning
 - [x] Background DNS lookups with NetBIOS fallback
