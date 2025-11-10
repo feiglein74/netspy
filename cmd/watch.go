@@ -44,12 +44,15 @@ var watchCmd = &cobra.Command{
 Monitors the network at regular intervals and reports when devices appear or disappear.
 Tracks timestamps for when each device was first seen, last seen, and status changes.
 
+If no network is specified, you'll be prompted to select from available network interfaces.
+
 Examples:
+  netspy watch                                     # Auto-detect and select network
   netspy watch 192.168.1.0/24                      # Monitor with default 60s interval
   netspy watch 192.168.1.0/24 --interval 30s       # Check every 30 seconds
   netspy watch 192.168.1.0/24 --mode hybrid        # Use hybrid scanning mode
   netspy watch 192.168.1.0/24 --mode arp           # Use ARP scanning mode`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.RangeArgs(0, 1),
 	RunE: runWatch,
 }
 
@@ -63,7 +66,18 @@ func init() {
 }
 
 func runWatch(cmd *cobra.Command, args []string) error {
-	network := args[0]
+	var network string
+
+	// If no network specified, detect and prompt user to select
+	if len(args) == 0 {
+		detectedNetwork, err := detectAndSelectNetwork()
+		if err != nil {
+			return err
+		}
+		network = detectedNetwork
+	} else {
+		network = args[0]
+	}
 
 	// Parse network
 	_, netCIDR, err := net.ParseCIDR(network)
@@ -974,4 +988,114 @@ func compareIPs(ip1, ip2 string) bool {
 func parseNetworkInputSimple(network *net.IPNet) []net.IP {
 	// Use the already-fixed function from discovery package
 	return discovery.GenerateIPsFromCIDR(network)
+}
+
+// NetworkInterface represents a detected network interface with its subnet
+type NetworkInterface struct {
+	Name    string
+	IP      string
+	Network string // CIDR notation
+}
+
+// detectAndSelectNetwork detects available network interfaces and prompts user to select one
+func detectAndSelectNetwork() (string, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return "", fmt.Errorf("failed to detect network interfaces: %v", err)
+	}
+
+	// Use a map to deduplicate networks (same CIDR might appear on multiple interfaces)
+	networkMap := make(map[string]NetworkInterface)
+
+	for _, iface := range interfaces {
+		// Skip loopback and down interfaces
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			var ipNet *net.IPNet
+
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+				ipNet = v
+			case *net.IPAddr:
+				ip = v.IP
+				// Skip if we can't get the network
+				continue
+			}
+
+			// Only IPv4 for now
+			if ip == nil || ip.To4() == nil {
+				continue
+			}
+
+			// Get the network address (not the host IP)
+			networkAddr := ipNet.IP.Mask(ipNet.Mask)
+			ones, _ := ipNet.Mask.Size()
+			networkCIDR := fmt.Sprintf("%s/%d", networkAddr.String(), ones)
+
+			// Store by network CIDR to deduplicate
+			if _, exists := networkMap[networkCIDR]; !exists {
+				networkMap[networkCIDR] = NetworkInterface{
+					Name:    iface.Name,
+					IP:      ip.String(),
+					Network: networkCIDR,
+				}
+			}
+		}
+	}
+
+	if len(networkMap) == 0 {
+		return "", fmt.Errorf("no active network interfaces found")
+	}
+
+	// Convert map to slice for ordering
+	var availableNetworks []NetworkInterface
+	for _, netif := range networkMap {
+		availableNetworks = append(availableNetworks, netif)
+	}
+
+	// If only one network, use it automatically
+	if len(availableNetworks) == 1 {
+		color.Cyan("🔍 Auto-detected network: %s (your IP: %s on %s)\n\n",
+			availableNetworks[0].Network,
+			availableNetworks[0].IP,
+			availableNetworks[0].Name)
+		return availableNetworks[0].Network, nil
+	}
+
+	// Multiple networks - ask user to select
+	color.Cyan("🔍 Multiple networks detected:\n\n")
+
+	for i, netif := range availableNetworks {
+		fmt.Printf("  %d. %s (your IP: %s on %s)\n",
+			i+1,
+			netif.Network,
+			netif.IP,
+			netif.Name)
+	}
+
+	fmt.Print("\nSelect network [1-", len(availableNetworks), "]: ")
+
+	var selection int
+	_, err = fmt.Scanln(&selection)
+	if err != nil || selection < 1 || selection > len(availableNetworks) {
+		return "", fmt.Errorf("invalid selection")
+	}
+
+	selectedNetwork := availableNetworks[selection-1]
+	color.Green("✅ Selected: %s (your IP: %s on %s)\n\n",
+		selectedNetwork.Network,
+		selectedNetwork.IP,
+		selectedNetwork.Name)
+
+	return selectedNetwork.Network, nil
 }
