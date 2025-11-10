@@ -40,8 +40,44 @@ go run main.go scan <network>
 
 ### Testen
 ```bash
+# Standard Go Tests ausführen
 go test ./...
+
+# Mit Ginkgo BDD Framework (ausführlicher)
+ginkgo -r
+
+# Mit Coverage Report
+ginkgo -r --cover
+
+# Nur bestimmtes Package testen
+ginkgo pkg/scanner
+ginkgo pkg/discovery
+
+# Verbose Output
+ginkgo -r -v
+
+# Tests bei Änderungen automatisch ausführen (Watch-Mode)
+ginkgo watch -r
 ```
+
+**WICHTIG**: Tests sollten regelmäßig ausgeführt werden - mindestens VOR jedem Commit!
+
+#### Test-Framework
+NetSpy verwendet **Ginkgo** (BDD Test Framework) mit **Gomega** (Matcher Library):
+- **Ginkgo**: Behavior-Driven Development (BDD) Test-Framework für Go
+- **Gomega**: Ausdrucksstarke Matcher und Assertions
+- **Plattformspezifische Tests**: Separate Test-Dateien mit Build-Tags (`//go:build windows`, `//go:build darwin`, `//go:build linux`)
+
+Test-Struktur:
+- `pkg/scanner/scanner_test.go` - Scanner-Funktionalität
+- `pkg/discovery/vendor_test.go` - MAC-Vendor-Erkennung
+- `pkg/discovery/devicetype_test.go` - Gerätetyp-Erkennung
+- `pkg/discovery/gateway_test.go` - Gateway-Erkennung
+- `pkg/discovery/ping_test.go` - Ping- und IP-Generierung
+- `pkg/discovery/arp_test.go` - Plattformübergreifende ARP-Tests
+- `pkg/discovery/arp_windows_test.go` - Windows-spezifische ARP-Tests
+- `pkg/discovery/arp_darwin_test.go` - macOS-spezifische ARP-Tests
+- `pkg/discovery/arp_linux_test.go` - Linux-spezifische ARP-Tests
 
 ### Abhängigkeiten
 ```bash
