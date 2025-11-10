@@ -244,18 +244,8 @@ func performScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, m
 		hosts, err = performHybridScanQuiet(ctx, netCIDR)
 	case "arp":
 		hosts, err = performARPScanQuiet(ctx, netCIDR)
-	case "fast":
-		fast = true
-		thorough = false
-		hosts, err = performNormalScan(network)
-	case "thorough":
-		fast = false
-		thorough = true
-		hosts, err = performNormalScan(network)
-	case "conservative":
-		fast = false
-		thorough = false
-		hosts, err = performNormalScan(network)
+	case "fast", "thorough", "conservative":
+		hosts, err = performNormalScan(network, mode)
 	default:
 		return nil
 	}
@@ -439,11 +429,14 @@ func populateARPTableQuiet(ctx context.Context, network *net.IPNet) error {
 
 // Old streaming functions removed - now using static table with redrawTable()
 
-func performNormalScan(network string) ([]scanner.Host, error) {
+func performNormalScan(network string, mode string) ([]scanner.Host, error) {
 	hosts, err := parseNetworkInput(network)
 	if err != nil {
 		return nil, fmt.Errorf("invalid network specification: %v", err)
 	}
+
+	// Set the global scanMode so createScanConfig() uses the right settings
+	scanMode = mode
 
 	config := createScanConfig()
 	config.Quiet = true // Suppress verbose output in watch mode

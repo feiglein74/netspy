@@ -21,10 +21,7 @@ var (
 	timeout    time.Duration
 	format     string
 	ports      []int
-	fast       bool
-	thorough   bool
-	arp        bool
-	hybrid     bool
+	scanMode   string
 )
 
 // scanCmd represents the scan command
@@ -34,17 +31,17 @@ var scanCmd = &cobra.Command{
 	Long: `Scan a network subnet to discover active hosts.
 
 Scan modes:
-  Default: Conservative TCP scan
-  --fast:     Quick scan (may miss some devices)
-  --thorough: Comprehensive scan (may have false positives)
-  --arp:      ARP-based scan (most accurate for local networks)
-  --hybrid:   ARP discovery + ping/port details (best accuracy + details)
+  conservative: Conservative TCP scan (default)
+  fast:         Quick scan (may miss some devices)
+  thorough:     Comprehensive scan (may have false positives)
+  arp:          ARP-based scan (most accurate for local networks)
+  hybrid:       ARP discovery + ping/port details (best accuracy + details)
 
 Examples:
-  netspy scan 192.168.1.0/24           # Conservative scan
-  netspy scan 192.168.1.0/24 --arp     # ARP scan only
-  netspy scan 192.168.1.0/24 --hybrid  # ARP + ping details (recommended!)
-  netspy scan 192.168.1.0/24 --hybrid --ports 22,80,443  # ARP + specific ports`,
+  netspy scan 192.168.1.0/24                      # Conservative scan (default)
+  netspy scan 192.168.1.0/24 --mode arp           # ARP scan only
+  netspy scan 192.168.1.0/24 --mode hybrid        # ARP + ping details (recommended!)
+  netspy scan 192.168.1.0/24 --mode hybrid --ports 22,80,443  # ARP + specific ports`,
 	Args: cobra.ExactArgs(1),
 	RunE: runScan,
 }
@@ -57,33 +54,7 @@ func init() {
 	scanCmd.Flags().DurationVarP(&timeout, "timeout", "t", 0, "Timeout per host")
 	scanCmd.Flags().StringVarP(&format, "format", "f", "table", "Output format (table, json, csv)")
 	scanCmd.Flags().IntSliceVarP(&ports, "ports", "p", []int{}, "Specific ports to scan")
-	scanCmd.Flags().BoolVar(&fast, "fast", false, "Fast scanning mode")
-	scanCmd.Flags().BoolVar(&thorough, "thorough", false, "Thorough scanning mode")
-	scanCmd.Flags().BoolVar(&arp, "arp", false, "ARP-based scanning only")
-	scanCmd.Flags().BoolVar(&hybrid, "hybrid", false, "ARP discovery + ping/port details (recommended)")
-
-	// Validate flags
-	scanCmd.PreRun = func(cmd *cobra.Command, args []string) {
-		modeCount := 0
-		if fast {
-			modeCount++
-		}
-		if thorough {
-			modeCount++
-		}
-		if arp {
-			modeCount++
-		}
-		if hybrid {
-			modeCount++
-		}
-
-		if modeCount > 1 {
-			color.Red("❌ Cannot combine scan modes")
-			cmd.Usage()
-			return
-		}
-	}
+	scanCmd.Flags().StringVar(&scanMode, "mode", "conservative", "Scan mode (conservative, fast, thorough, arp, hybrid)")
 }
 
 // isQuiet checks if quiet mode is enabled
@@ -94,13 +65,25 @@ func isQuiet() bool {
 func runScan(cmd *cobra.Command, args []string) error {
 	network := args[0]
 
+	// Validate mode
+	validModes := map[string]bool{
+		"conservative": true,
+		"fast":         true,
+		"thorough":     true,
+		"arp":          true,
+		"hybrid":       true,
+	}
+	if !validModes[scanMode] {
+		return fmt.Errorf("invalid scan mode: %s (valid: conservative, fast, thorough, arp, hybrid)", scanMode)
+	}
+
 	// Use hybrid scanning if requested
-	if hybrid {
+	if scanMode == "hybrid" {
 		return runHybridScan(network)
 	}
 
 	// Use ARP scanning if requested
-	if arp {
+	if scanMode == "arp" {
 		return runARPScan(network)
 	}
 
@@ -116,8 +99,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// Print scan info (unless quiet mode)
 	if !isQuiet() {
-		mode := getModeName()
-		color.Cyan("🔍 Scanning %s (%d hosts) in %s mode\n", network, len(hosts), mode)
+		color.Cyan("🔍 Scanning %s (%d hosts) in %s mode\n", network, len(hosts), scanMode)
 		color.White("⚙️  Workers: %d, Timeout: %v\n\n", config.Concurrency, config.Timeout)
 	}
 
@@ -432,16 +414,7 @@ func populateARPTable(network *net.IPNet) error {
 
 
 func getModeName() string {
-	if arp {
-		return "ARP"
-	} else if hybrid {
-		return "hybrid"
-	} else if fast {
-		return "fast"
-	} else if thorough {
-		return "thorough"
-	}
-	return "conservative"
+	return scanMode
 }
 
 func createScanConfig() scanner.Config {
@@ -449,20 +422,20 @@ func createScanConfig() scanner.Config {
 		Concurrency: concurrent,
 		Timeout:     timeout,
 		Ports:       ports,
-		Fast:        fast,
-		Thorough:    thorough,
+		Fast:        scanMode == "fast",
+		Thorough:    scanMode == "thorough",
 		Quiet:       isQuiet(),
 	}
 
 	// Conservative defaults to avoid false positives
-	if thorough {
+	if scanMode == "thorough" {
 		if config.Concurrency == 0 {
 			config.Concurrency = 20
 		}
 		if config.Timeout == 0 {
 			config.Timeout = 1500 * time.Millisecond
 		}
-	} else if fast {
+	} else if scanMode == "fast" {
 		if config.Concurrency == 0 {
 			config.Concurrency = 100
 		}
