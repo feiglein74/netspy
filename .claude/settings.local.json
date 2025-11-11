@@ -36,7 +36,15 @@
       "Bash(./netspy watch:*)",
       "Bash(sed:*)",
       "Bash(go get:*)",
-      "Bash(go install:*)"
+      "Bash(go install:*)",
+      "Bash(timeout 8 go run:*)",
+      "Bash(timeout 15 ping:*)",
+      "Bash(nul)",
+      "Bash(timeout 10 ping:*)",
+      "Bash(.netspy.exe watch 10.0.0.0/24 --interval 30s)",
+      "Bash(timeout 12 ping:*)",
+      "Bash(dir:*)",
+      "Bash(./netspy.exe watch:*)"
     ],
     "deny": [],
     "ask": []

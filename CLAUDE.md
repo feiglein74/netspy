@@ -5,8 +5,11 @@ Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit 
 ## Claude Code Präferenzen
 
 ### Testen & Ausführen
-- **IMMER `go run main.go` zum Testen verwenden**, NICHT die kompilierte exe
-- **Beispiel**: `timeout 90 go run main.go watch 10.0.0.0/24 --interval 30s`
+- **Kompilierte Binary bevorzugen**: `./netspy.exe` oder `netspy.exe` verwenden
+- **Build-Befehl**: `go build -o netspy.exe` (falls Binary nicht existiert)
+- **Alternativ**: `go run main.go` kann ebenfalls verwendet werden
+- **Beispiel Binary**: `netspy.exe watch 10.0.0.0/24 --interval 30s`
+- **Beispiel go run**: `timeout 90 go run main.go watch 10.0.0.0/24 --interval 30s`
 
 ### Git Workflow
 - **Regelmäßig auto-committen**, um Fortschritt zu tracken und Datenverlust zu vermeiden
