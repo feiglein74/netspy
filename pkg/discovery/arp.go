@@ -48,7 +48,7 @@ func (a *ARPScanner) ScanARPTable(network *net.IPNet) ([]ARPEntry, error) {
 		}
 	}
 
-	fmt.Printf("✅ Found %d hosts in ARP table for network %s\n", len(filteredEntries), network.String())
+	fmt.Printf("[OK] Found %d hosts in ARP table for network %s\n", len(filteredEntries), network.String())
 	return filteredEntries, nil
 }
 

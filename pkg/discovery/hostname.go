@@ -164,7 +164,7 @@ func GetSourceEmoji(source string) string {
 	case "llmnr":
 		return "🔗" // Link - LLMNR
 	case "vendor":
-		return "🏷️" // Label - from vendor database
+		return "[tag]" // Label - from vendor database
 	default:
 		return ""
 	}

@@ -99,8 +99,8 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// Scan-Info ausgeben (außer im quiet-Modus)
 	if !isQuiet() {
-		color.Cyan("🔍 Scanning %s (%d hosts) in %s mode\n", network, len(hosts), scanMode)
-		color.White("⚙️  Workers: %d, Timeout: %v\n\n", config.Concurrency, config.Timeout)
+		color.Cyan(" Scanning %s (%d hosts) in %s mode\n", network, len(hosts), scanMode)
+		color.White("  Workers: %d, Timeout: %v\n\n", config.Concurrency, config.Timeout)
 	}
 
 	// Scan durchführen
@@ -138,19 +138,19 @@ func runHybridScan(network string) error {
 	}
 	if err := populateARPTable(netCIDR); err != nil {
 		if !quiet {
-			color.Yellow("⚠️  Warning: %v\n", err)
+			color.Yellow("[WARN]  Warning: %v\n", err)
 		}
 	}
 
 	// Read ARP table
 	arpHosts := readCurrentARPTable(netCIDR)
 	if !quiet {
-		color.Green("✅ ARP found %d active hosts\n\n", len(arpHosts))
+		color.Green("[OK] ARP found %d active hosts\n\n", len(arpHosts))
 	}
 
 	if len(arpHosts) == 0 {
 		if !quiet {
-			color.Red("❌ No hosts found via ARP\n")
+			color.Red("[ERROR] No hosts found via ARP\n")
 		}
 		return nil
 	}
@@ -162,7 +162,7 @@ func runHybridScan(network string) error {
 	enhancedHosts := enhanceHostsWithDetails(arpHosts)
 
 	if !quiet {
-		color.Green("✅ Enhanced %d hosts with ping/port details\n\n", len(enhancedHosts))
+		color.Green("[OK] Enhanced %d hosts with ping/port details\n\n", len(enhancedHosts))
 	}
 
 	// Ergebnisse ausgeben
@@ -201,7 +201,7 @@ func runARPScan(network string) error {
 	}
 	if err := populateARPTable(netCIDR); err != nil {
 		if !quiet {
-			color.Yellow("⚠️  Warning: %v\n", err)
+			color.Yellow("[WARN]  Warning: %v\n", err)
 		}
 	}
 
@@ -212,7 +212,7 @@ func runARPScan(network string) error {
 	finalHosts := readCurrentARPTable(netCIDR)
 
 	if !quiet {
-		color.Green("✅ Final result: %d hosts found after ARP refresh\n", len(finalHosts))
+		color.Green("[OK] Final result: %d hosts found after ARP refresh\n", len(finalHosts))
 	}
 
 	// Ergebnisse ausgeben
@@ -331,7 +331,7 @@ func readCurrentARPTable(network *net.IPNet) []scanner.Host {
 	arpScanner := discovery.NewARPScanner(500 * time.Millisecond)
 	arpEntries, err := arpScanner.ScanARPTable(network)
 	if err != nil {
-		color.Red("❌ Failed to read ARP table: %v\n", err)
+		color.Red("[ERROR] Failed to read ARP table: %v\n", err)
 		return nil
 	}
 
@@ -405,7 +405,7 @@ func populateARPTable(network *net.IPNet) error {
 
 	// Wait a moment for ARP entries to be written
 	if !quiet {
-		color.Cyan("⏳ Waiting for ARP table to update...\n")
+		color.Cyan(" Waiting for ARP table to update...\n")
 	}
 	time.Sleep(1 * time.Second)
 

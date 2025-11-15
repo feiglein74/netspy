@@ -115,7 +115,7 @@ func (s *Scanner) ScanHosts(ips []net.IP) ([]Host, error) {
 						}
 					}
 					mutex.Unlock()
-					fmt.Printf("⏳ %d/%d scanned, %d found (%.0f/sec)\n",
+					fmt.Printf(" %d/%d scanned, %d found (%.0f/sec)\n",
 						done, total, online, rate)
 				}
 			}
@@ -133,9 +133,9 @@ func (s *Scanner) ScanHosts(ips []net.IP) ([]Host, error) {
 	}
 
 	if !s.config.Quiet {
-		fmt.Printf("✅ Scan completed in %.1fs (%.0f hosts/sec)\n",
+		fmt.Printf("[OK] Scan completed in %.1fs (%.0f hosts/sec)\n",
 			elapsed.Seconds(), float64(total)/elapsed.Seconds())
-		fmt.Printf("📊 Found %d online hosts out of %d scanned\n\n", onlineCount, total)
+		fmt.Printf("[Summary] Found %d online hosts out of %d scanned\n\n", onlineCount, total)
 	}
 
 	return results, nil

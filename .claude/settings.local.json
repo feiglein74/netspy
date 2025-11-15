@@ -53,7 +53,8 @@
       "Bash(timeout 15 ./netspy.exe:*)",
       "Bash(./netspy.exe:*)",
       "Bash(git tag:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash({} ;)"
     ],
     "deny": [],
     "ask": []
