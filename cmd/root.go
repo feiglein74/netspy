@@ -9,6 +9,7 @@ import (
 )
 
 var cfgFile string
+var showVersion bool
 
 // rootCmd repräsentiert den Basis-Befehl wenn ohne Unterbefehle aufgerufen
 var rootCmd = &cobra.Command{
@@ -23,6 +24,15 @@ Features:
 - Multiple discovery methods (ICMP, ARP)
 - Beautiful CLI output
 - Non-intrusive scanning`,
+	Run: func(cmd *cobra.Command, args []string) {
+		// Wenn --version Flag gesetzt ist, Version anzeigen
+		if showVersion {
+			fmt.Printf("NetSpy v%s\n", getVersion())
+			os.Exit(0)
+		}
+		// Sonst Standard-Hilfe anzeigen
+		cmd.Help()
+	},
 }
 
 // Execute fügt alle Unterbefehle zum Root-Befehl hinzu und setzt Flags entsprechend
@@ -40,10 +50,16 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.netspy.yaml)")
 	rootCmd.PersistentFlags().Bool("verbose", false, "verbose output")
 	rootCmd.PersistentFlags().Bool("quiet", false, "quiet output")
+	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "show version information")
 
 	// Flags an Viper binden
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 	viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
+}
+
+// getVersion gibt die aktuelle Version zurück
+func getVersion() string {
+	return "0.1.0"
 }
 
 // initConfig liest Konfig-Datei und ENV-Variablen ein falls gesetzt

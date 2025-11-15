@@ -11,9 +11,14 @@
 # Output of the go coverage tool
 *.out
 coverage.html
+*.coverprofile
 
 # Go workspace file
 go.work
+go.work.sum
+
+# Ginkgo test output
+*.ginkgo.json
 
 # Dependency directories
 vendor/
@@ -32,7 +37,15 @@ Thumbs.db
 # NetSpy specific
 netspy
 netspy.exe
+dist/
+*.tar.gz
+*.zip
 
 # Configuration files (may contain sensitive data)
 .netspy.yaml
 *.local.yaml
+
+# Temporary directories
+tmp/
+temp/
+_ul/
