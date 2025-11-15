@@ -58,8 +58,14 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 		}
 	}
 
-	// Hybrid-Modus: alles anzeigen
+	// Terminal-Größe ermitteln
+	termSize := GetTerminalSize()
+
+	// Hybrid-Modus: alles anzeigen (responsive)
 	if hasMAC && hasRTT {
+		return printResponsiveHybridTable(hosts, termSize)
+	} else if hasMAC && false {
+		// Placeholder für alte Logik - wird durch responsive ersetzt
 		color.Cyan("%-20s %-30s %-8s %-18s %-20s %-25s %-12s\n",
 			"IP Address", "Hostname", "RTT", "MAC Address", "Device Type", "HTTP Banner", "Ports")
 		color.White("%s\n", strings.Repeat("-", 140))
