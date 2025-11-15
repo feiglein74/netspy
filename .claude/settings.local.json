@@ -50,7 +50,9 @@
       "Bash(set GOCACHE=%CD%.gocache)",
       "Bash(set GOTMPDIR=%CD%.gotmp)",
       "Bash(mkdir:*)",
-      "Bash(timeout 15 ./netspy.exe:*)"
+      "Bash(timeout 15 ./netspy.exe:*)",
+      "Bash(./netspy.exe:*)",
+      "Bash(git tag:*)"
     ],
     "deny": [],
     "ask": []
