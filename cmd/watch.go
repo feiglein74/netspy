@@ -129,10 +129,10 @@ func runWatch(cmd *cobra.Command, args []string) error {
 				for {
 					select {
 					case <-scanDone:
-						fmt.Print("\r\033[2K") // Clear the line
+						fmt.Print("\033[2K\r") // Clear the line
 						return
 					default:
-						color.Cyan("\r%s Scanning network... ", spinner[i])
+						fmt.Printf("\033[2K\r%s", color.CyanString("%s Scanning network... ", spinner[i]))
 						i = (i + 1) % len(spinner)
 						time.Sleep(100 * time.Millisecond)
 					}

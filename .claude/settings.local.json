@@ -44,7 +44,13 @@
       "Bash(.netspy.exe watch 10.0.0.0/24 --interval 30s)",
       "Bash(timeout 12 ping:*)",
       "Bash(dir:*)",
-      "Bash(./netspy.exe watch:*)"
+      "Bash(./netspy.exe watch:*)",
+      "Bash(git config:*)",
+      "Bash(ginkgo:*)",
+      "Bash(set GOCACHE=%CD%.gocache)",
+      "Bash(set GOTMPDIR=%CD%.gotmp)",
+      "Bash(mkdir:*)",
+      "Bash(timeout 15 ./netspy.exe:*)"
     ],
     "deny": [],
     "ask": []
