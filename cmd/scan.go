@@ -93,6 +93,12 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid network specification: %v", err)
 	}
 
+	// Parse CIDR für Gateway-Erkennung
+	_, netCIDR, err := net.ParseCIDR(network)
+	if err != nil {
+		return fmt.Errorf("invalid CIDR: %v", err)
+	}
+
 	// Scanner-Konfiguration erstellen
 	config := createScanConfig()
 	s := scanner.New(config)
@@ -108,6 +114,9 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("scan failed: %v", err)
 	}
+
+	// Gateway-Flags setzen (heuristische Erkennung)
+	scanner.SetGatewayFlags(results, netCIDR)
 
 	// Ergebnisse ausgeben
 	return output.PrintResults(results, format)
@@ -209,6 +218,9 @@ func runHybridScan(network string) error {
 		color.Green("[OK] Enhanced %d hosts with ping/port details\n\n", len(enhancedHosts))
 	}
 
+	// Gateway-Flags setzen (heuristische Erkennung)
+	scanner.SetGatewayFlags(enhancedHosts, netCIDR)
+
 	// Ergebnisse ausgeben
 	return output.PrintResults(enhancedHosts, format)
 }
@@ -306,6 +318,9 @@ func runARPScan(network string) error {
 
 		finalHosts = results
 	}
+
+	// Gateway-Flags setzen (heuristische Erkennung)
+	scanner.SetGatewayFlags(finalHosts, netCIDR)
 
 	// Ergebnisse ausgeben
 	return output.PrintResults(finalHosts, format)

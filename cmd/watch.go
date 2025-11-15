@@ -268,6 +268,9 @@ func performScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, m
 		return hosts
 	}
 
+	// Gateway-Flags setzen (heuristische Erkennung)
+	scanner.SetGatewayFlags(hosts, netCIDR)
+
 	return hosts
 }
 
@@ -695,8 +698,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		}
 
 		// Check if this is the gateway and add marker to IP
-		parsedIP := net.ParseIP(ipStr)
-		if parsedIP != nil && discovery.IsGateway(parsedIP) {
+		if state.Host.IsGateway {
 			ipStr = ipStr + " [G]"
 		}
 
