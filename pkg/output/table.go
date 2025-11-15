@@ -41,7 +41,7 @@ func PrintResults(hosts []scanner.Host, format string) error {
 
 func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 	if len(hosts) == 0 {
-		color.Red("❌ No active hosts found (scanned %d addresses)\n", totalScanned)
+		color.Red("[ERROR] No active hosts found (scanned %d addresses)\n", totalScanned)
 		return nil
 	}
 

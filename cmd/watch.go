@@ -97,12 +97,12 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 	go func() {
 		sig := <-sigChan
-		fmt.Printf("\n\n🛑 Received signal %v, shutting down...\n", sig)
+		fmt.Printf("\n\n[!] Received signal %v, shutting down...\n", sig)
 		cancel()
 	}()
 
 	// Print header once
-	color.Cyan("🔍 NetSpy Watch Mode\n")
+	color.Cyan("NetSpy Watch Mode\n")
 	color.White("Network: %s | Interval: %v | Mode: %s\n", network, watchInterval, watchMode)
 	color.Yellow("Press Ctrl+C (^C) to stop\n\n")
 
@@ -112,7 +112,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	for {
 		// Check if context is cancelled before starting new scan
 		if ctx.Err() != nil {
-			fmt.Println("\n✅ Shutdown complete")
+			fmt.Println("\n[OK] Shutdown complete")
 			return nil
 		}
 
@@ -124,7 +124,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		if scanCount == 1 {
 			scanDone = make(chan bool)
 			go func() {
-				spinner := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+				spinner := []string{"|", "/", "-", "\\"}
 				i := 0
 				for {
 					select {
@@ -132,7 +132,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 						fmt.Print("\033[2K\r") // Clear the line
 						return
 					default:
-						fmt.Printf("\033[2K\r%s", color.CyanString("%s Scanning network... ", spinner[i]))
+						fmt.Printf("\033[2K\r%s", color.CyanString("[%s] Scanning network... ", spinner[i]))
 						i = (i + 1) % len(spinner)
 						time.Sleep(100 * time.Millisecond)
 					}
@@ -151,7 +151,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 		// Check if cancelled during scan
 		if ctx.Err() != nil {
-			fmt.Println("\n✅ Shutdown complete")
+			fmt.Println("\n[OK] Shutdown complete")
 			return nil
 		}
 
@@ -571,11 +571,11 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		state := states[ipStr]
 
 		// Prepare ALL data BEFORE clearing the line (to minimize flicker)
-		statusIcon := "🟢"
+		statusIcon := "[+]"
 		statusColor := color.GreenString
 		statusText := "online "  // Extra space to match "offline" length
 		if state.Status == "offline" {
-			statusIcon = "🔴"
+			statusIcon = "[-]"
 			statusColor = color.RedString
 			statusText = "offline"
 		}
@@ -676,7 +676,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			offlineCount++
 		}
 	}
-	fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: %s",
+	fmt.Printf("[Scan #%d] %d devices (%d online, %d offline) | Scan: %s | Next: %s",
 		scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(duration))
 
 	for {
@@ -737,7 +737,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				}
 			}
 
-			fmt.Printf("📊 Scan #%d | %d devices (%d online, %d offline) | Scan: %s | ⏳ Next: %s",
+			fmt.Printf("[Stats] Scan #%d | %d devices (%d online, %d offline) | Scan: %s |  Next: %s",
 				scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
 		}
 	}
@@ -1065,7 +1065,7 @@ func detectAndSelectNetwork() (string, error) {
 
 	// If only one network, use it automatically
 	if len(availableNetworks) == 1 {
-		color.Cyan("🔍 Auto-detected network: %s (your IP: %s on %s)\n\n",
+		color.Cyan(" Auto-detected network: %s (your IP: %s on %s)\n\n",
 			availableNetworks[0].Network,
 			availableNetworks[0].IP,
 			availableNetworks[0].Name)
@@ -1073,7 +1073,7 @@ func detectAndSelectNetwork() (string, error) {
 	}
 
 	// Multiple networks - ask user to select
-	color.Cyan("🔍 Multiple networks detected:\n\n")
+	color.Cyan(" Multiple networks detected:\n\n")
 
 	for i, netif := range availableNetworks {
 		fmt.Printf("  %d. %s (your IP: %s on %s)\n",
@@ -1092,7 +1092,7 @@ func detectAndSelectNetwork() (string, error) {
 	}
 
 	selectedNetwork := availableNetworks[selection-1]
-	color.Green("✅ Selected: %s (your IP: %s on %s)\n\n",
+	color.Green(" Selected: %s (your IP: %s on %s)\n\n",
 		selectedNetwork.Network,
 		selectedNetwork.IP,
 		selectedNetwork.Name)
