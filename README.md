@@ -189,15 +189,18 @@ ginkgo -r -v
 
 ## Plattform-Support
 
-| Feature | Windows | macOS | Linux |
-|---------|---------|-------|-------|
-| ARP-Scanning | ✅ | ✅ | ✅ |
-| TCP-Ping | ✅ | ✅ | ✅ |
-| DNS-Auflösung | ✅ | ✅ | ✅ |
-| mDNS/Bonjour | ✅ | ✅ | ✅ |
-| NetBIOS | ✅ | ➖ | ➖ |
-| LLMNR | ✅ | ✅ | ✅ |
-| Gateway-Detection | ✅ | ✅ | ✅ |
+| Feature | Windows | macOS | Linux | Notizen |
+|---------|---------|-------|-------|---------|
+| ARP-Scanning | ✅ | ✅ | ✅* | *Linux nicht vollständig getestet |
+| TCP-Ping | ✅ | ✅ | ✅ | Pure Go |
+| DNS-Auflösung | ✅ | ✅ | ✅ | Standard Library |
+| mDNS/Bonjour | ✅ | ✅ | ✅ | Pure Go |
+| NetBIOS | ✅ | ⚠️ | ⚠️ | Windows-optimiert |
+| LLMNR | ✅ | ✅ | ✅ | |
+| Gateway-Detection | ✅ | ❌ | ❌ | **Siehe Bekannte Einschränkungen** |
+| Watch-Modus | ✅ | ✅ | ✅ | ANSI Codes |
+
+**Detaillierte Plattform-Informationen:** Siehe [docs/PLATFORM_COMPATIBILITY.md](docs/PLATFORM_COMPATIBILITY.md)
 
 ## Konfiguration
 
@@ -218,10 +221,18 @@ watch:
 
 ## Bekannte Einschränkungen
 
+### Cross-Platform
+- **Gateway-Erkennung funktioniert nur auf Windows** (KRITISCH)
+  - macOS und Linux: Gateway-Marker `[G]` fehlt im Watch-Modus
+  - Lösung in Arbeit für v0.2.0
+  - Details: [docs/PLATFORM_COMPATIBILITY.md](docs/PLATFORM_COMPATIBILITY.md)
+- Linux-Support vollständig implementiert aber noch nicht in Produktion getestet
+
+### Allgemein
 - Einige IoT-Geräte antworten nicht auf mDNS/LLMNR
 - ICMP-Ping erfordert Admin-Rechte (aktuell nur TCP)
 - IPv6-Support noch nicht implementiert
-- 16 von 42 Tests schlagen aktuell fehl (siehe TODO.md)
+- 16 von 42 Tests schlagen aktuell fehl (siehe [TODO.md](TODO.md))
 
 ## Roadmap
 

@@ -1,12 +1,33 @@
 # NetSpy TODO
 
 ## High Priority
+
+### 🔴 Cross-Platform Critical Issues (v0.2.0)
+- [ ] **Gateway-Erkennung für macOS implementieren** (KRITISCH)
+  - Aktuell: Nur Windows unterstützt (`route print 0.0.0.0`)
+  - Lösung: `netstat -rn` oder `route get default` verwenden
+  - Siehe: `docs/PLATFORM_COMPATIBILITY.md`
+- [ ] **Gateway-Erkennung für Linux implementieren** (KRITISCH)
+  - Aktuell: Nur Windows unterstützt
+  - Lösung: `ip route` oder `/proc/net/route` verwenden
+  - Siehe: `docs/PLATFORM_COMPATIBILITY.md`
+- [ ] **Build-Tags zu gateway.go hinzufügen**
+  - Dateien: `gateway_windows.go`, `gateway_darwin.go`, `gateway_linux.go`
+  - Error-Logging für fehlgeschlagene Gateway-Erkennung
+- [ ] **Spinner-Fix auf Windows testen** (nach macOS-Fix)
+  - ANSI-Escape-Codes statt Carriage Return
+  - Verifizieren dass Windows 10+ funktioniert
+
+### 🧪 Testing & Quality
 - [ ] Fix failing tests (16 von 42 Tests schlagen fehl)
   - [ ] `GenerateIPsFromCIDR` - IP-Range-Logik (erwartet alle IPs inkl. Netz/Broadcast)
   - [ ] `DetectDeviceType` - Gibt leere Strings zurück statt Gerätetypen
   - [ ] `GetMACVendor` - MAC-Format-Handling (Dashes, ohne Separator)
   - [ ] `ScanARPTable` - Gibt nil statt leeres Array zurück
   - [ ] `Scanner.Scan` - Localhost-Detection schlägt fehl
+- [ ] Linux vollständig testen (ARP, Gateway, Watch-Mode)
+
+### ⚙️ Configuration
 - [ ] Add configuration file support (.netspy.yaml)
 
 ## Features
@@ -23,6 +44,13 @@
 - [ ] Improve mDNS/LLMNR reliability (some devices don't respond)
 
 ## Done ✅
+
+### v0.1.0 (2025-11-15)
+- [x] **README.md, CHANGELOG.md erstellt** - Vollständige Projekt-Dokumentation
+- [x] **Versionierung implementiert** - SemVer mit --version Flag/Command
+- [x] **Git-Tag v0.1.0** - Initial Release markiert
+- [x] **Spinner-Fix für macOS** - ANSI-Escape-Codes für Cross-Platform Kompatibilität
+- [x] **Cross-Platform Analyse** - Vollständige Code-Review mit 4 Berichten in `docs/`
 - [x] **Ginkgo/Gomega BDD Testing Framework** eingerichtet (11 Test-Dateien, 42 Specs)
 - [x] **Plattformspezifische Tests** (Windows, macOS, Linux) mit Build-Tags
 - [x] **Deutsche Code-Kommentare** in allen Dateien
