@@ -58,7 +58,12 @@
       "Bash(route print:*)",
       "Bash(timeout 30 ./netspy.exe scan:*)",
       "Bash(pkill -9 netspy.exe)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(route -n get default:*)",
+      "Bash(mv:*)",
+      "Bash(chmod:*)",
+      "Bash(git rm:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []
