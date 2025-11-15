@@ -44,7 +44,7 @@ func printNarrowHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			hostname = "-"
 		}
 		if len(hostname) > 16 {
-			hostname = hostname[:13] + "..."
+			hostname = hostname[:13] + "…"
 		}
 
 		// RTT
@@ -58,10 +58,10 @@ func printNarrowHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 		if mac == "" {
 			mac = "-"
 		} else if len(mac) > 15 {
-			// Zeige nur letzten Teil der MAC (z.B. "...c8:26:03:8c")
+			// Zeige nur letzten Teil der MAC (z.B. "…c8:26:03:8c")
 			parts := strings.Split(mac, ":")
 			if len(parts) >= 3 {
-				mac = "..." + strings.Join(parts[len(parts)-3:], ":")
+				mac = "…" + strings.Join(parts[len(parts)-3:], ":")
 			}
 		}
 
@@ -97,7 +97,7 @@ func printMediumHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			hostname = "-"
 		}
 		if len(hostname) > 22 {
-			hostname = hostname[:19] + "..."
+			hostname = hostname[:19] + "…"
 		}
 
 		// RTT
@@ -121,7 +121,7 @@ func printMediumHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			deviceInfo = "-"
 		}
 		if len(deviceInfo) > 16 {
-			deviceInfo = deviceInfo[:13] + "..."
+			deviceInfo = deviceInfo[:13] + "…"
 		}
 
 		fmt.Printf("%-16s %-24s %-8s %-18s %-18s\n",
@@ -157,7 +157,7 @@ func printWideHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			hostname = "-"
 		}
 		if len(hostname) > 28 {
-			hostname = hostname[:25] + "..."
+			hostname = hostname[:25] + "…"
 		}
 
 		// RTT
@@ -181,7 +181,7 @@ func printWideHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			deviceInfo = "-"
 		}
 		if len(deviceInfo) > 18 {
-			deviceInfo = deviceInfo[:15] + "..."
+			deviceInfo = deviceInfo[:15] + "…"
 		}
 
 		// HTTP Banner
@@ -190,7 +190,7 @@ func printWideHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			httpBanner = "-"
 		}
 		if len(httpBanner) > 23 {
-			httpBanner = httpBanner[:20] + "..."
+			httpBanner = httpBanner[:20] + "…"
 		}
 
 		// Ports
@@ -202,7 +202,7 @@ func printWideHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			}
 			ports = strings.Join(portStrs, ",")
 			if len(ports) > 10 {
-				ports = ports[:10] + "..."
+				ports = ports[:10] + "…"
 			}
 		}
 

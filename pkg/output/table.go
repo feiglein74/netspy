@@ -77,7 +77,7 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 			}
 			// Truncate long hostnames
 			if len(hostname) > 28 {
-				hostname = hostname[:25] + "..."
+				hostname = hostname[:25] + "…"
 			}
 
 			rtt := "-"
@@ -100,7 +100,7 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 			}
 			// Truncate if too long
 			if len(deviceInfo) > 18 {
-				deviceInfo = deviceInfo[:15] + "..."
+				deviceInfo = deviceInfo[:15] + "…"
 			}
 
 			ports := "-"
@@ -112,7 +112,7 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 				ports = strings.Join(portStrs, ",")
 				// Truncate if too long
 				if len(ports) > 10 {
-					ports = ports[:10] + "..."
+					ports = ports[:10] + "…"
 				}
 			}
 
@@ -129,7 +129,7 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 			}
 			// Truncate if too long
 			if len(httpBanner) > 23 {
-				httpBanner = httpBanner[:20] + "..."
+				httpBanner = httpBanner[:20] + "…"
 			}
 
 			fmt.Printf("%-20s %-30s %-8s %-18s %-20s %-25s %-12s\n",
