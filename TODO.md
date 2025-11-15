@@ -2,18 +2,16 @@
 
 ## High Priority
 
+### 🎨 UI/UX Improvements
+- [ ] **Responsive Tabellen für Watch-Mode implementieren**
+  - Aktuell: Nur scan-Modus hat responsive Tabellen (3 Layouts: narrow/medium/wide)
+  - Watch-Mode verwendet feste Tabellen-Breite
+  - Herausforderung: ANSI-Escape-Codes für Live-Updates, dynamisches Zeilen-Tracking
+  - Komplexität: Cursor-Positioning muss für jedes Layout neu berechnet werden
+  - Terminal-Größen: < 100 cols (narrow), 100-139 (medium), >= 140 (wide)
+  - Siehe: `pkg/output/table_responsive.go` für scan-Implementierung
+
 ### 🔴 Cross-Platform Critical Issues (v0.2.0)
-- [ ] **Gateway-Erkennung für macOS implementieren** (KRITISCH)
-  - Aktuell: Nur Windows unterstützt (`route print 0.0.0.0`)
-  - Lösung: `netstat -rn` oder `route get default` verwenden
-  - Siehe: `docs/PLATFORM_COMPATIBILITY.md`
-- [ ] **Gateway-Erkennung für Linux implementieren** (KRITISCH)
-  - Aktuell: Nur Windows unterstützt
-  - Lösung: `ip route` oder `/proc/net/route` verwenden
-  - Siehe: `docs/PLATFORM_COMPATIBILITY.md`
-- [ ] **Build-Tags zu gateway.go hinzufügen**
-  - Dateien: `gateway_windows.go`, `gateway_darwin.go`, `gateway_linux.go`
-  - Error-Logging für fehlgeschlagene Gateway-Erkennung
 - [ ] **Spinner-Fix auf Windows testen** (nach macOS-Fix)
   - ANSI-Escape-Codes statt Carriage Return
   - Verifizieren dass Windows 10+ funktioniert
@@ -44,6 +42,24 @@
 - [ ] Improve mDNS/LLMNR reliability (some devices don't respond)
 
 ## Done ✅
+
+### v0.1.1 (2025-11-15)
+- [x] **Plattformspezifische Gateway-Erkennung** - Windows, macOS, Linux Support
+  - `gateway_windows.go`: `route print` für Windows
+  - `gateway_darwin.go`: `route -n get default` für macOS
+  - `gateway_linux.go`: `ip route` / `route -n` für Linux
+  - Gateway-Marker [G] direkt an IP angehängt (z.B. "192.168.179.1 [G]")
+- [x] **Responsive Tabellen für Scan-Mode** - 3 Layouts (narrow/medium/wide)
+  - Terminal < 100 cols: Kompakte Ansicht (IP, Hostname kurz, RTT, MAC kurz)
+  - Terminal 100-139 cols: Standard-Ansicht (+ Device Type)
+  - Terminal >= 140 cols: Vollständige Ansicht (alle Spalten)
+- [x] **Unicode-Ellipsis (…)** statt drei Punkte (...) bei Kürzungen
+- [x] **Spaltenausrichtung korrigiert** - Header stimmt mit Datenspalten überein
+- [x] **Watch-Mode Tabellen-Rendering Fix** - clearLine() für saubere Updates
+- [x] **Automatischer Fallback für fremde Subnets**
+  - ARP-Modus erkennt lokale vs. remote Subnets
+  - Hybrid-Modus fällt auf TCP-Scan zurück bei Remote-Netzen
+  - Informative Meldungen über verwendete Strategie
 
 ### v0.1.0 (2025-11-15)
 - [x] **README.md, CHANGELOG.md erstellt** - Vollständige Projekt-Dokumentation
@@ -76,4 +92,3 @@
 - [x] **mDNS/Bonjour support** for Apple/IoT devices
 - [x] **LLMNR support** for Windows hostname resolution
 - [x] **OS detection** based on open ports (Windows, Linux, Server detection)
-- [x] **Gateway marker** (G indicator for default gateway)
