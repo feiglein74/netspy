@@ -614,10 +614,12 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		}
 	}
 
-	// Print header (no clear needed - fixed width columns will overwrite)
-	fmt.Print("\r")  // Go to start of line
+	// Print header with proper line clearing
+	fmt.Print("\r")
+	clearLine()
 	color.Cyan("IP Address      Status    Hostname                  MAC Address        Device Type       RTT      First Seen    Uptime/Downtime  Flaps\n")
-	fmt.Print("\r")  // Go to start of line
+	fmt.Print("\r")
+	clearLine()
 	color.White("%s\n", strings.Repeat("─", 136))
 
 	// Sort IPs
@@ -699,8 +701,9 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 			gatewayMarker = "G"
 		}
 
-		// Print device line (no clear needed - fixed width will overwrite)
-		fmt.Print("\r")  // Go to start of line
+		// Print device line with proper line clearing
+		fmt.Print("\r")
+		clearLine()
 		fmt.Printf("%-15s %s%s %-7s %-25s %s %-17s %-8s %-13s %-16s %s\n",
 			ipStr,
 			gatewayMarker,
