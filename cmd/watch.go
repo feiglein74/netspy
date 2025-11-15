@@ -617,7 +617,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 	// Print header with proper line clearing
 	fmt.Print("\r")
 	clearLine()
-	color.Cyan("IP Address       Status     Hostname                  MAC Address        Device Type       RTT      First Seen    Uptime/Downtime  Flaps\n")
+	color.Cyan("IP Address           Status     Hostname                  MAC Address        Device Type       RTT      First Seen    Uptime/Downtime  Flaps\n")
 	fmt.Print("\r")
 	clearLine()
 	color.White("%s\n", strings.Repeat("─", 136))
@@ -694,19 +694,17 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 			flapText = color.YellowString(flapText)
 		}
 
-		// Check if this is the gateway
-		gatewayMarker := " "
+		// Check if this is the gateway and add marker to IP
 		parsedIP := net.ParseIP(ipStr)
 		if parsedIP != nil && discovery.IsGateway(parsedIP) {
-			gatewayMarker = "G"
+			ipStr = ipStr + " [G]"
 		}
 
 		// Print device line with proper line clearing
 		fmt.Print("\r")
 		clearLine()
-		fmt.Printf("%-15s %s%s %-7s %-25s %s %-17s %-8s %-13s %-16s %s\n",
+		fmt.Printf("%-20s %s %-7s %-25s %s %-17s %-8s %-13s %-16s %s\n",
 			ipStr,
-			gatewayMarker,
 			statusIcon,
 			statusColor(statusText),
 			hostname,
