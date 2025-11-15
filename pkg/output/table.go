@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"netspy/pkg/discovery"
 	"netspy/pkg/scanner"
 
 	"github.com/fatih/color"
@@ -118,7 +117,7 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 
 			// Check if this is the gateway
 			ipStr := host.IP.String()
-			if discovery.IsGateway(host.IP) {
+			if host.IsGateway {
 				ipStr = ipStr + " [G]"
 			}
 
@@ -169,7 +168,7 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 
 			// Check if this is the gateway
 			ipStr := host.IP.String()
-			if discovery.IsGateway(host.IP) {
+			if host.IsGateway {
 				ipStr = ipStr + " [G]"
 			}
 
@@ -196,8 +195,14 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 				rtt = fmt.Sprintf("%.2fms", float64(host.RTT.Microseconds())/1000.0)
 			}
 
+			// Check if this is the gateway
+			ipStr := host.IP.String()
+			if host.IsGateway {
+				ipStr = ipStr + " [G]"
+			}
+
 			fmt.Printf("%-15s %-30s %-10s\n",
-				host.IP.String(),
+				ipStr,
 				hostname,
 				rtt,
 			)

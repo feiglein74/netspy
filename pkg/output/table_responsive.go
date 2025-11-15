@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"netspy/pkg/discovery"
 	"netspy/pkg/scanner"
 
 	"github.com/fatih/color"
@@ -31,7 +30,7 @@ func printNarrowHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 	for _, host := range hosts {
 		// IP (ggf. mit Gateway-Marker)
 		ipStr := host.IP.String()
-		if discovery.IsGateway(host.IP) {
+		if host.IsGateway {
 			ipStr = ipStr + " G"
 		}
 		if len(ipStr) > 15 {
@@ -87,7 +86,7 @@ func printMediumHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 	for _, host := range hosts {
 		// IP (mit Gateway-Marker)
 		ipStr := host.IP.String()
-		if discovery.IsGateway(host.IP) {
+		if host.IsGateway {
 			ipStr = ipStr + " [G]"
 		}
 
@@ -147,7 +146,7 @@ func printWideHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 	for _, host := range hosts {
 		// IP (mit Gateway-Marker)
 		ipStr := host.IP.String()
-		if discovery.IsGateway(host.IP) {
+		if host.IsGateway {
 			ipStr = ipStr + " [G]"
 		}
 

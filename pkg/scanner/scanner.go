@@ -22,6 +22,7 @@ type Host struct {
 	RTT              time.Duration `json:"rtt,omitempty"`
 	Ports            []int         `json:"ports,omitempty"`
 	Online           bool          `json:"online"`
+	IsGateway        bool          `json:"is_gateway,omitempty"` // True wenn Host ein Gateway ist (lokal oder heuristisch erkannt)
 }
 
 // Config speichert die Scanner-Konfiguration
@@ -190,4 +191,16 @@ func (s *Scanner) scanPorts(ip net.IP, ports []int) []int {
 
 	wg.Wait()
 	return openPorts
+}
+
+// SetGatewayFlags markiert Gateways in der Host-Liste
+// Verwendet heuristische Erkennung für entfernte Netzwerke
+func SetGatewayFlags(hosts []Host, network *net.IPNet) {
+	if network == nil {
+		return
+	}
+
+	for i := range hosts {
+		hosts[i].IsGateway = discovery.IsLikelyGateway(hosts[i].IP, network)
+	}
 }
