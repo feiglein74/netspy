@@ -404,13 +404,45 @@ func getLocalMAC() string {
 }
 
 func performARPScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.Host, error) {
-	// Populate ARP table
-	if err := populateARPTableQuiet(ctx, netCIDR); err != nil {
-		return nil, err
+	// Prüfe ob das Ziel-Netzwerk lokal oder fremd ist
+	isLocal, _ := discovery.IsLocalSubnet(netCIDR)
+
+	var hosts []scanner.Host
+
+	// Nur ARP versuchen wenn lokales Netzwerk
+	if isLocal {
+		// Populate ARP table
+		if err := populateARPTableQuiet(ctx, netCIDR); err != nil {
+			return nil, err
+		}
+
+		// Read ARP table quietly
+		hosts = readCurrentARPTableQuiet(netCIDR)
 	}
 
-	// Read ARP table quietly
-	hosts := readCurrentARPTableQuiet(netCIDR)
+	// Fallback zu TCP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
+	if len(hosts) == 0 {
+		// Generate all IPs in network
+		ips := discovery.GenerateIPsFromCIDR(netCIDR)
+
+		// Scanner-Konfiguration (conservative mode für watch)
+		config := scanner.Config{
+			Concurrency: 40,
+			Timeout:     500 * time.Millisecond,
+			Fast:        false,
+			Thorough:    false,
+			Quiet:       true,
+		}
+
+		s := scanner.New(config)
+		tcpHosts, err := s.ScanHosts(ips)
+		if err != nil {
+			return nil, err
+		}
+
+		hosts = tcpHosts
+	}
+
 	return hosts, nil
 }
 
