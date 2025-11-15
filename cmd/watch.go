@@ -272,31 +272,62 @@ func performScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, m
 }
 
 func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.Host, error) {
-	allHosts := []scanner.Host{}
+	// Prüfe ob das Ziel-Netzwerk lokal oder fremd ist
+	isLocal, _ := discovery.IsLocalSubnet(netCIDR)
 
-	// Read existing ARP table first (quietly)
-	existingHosts := readCurrentARPTableQuiet(netCIDR)
-	allHosts = append(allHosts, existingHosts...)
+	var finalHosts []scanner.Host
 
-	// Populate ARP table
-	if err := populateARPTableQuiet(ctx, netCIDR); err != nil {
-		return allHosts, err
+	// Nur ARP versuchen wenn lokales Netzwerk
+	if isLocal {
+		allHosts := []scanner.Host{}
+
+		// Read existing ARP table first (quietly)
+		existingHosts := readCurrentARPTableQuiet(netCIDR)
+		allHosts = append(allHosts, existingHosts...)
+
+		// Populate ARP table
+		if err := populateARPTableQuiet(ctx, netCIDR); err != nil {
+			return allHosts, err
+		}
+
+		// Read refreshed ARP table (quietly)
+		finalHosts = readCurrentARPTableQuiet(netCIDR)
+
+		// Add localhost if it's in the network range
+		localhostIP := getLocalhostIP(netCIDR)
+		if localhostIP != nil {
+			localMAC := getLocalMAC()
+			finalHosts = append(finalHosts, scanner.Host{
+				IP:         localhostIP,
+				MAC:        localMAC,
+				Vendor:     "localhost",
+				DeviceType: "This Computer",
+				Online:     true,
+			})
+		}
 	}
 
-	// Read refreshed ARP table (quietly)
-	finalHosts := readCurrentARPTableQuiet(netCIDR)
+	// Fallback zu TCP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
+	if len(finalHosts) == 0 {
+		// Generate all IPs in network
+		ips := discovery.GenerateIPsFromCIDR(netCIDR)
 
-	// Add localhost if it's in the network range
-	localhostIP := getLocalhostIP(netCIDR)
-	if localhostIP != nil {
-		localMAC := getLocalMAC()
-		finalHosts = append(finalHosts, scanner.Host{
-			IP:         localhostIP,
-			MAC:        localMAC,
-			Vendor:     "localhost",
-			DeviceType: "This Computer",
-			Online:     true,
-		})
+		// Scanner-Konfiguration (conservative mode für watch)
+		config := scanner.Config{
+			Concurrency: 40,
+			Timeout:     500 * time.Millisecond,
+			Fast:        false,
+			Thorough:    false,
+			Quiet:       true,
+		}
+
+		s := scanner.New(config)
+		tcpHosts, err := s.ScanHosts(ips)
+		if err != nil {
+			return nil, err
+		}
+
+		finalHosts = tcpHosts
 	}
 
 	// Skip RTT measurement in watch mode - we'll get RTT from reachability checks

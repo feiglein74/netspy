@@ -116,48 +116,92 @@ func runScan(cmd *cobra.Command, args []string) error {
 func runHybridScan(network string) error {
 	quiet := isQuiet()
 
-	if !quiet {
-		color.Cyan("🚀 Hybrid scan: ARP discovery + ping/port details\n")
-		color.Yellow("💡 This combines accuracy of ARP with details from ping/ports\n\n")
-	}
-
 	// Parse network
 	_, netCIDR, err := net.ParseCIDR(network)
 	if err != nil {
 		return fmt.Errorf("invalid CIDR: %v", err)
 	}
 
-	// Step 1: ARP Discovery
-	if !quiet {
-		color.Cyan("📋 Step 1: ARP-based host discovery...\n")
-	}
+	// Prüfe ob das Ziel-Netzwerk lokal oder fremd ist
+	isLocal, localNet := discovery.IsLocalSubnet(netCIDR)
 
-	// Populate ARP table first
 	if !quiet {
-		color.Cyan("🔄 Populating ARP table...\n")
-	}
-	if err := populateARPTable(netCIDR); err != nil {
-		if !quiet {
-			color.Yellow("[WARN]  Warning: %v\n", err)
+		if isLocal {
+			color.Cyan("Hybrid scan: ARP discovery + ping/port details\n")
+			color.Green("Detected local subnet: %s\n", localNet.String())
+			color.White("Strategy: ARP-based discovery (most accurate for local networks)\n\n")
+		} else {
+			color.Cyan("Hybrid scan: Remote subnet detection\n")
+			color.Yellow("Target %s is in a different subnet\n", netCIDR.String())
+			if localNet != nil {
+				color.White("Your network: %s\n", localNet.String())
+			}
+			color.White("Strategy: TCP-based scanning (ARP does not work across routers)\n\n")
 		}
 	}
 
-	// Read ARP table
-	arpHosts := readCurrentARPTable(netCIDR)
-	if !quiet {
-		color.Green("[OK] ARP found %d active hosts\n\n", len(arpHosts))
+	// Step 1: Versuche ARP Discovery (nur für lokale Netzwerke sinnvoll)
+	var arpHosts []scanner.Host
+
+	if isLocal {
+		if !quiet {
+			color.Cyan("Step 1: ARP-based host discovery...\n")
+		}
+
+		// Populate ARP table first
+		if !quiet {
+			color.Cyan("Populating ARP table...\n")
+		}
+		if err := populateARPTable(netCIDR); err != nil {
+			if !quiet {
+				color.Yellow("[WARN] Warning: %v\n", err)
+			}
+		}
+
+		// Read ARP table
+		arpHosts = readCurrentARPTable(netCIDR)
+		if !quiet {
+			color.Green("[OK] ARP found %d active hosts\n\n", len(arpHosts))
+		}
 	}
 
+	// Fallback zu TCP-Scanning wenn keine ARP-Hosts gefunden wurden
 	if len(arpHosts) == 0 {
 		if !quiet {
-			color.Red("[ERROR] No hosts found via ARP\n")
+			if isLocal {
+				color.Yellow("[INFO] No hosts found via ARP, falling back to TCP scan\n")
+			} else {
+				color.Cyan("Step 1: TCP-based host discovery (remote subnet)\n")
+			}
 		}
-		return nil
+
+		// Parse network für TCP-Scan
+		hosts, err := parseNetworkInput(network)
+		if err != nil {
+			return fmt.Errorf("invalid network specification: %v", err)
+		}
+
+		// Scanner-Konfiguration erstellen (conservative mode für Genauigkeit)
+		config := createScanConfig()
+		s := scanner.New(config)
+
+		if !quiet {
+			color.White("Scanning %d hosts with TCP ping...\n", len(hosts))
+		}
+
+		// Scan durchführen
+		results, err := s.ScanHosts(hosts)
+		if err != nil {
+			return fmt.Errorf("scan failed: %v", err)
+		}
+
+		// Ergebnisse ausgeben
+		return output.PrintResults(results, format)
 	}
 
 	// Step 2: Ping + Port details for ARP-discovered hosts
 	if !quiet {
-		color.Cyan("📡 Step 2: Getting ping/port details for discovered hosts...\n")
+		color.Cyan("Step 2: Getting ping/port details for discovered hosts...\n")
 	}
 	enhancedHosts := enhanceHostsWithDetails(arpHosts)
 
