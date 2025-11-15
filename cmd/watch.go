@@ -617,7 +617,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 	// Print header with proper line clearing
 	fmt.Print("\r")
 	clearLine()
-	color.Cyan("IP Address      Status    Hostname                  MAC Address        Device Type       RTT      First Seen    Uptime/Downtime  Flaps\n")
+	color.Cyan("IP Address       Status     Hostname                  MAC Address        Device Type       RTT      First Seen    Uptime/Downtime  Flaps\n")
 	fmt.Print("\r")
 	clearLine()
 	color.White("%s\n", strings.Repeat("─", 136))
@@ -647,7 +647,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 
 		hostname := getHostname(state.Host)
 		if len(hostname) > 23 {
-			hostname = hostname[:20] + "..."
+			hostname = hostname[:20] + "…"
 		}
 
 		// Format MAC address with color coding for local MACs
@@ -659,7 +659,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 			deviceInfo = getVendor(state.Host)
 		}
 		if len(deviceInfo) > 16 {
-			deviceInfo = deviceInfo[:13] + "..."
+			deviceInfo = deviceInfo[:13] + "…"
 		}
 
 		firstSeen := state.FirstSeen.Format("15:04:05")
