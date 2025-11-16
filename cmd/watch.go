@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"sort"
 	"strings"
@@ -21,8 +24,10 @@ import (
 )
 
 var (
-	watchInterval time.Duration
-	watchMode     string
+	watchInterval   time.Duration
+	watchMode       string
+	screenBuffer    bytes.Buffer // Buffer für aktuellen Screen-Inhalt
+	screenBufferMux sync.Mutex   // Mutex für Thread-Safe Zugriff
 )
 
 // DeviceState verfolgt den Zustand eines entdeckten Geräts über die Zeit
@@ -100,10 +105,43 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	winchChan := make(chan os.Signal, 1)
 	signal.Notify(winchChan, syscall.SIGWINCH)
 
+	// Keyboard input channel für 'c' zum Kopieren
+	keyChan := make(chan rune, 10)
+
+	// Terminal in raw mode versetzen für direkte Tasteneingaben (macOS/Linux)
+	rawModeCmd := exec.Command("stty", "-icanon", "min", "1", "-echo")
+	rawModeCmd.Stdin = os.Stdin
+	_ = rawModeCmd.Run()
+
+	// Stelle sicher, dass wir beim Exit wieder zurücksetzen
+	defer func() {
+		resetCmd := exec.Command("stty", "icanon", "echo")
+		resetCmd.Stdin = os.Stdin
+		_ = resetCmd.Run()
+	}()
+
 	go func() {
 		sig := <-sigChan
 		fmt.Printf("\n\n[!] Received signal %v, shutting down...\n", sig)
+		// Terminal-State wiederherstellen
+		resetCmd := exec.Command("stty", "icanon", "echo")
+		resetCmd.Stdin = os.Stdin
+		_ = resetCmd.Run()
 		cancel()
+	}()
+
+	// Keyboard-Listener für 'c' zum Kopieren
+	go func() {
+		buf := make([]byte, 1)
+		for {
+			n, err := os.Stdin.Read(buf)
+			if err != nil || n == 0 {
+				continue
+			}
+			if buf[0] == 'c' || buf[0] == 'C' {
+				keyChan <- rune(buf[0])
+			}
+		}
 	}()
 
 	scanCount := 0
@@ -119,35 +157,8 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		scanCount++
 		scanStart := time.Now()
 
-		// Show scanning indicator with spinner
-		var scanDone chan bool
-		if scanCount == 1 {
-			scanDone = make(chan bool)
-			go func() {
-				spinner := []string{"|", "/", "-", "\\"}
-				i := 0
-				for {
-					select {
-					case <-scanDone:
-						fmt.Print("\033[2K\r") // Clear the line
-						return
-					default:
-						fmt.Printf("\033[2K\r%s", color.CyanString("[%s] Scanning network... ", spinner[i]))
-						i = (i + 1) % len(spinner)
-						time.Sleep(100 * time.Millisecond)
-					}
-				}
-			}()
-		}
-
 		// Perform scan quietly (no output during scan)
 		hosts := performScanQuiet(ctx, network, netCIDR, watchMode)
-
-		// Stop spinner on first scan
-		if scanCount == 1 {
-			close(scanDone)
-			time.Sleep(150 * time.Millisecond) // Wait for spinner to clean up
-		}
 
 		// Check if cancelled during scan
 		if ctx.Err() != nil {
@@ -227,23 +238,23 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		// Clear screen and redraw everything (fullscreen mode)
 		fmt.Print("\033[2J\033[H") // Clear screen + move to home
 
-		// Draw btop-inspired layout
-		drawBtopLayout(deviceStates, scanStart, network, watchInterval, watchMode, scanCount, scanDuration)
-
-		redrawMutex.Unlock()
-
-		// Calculate next scan time
+		// Calculate next scan time for status display
 		nextScan := watchInterval - scanDuration
 		if nextScan < 0 {
 			nextScan = 0
 		}
+
+		// Draw btop-inspired layout (includes status line now)
+		drawBtopLayout(deviceStates, scanStart, network, watchInterval, watchMode, scanCount, scanDuration, nextScan)
+
+		redrawMutex.Unlock()
 
 		// Start background DNS lookups while countdown is running
 		if nextScan > 0 {
 			go performBackgroundDNSLookups(ctx, deviceStates)
 
 			// Show countdown with periodic table updates (pass scanStart for consistent uptime)
-			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, &redrawMutex, network, watchInterval, watchMode)
+			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, keyChan, &redrawMutex, network, watchInterval, watchMode)
 		}
 	}
 }
@@ -600,8 +611,202 @@ func clearLine() {
 	fmt.Print("\033[2K\r") // Clear entire line and move to start
 }
 
+// printBoxLine prints a line within the box with proper padding
+func printBoxLine(content string, width int) {
+	// Calculate visible length (without ANSI codes)
+	visibleLen := len(stripANSI(content))
+	padding := width - visibleLen - 3 // -3 for "║ " and " ║"
+	if padding < 0 {
+		padding = 0
+	}
+	fmt.Print(color.CyanString("║"))
+	fmt.Print(" " + content)
+	fmt.Print(strings.Repeat(" ", padding))
+	fmt.Print(color.CyanString(" ║\n"))
+}
+
+// stripANSI removes ANSI escape codes to get actual visible length
+func stripANSI(s string) string {
+	// Simple regex-free approach: count non-escape characters
+	result := ""
+	inEscape := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\033' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if (s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+		result += string(s[i])
+	}
+	return result
+}
+
+// runeLen gibt die Anzahl der Runes (Zeichen) in einem String zurück
+func runeLen(s string) int {
+	return len([]rune(s))
+}
+
+// padRight padded einen String rechts mit Leerzeichen bis zur gewünschten Rune-Länge
+func padRight(s string, length int) string {
+	currentLen := runeLen(s)
+	if currentLen >= length {
+		return s
+	}
+	return s + strings.Repeat(" ", length-currentLen)
+}
+
+// printTableRow druckt eine Tabellenzeile mit korrektem Padding (UTF-8 + ANSI aware)
+func printTableRow(content string, width int) {
+	// Berechne sichtbare Länge (ohne ANSI codes)
+	visibleContent := stripANSI(content)
+	visibleLen := runeLen(visibleContent)
+	padding := width - visibleLen - 3 // -3 for "║ " and " ║"
+	if padding < 0 {
+		padding = 0
+	}
+	fmt.Print(color.CyanString("║"))
+	fmt.Print(" " + content)
+	fmt.Print(strings.Repeat(" ", padding))
+	fmt.Print(color.CyanString(" ║\n"))
+}
+
+// captureScreenSimple speichert eine vereinfachte Text-Version des Screens
+// HINWEIS: Dies ist eine Fallback-Lösung. Ideally würden wir das exakte Layout capturen
+func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration) {
+	screenBufferMux.Lock()
+	defer screenBufferMux.Unlock()
+
+	// Buffer zurücksetzen
+	screenBuffer.Reset()
+
+	// Generiere Screen-Content ohne ANSI-Farben für Zwischenablage
+	termSize := output.GetTerminalSize()
+	width := termSize.GetDisplayWidth()
+
+	// Count stats
+	onlineCount := 0
+	offlineCount := 0
+	totalFlaps := 0
+	for _, state := range states {
+		if state.Status == "online" {
+			onlineCount++
+		} else {
+			offlineCount++
+		}
+		totalFlaps += state.FlapCount
+	}
+
+	// Helper: schreibt eine Zeile mit korrektem Padding (UTF-8-aware)
+	writeLine := func(content string) {
+		contentRunes := runeLen(content)
+		padding := width - contentRunes - 3 // -3 für "║ " und " ║"
+		if padding < 0 {
+			padding = 0
+		}
+		screenBuffer.WriteString("║ " + content + strings.Repeat(" ", padding) + " ║\n")
+	}
+
+	// Top border
+	screenBuffer.WriteString("╔" + strings.Repeat("═", width-2) + "╗\n")
+
+	// Title line
+	title := "NetSpy - Network Monitor"
+	scanInfo := fmt.Sprintf("[Scan #%d]", scanCount)
+	spacesNeeded := width - runeLen(title) - runeLen(scanInfo) - 3
+	if spacesNeeded < 0 {
+		spacesNeeded = 0
+	}
+	titleLine := title + strings.Repeat(" ", spacesNeeded) + scanInfo
+	writeLine(titleLine)
+
+	// Separator
+	screenBuffer.WriteString("╠" + strings.Repeat("═", width-2) + "╣\n")
+
+	// Info line 1
+	line1 := fmt.Sprintf("Network: %s  │  Mode: %s  │  Interval: %v", network, mode, interval)
+	writeLine(line1)
+
+	// Info line 2
+	line2 := fmt.Sprintf("Devices: %d (↑%d ↓%d)  │  Flaps: %d  │  Scan: %s",
+		len(states), onlineCount, offlineCount, totalFlaps, formatDuration(scanDuration))
+	writeLine(line2)
+
+	// Separator
+	screenBuffer.WriteString("╠" + strings.Repeat("═", width-2) + "╣\n")
+
+	// Table header und Rows (vereinfacht - zeigt nur IPs und Status)
+	// Sortiere IPs
+	ips := make([]string, 0, len(states))
+	for ip := range states {
+		ips = append(ips, ip)
+	}
+	sort.Slice(ips, func(i, j int) bool {
+		return compareIPs(ips[i], ips[j])
+	})
+
+	// Header
+	header := "IP               Stat Hostname           Uptime"
+	writeLine(header)
+
+	// Rows
+	for _, ipStr := range ips {
+		state := states[ipStr]
+		statusIcon := "+"
+		if state.Status == "offline" {
+			statusIcon = "-"
+		}
+
+		displayIP := ipStr
+		if state.Host.IsGateway {
+			displayIP = ipStr + " G"
+		}
+		if len(displayIP) > 16 {
+			displayIP = displayIP[:16]
+		}
+
+		hostname := getHostname(state.Host)
+		// Hostname auf max 18 Zeichen (Runes) begrenzen
+		hostnameRunes := []rune(hostname)
+		if len(hostnameRunes) > 18 {
+			hostname = string(hostnameRunes[:17]) + "…"
+		}
+
+		var statusDuration time.Duration
+		if state.Status == "online" {
+			totalTime := referenceTime.Sub(state.FirstSeen)
+			statusDuration = totalTime - state.TotalOfflineTime
+		} else {
+			statusDuration = referenceTime.Sub(state.StatusSince)
+		}
+
+		// Manuelles Padding mit UTF-8-awareness
+		paddedIP := padRight(displayIP, 17)      // 17 Zeichen für IP
+		paddedHostname := padRight(hostname, 18) // 18 Zeichen für Hostname
+		paddedUptime := padRight(formatDurationShort(statusDuration), 8)
+
+		row := paddedIP + statusIcon + "    " + paddedHostname + paddedUptime
+		writeLine(row)
+	}
+
+	// Separator
+	screenBuffer.WriteString("╠" + strings.Repeat("═", width-2) + "╣\n")
+
+	// Status line
+	statusLine := fmt.Sprintf("▶ Next scan in: %s │ Press Ctrl+C to exit or 'c' to copy",
+		formatDuration(nextScanIn))
+	writeLine(statusLine)
+
+	// Bottom border
+	screenBuffer.WriteString("╚" + strings.Repeat("═", width-2) + "╝\n")
+}
+
 // drawBtopLayout renders a btop-inspired fullscreen layout
-func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration) {
+func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration) {
 	termSize := output.GetTerminalSize()
 	width := termSize.GetDisplayWidth()
 
@@ -624,11 +829,11 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	// ║ Network: 10.0.0.0/24  │  Mode: hybrid  │  Interval: 30s      ║
 	// ║ Devices: 15 (↑14 ↓1)  │  Flaps: 3      │  Scan: 2.3s         ║
 	// ╠═══════════════════════════════════════════════════════════════╣
-	// ║                      NETWORK DEVICES                          ║
-	// ╟───────────────────────────────────────────────────────────────╢
 	// ║ IP Address    Status   Hostname         MAC      Type    RTT ║
 	// ╟───────────────────────────────────────────────────────────────╢
 	// ║ 10.0.0.1 [G]  online   gateway          aa:bb... Router  2ms ║
+	// ╠═══════════════════════════════════════════════════════════════╣
+	// ║ ▶ Next scan in: 28s │ Press Ctrl+C to exit                  ║
 	// ╚═══════════════════════════════════════════════════════════════╝
 
 	// Top border with title
@@ -636,18 +841,11 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
 	fmt.Print(color.CyanString("╗\n"))
 
-	// Title line
-	title := " NetSpy - Network Monitor"
-	scanInfo := fmt.Sprintf("[Scan #%d] ", scanCount)
-	padding := width - len(title) - len(scanInfo) - 2
-	if padding < 0 {
-		padding = 0
-	}
-	fmt.Print(color.CyanString("║"))
-	fmt.Print(color.HiWhiteString(title))
-	fmt.Print(strings.Repeat(" ", padding))
-	fmt.Print(color.HiYellowString(scanInfo))
-	fmt.Print(color.CyanString("║\n"))
+	// Title line - use printBoxLine with properly constructed content
+	title := color.HiWhiteString(" NetSpy - Network Monitor")
+	scanInfo := color.HiYellowString(fmt.Sprintf("[Scan #%d]", scanCount))
+	titleLine := title + strings.Repeat(" ", width-len(stripANSI(title))-len(stripANSI(scanInfo))-3) + scanInfo
+	printBoxLine(titleLine, width)
 
 	// Separator
 	fmt.Print(color.CyanString("╠"))
@@ -656,14 +854,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 
 	// Info line 1
 	line1 := fmt.Sprintf(" Network: %s  │  Mode: %s  │  Interval: %v", network, mode, interval)
-	padLen := width - len(line1) - 2
-	if padLen < 0 {
-		padLen = 0
-	}
-	fmt.Print(color.CyanString("║"))
-	fmt.Print(color.WhiteString(line1))
-	fmt.Print(strings.Repeat(" ", padLen))
-	fmt.Print(color.CyanString("║\n"))
+	printBoxLine(line1, width)
 
 	// Info line 2
 	line2 := fmt.Sprintf(" Devices: %d (%s%d %s%d)  │  Flaps: %d  │  Scan: %s",
@@ -672,17 +863,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 		color.RedString("↓"), offlineCount,
 		totalFlaps,
 		formatDuration(scanDuration))
-	// Strip ANSI codes for length calculation
-	line2Len := len(fmt.Sprintf(" Devices: %d (↑%d ↓%d)  │  Flaps: %d  │  Scan: %s",
-		len(states), onlineCount, offlineCount, totalFlaps, formatDuration(scanDuration)))
-	padLen = width - line2Len - 2
-	if padLen < 0 {
-		padLen = 0
-	}
-	fmt.Print(color.CyanString("║"))
-	fmt.Print(line2)
-	fmt.Print(strings.Repeat(" ", padLen))
-	fmt.Print(color.CyanString("║\n"))
+	printBoxLine(line2, width)
 
 	// Separator before table (directly from info to table)
 	fmt.Print(color.CyanString("╠"))
@@ -692,12 +873,25 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	// Delegate to existing responsive table rendering
 	redrawTable(states, referenceTime)
 
-	// Bottom border (without newline - we'll add status line below)
+	// Separator before status line
+	fmt.Print(color.CyanString("╠"))
+	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString("╣\n"))
+
+	// Status line (inside box)
+	statusLine := fmt.Sprintf(" %s Next scan in: %s │ Press Ctrl+C to exit or 'c' to copy",
+		color.HiBlackString("▶"),
+		color.CyanString(formatDuration(nextScanIn)))
+	printBoxLine(statusLine, width)
+
+	// Bottom border
 	fmt.Print(color.CyanString("╚"))
 	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
-	fmt.Print(color.CyanString("╝"))
+	fmt.Print(color.CyanString("╝\n"))
 
-	// Status line will be printed by showCountdownWithTableUpdates
+	// Capture screen content für späteres Kopieren - VEREINFACHT
+	// Verwende die gleiche Logik wie oben, nur ohne Farben
+	go captureScreenSimple(states, referenceTime, network, interval, mode, scanCount, scanDuration, nextScanIn)
 }
 
 func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
@@ -933,24 +1127,18 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	hostnameWidth := max(25, min(50, int(float64(remainingWidth)*0.6)))
 	deviceTypeWidth := max(17, remainingWidth-hostnameWidth)
 
-	// Table header with box drawing
-	headerFormat := fmt.Sprintf("%%-%ds %%-10s %%-%ds %%-18s %%-%ds %%-8s %%-13s %%-16s %%-5s",
-		20, hostnameWidth, deviceTypeWidth)
-	headerContent := fmt.Sprintf(headerFormat,
-		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "First Seen", "Uptime/Down", "Flaps")
+	// Table header with box drawing - use padRight for UTF-8 safety
+	headerContent := padRight("IP Address", 20) + " " +
+		padRight("Status", 10) + " " +
+		padRight("Hostname", hostnameWidth) + " " +
+		padRight("MAC Address", 18) + " " +
+		padRight("Device Type", deviceTypeWidth) + " " +
+		padRight("RTT", 8) + " " +
+		padRight("First Seen", 13) + " " +
+		padRight("Uptime/Down", 16) + " " +
+		padRight("Flaps", 5)
 
-	// Calculate padding
-	// Content length: all columns + spaces between them + leading space
-	headerLen := 1 + 20 + 1 + 10 + 1 + hostnameWidth + 1 + 18 + 1 + deviceTypeWidth + 1 + 8 + 1 + 13 + 1 + 16 + 1 + 5
-	padLen := termWidth - headerLen - 2 // -2 for "║" and " ║"
-	if padLen < 0 {
-		padLen = 0
-	}
-
-	fmt.Print(color.CyanString("║"))
-	fmt.Print(color.CyanString(" " + headerContent))
-	fmt.Print(strings.Repeat(" ", padLen))
-	fmt.Print(color.CyanString(" ║\n"))
+	printTableRow(color.CyanString(headerContent), termWidth)
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -980,10 +1168,11 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			displayIP = ipStr + " [G]"
 		}
 
-		// Hostname - use dynamic width
+		// Hostname - use dynamic width with UTF-8 awareness
 		hostname := getHostname(state.Host)
-		if len(hostname) > hostnameWidth-1 {
-			hostname = hostname[:hostnameWidth-2] + "…"
+		hostnameRunes := []rune(hostname)
+		if len(hostnameRunes) > hostnameWidth {
+			hostname = string(hostnameRunes[:hostnameWidth-1]) + "…"
 		}
 
 		// Format MAC address - handle color after padding
@@ -991,7 +1180,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		if mac == "" || mac == "-" {
 			mac = "-"
 		}
-		macPadded := fmt.Sprintf("%-18s", mac)
+		macPadded := padRight(mac, 18)
 		if isLocallyAdministered(mac) {
 			macPadded = color.YellowString(macPadded)
 		}
@@ -1001,8 +1190,9 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		if deviceInfo == "" || deviceInfo == "Unknown" {
 			deviceInfo = getVendor(state.Host)
 		}
-		if len(deviceInfo) > deviceTypeWidth-1 {
-			deviceInfo = deviceInfo[:deviceTypeWidth-2] + "…"
+		deviceInfoRunes := []rune(deviceInfo)
+		if len(deviceInfoRunes) > deviceTypeWidth {
+			deviceInfo = string(deviceInfoRunes[:deviceTypeWidth-1]) + "…"
 		}
 
 		firstSeen := state.FirstSeen.Format("15:04:05")
@@ -1029,39 +1219,33 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			}
 		}
 
-		// Format flap count - pad before coloring
-		flapNum := fmt.Sprintf("%-5s", fmt.Sprintf("%d", state.FlapCount))
+		// Format flap count - UTF-8 aware padding
+		flapStr := fmt.Sprintf("%d", state.FlapCount)
+		flapNum := padRight(flapStr, 5)
 		if state.FlapCount > 0 {
 			flapNum = color.YellowString(flapNum)
 		}
 
 		// Pad status text before coloring
-		coloredStatus := statusColor(fmt.Sprintf("%-6s", statusText))
+		coloredStatus := statusColor(padRight(statusText, 6))
 
-		// Use dynamic format string with calculated widths
-		rowFormat := fmt.Sprintf("%%-20s %%s %%s %%-%ds %%s %%-%ds %%-8s %%-13s %%-16s %%s",
-			hostnameWidth, deviceTypeWidth)
+		// Manuelles Zusammenbauen der Row mit UTF-8-aware padding
+		rowContent := padRight(displayIP, 20) + " " +
+			statusIcon + " " +
+			coloredStatus + " " +
+			padRight(hostname, hostnameWidth) + " " +
+			macPadded + " " +
+			padRight(deviceInfo, deviceTypeWidth) + " " +
+			padRight(rttText, 8) + " " +
+			padRight(firstSeen, 13) + " " +
+			padRight(formatDuration(statusDuration), 16) + " " +
+			flapNum
 
-		// Device row with box drawing
-		fmt.Print(color.CyanString("║"))
-		fmt.Printf(" "+rowFormat,
-			displayIP,
-			statusIcon,
-			coloredStatus,
-			hostname,
-			macPadded,
-			deviceInfo,
-			rttText,
-			firstSeen,
-			formatDuration(statusDuration),
-			flapNum,
-		)
-		fmt.Print(strings.Repeat(" ", padLen))
-		fmt.Print(color.CyanString(" ║\n"))
+		printTableRow(rowContent, termWidth)
 	}
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string) {
+func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -1069,21 +1253,40 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 	lastRedraw := -1 // Track last redraw second to avoid double-redraw
 
 	// Helper function to redraw entire screen with btop layout
-	redrawFullScreen := func(refTime time.Time, currentScanDuration time.Duration) {
+	redrawFullScreen := func(refTime time.Time, currentScanDuration time.Duration, remaining time.Duration) {
 		// Clear screen and move to home
 		fmt.Print("\033[2J\033[H")
-		// Draw btop-inspired layout
-		drawBtopLayout(states, refTime, network, watchInterval, watchMode, scanCount, currentScanDuration)
+		// Draw btop-inspired layout (includes status line inside box)
+		drawBtopLayout(states, refTime, network, watchInterval, watchMode, scanCount, currentScanDuration, remaining)
 	}
-
-	// Initial countdown display (status line below box)
-	fmt.Printf("\n%s Next scan in: %s | Press Ctrl+C to exit",
-		color.HiBlackString("▶"), color.CyanString(formatDuration(duration)))
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-keyChan:
+			// Benutzer hat 'c' gedrückt - Kopiere Screen in Zwischenablage
+			if err := copyScreenToClipboard(); err != nil {
+				// Zeige Fehler kurz an (ohne Layout zu zerstören)
+				fmt.Print("\r")
+				fmt.Printf("%s %s ", color.RedString("✗"), err.Error())
+				time.Sleep(2 * time.Second)
+			} else {
+				// Zeige Erfolg kurz an
+				fmt.Print("\r")
+				fmt.Printf("%s Screen in Zwischenablage kopiert! ", color.GreenString("✓"))
+				time.Sleep(2 * time.Second)
+			}
+			// Redraw screen nach Nachricht
+			redrawMutex.Lock()
+			elapsed := time.Since(startTime)
+			currentRefTime := scanStart.Add(elapsed)
+			remaining := duration - elapsed
+			if remaining < 0 {
+				remaining = 0
+			}
+			redrawFullScreen(currentRefTime, scanDuration, remaining)
+			redrawMutex.Unlock()
 		case <-winchChan:
 			// Try to acquire lock - skip if already redrawing
 			if !redrawMutex.TryLock() {
@@ -1094,24 +1297,21 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			elapsed := time.Since(startTime)
 			currentRefTime := scanStart.Add(elapsed)
 
+			remaining := duration - elapsed
+			if remaining < 0 {
+				remaining = 0
+			}
+
 			// Hide cursor during redraw
 			fmt.Print("\033[?25l")
 
-			// Full screen redraw
-			redrawFullScreen(currentRefTime, scanDuration)
+			// Full screen redraw (includes status line inside box)
+			redrawFullScreen(currentRefTime, scanDuration, remaining)
 
 			// Show cursor again
 			fmt.Print("\033[?25h")
 
 			redrawMutex.Unlock()
-
-			// Status line below box
-			remaining := duration - elapsed
-			if remaining < 0 {
-				remaining = 0
-			}
-			fmt.Printf("\n%s Next scan in: %s | Press Ctrl+C to exit",
-				color.HiBlackString("▶"), color.CyanString(formatDuration(remaining)))
 		case <-ticker.C:
 			elapsed := time.Since(startTime)
 			currentSecond := int(elapsed.Seconds())
@@ -1119,6 +1319,12 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			// Check if we're done BEFORE any processing
 			if elapsed >= duration {
 				return
+			}
+
+			// ALWAYS calculate remaining time fresh (accounts for any processing delays)
+			remaining := duration - time.Since(startTime)
+			if remaining < 0 {
+				remaining = 0
 			}
 
 			// Every 5 seconds, do something useful: alternate between DNS updates and reachability checks
@@ -1131,34 +1337,16 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 					// DNS update: full screen redraw
 					redrawMutex.Lock()
 					currentRefTime := scanStart.Add(elapsed)
-					redrawFullScreen(currentRefTime, scanDuration)
+					redrawFullScreen(currentRefTime, scanDuration, remaining)
 					redrawMutex.Unlock()
 				} else {
 					// Reachability check: quickly check if devices are still online
 					performQuickReachabilityCheck(states)
 					redrawMutex.Lock()
 					currentRefTime := scanStart.Add(elapsed)
-					redrawFullScreen(currentRefTime, scanDuration)
+					redrawFullScreen(currentRefTime, scanDuration, remaining)
 					redrawMutex.Unlock()
 				}
-			}
-
-			// ALWAYS calculate remaining time fresh (accounts for any processing delays)
-			remaining := duration - time.Since(startTime)
-			if remaining < 0 {
-				remaining = 0
-			}
-
-			// Status line below box
-			if currentSecond%5 == 0 && currentSecond == lastRedraw {
-				// After full redraw, show status
-				fmt.Printf("\n%s Next scan in: %s | Press Ctrl+C to exit",
-					color.HiBlackString("▶"), color.CyanString(formatDuration(remaining)))
-			} else {
-				// Just update countdown
-				fmt.Print("\r")
-				fmt.Printf("%s Next scan in: %s | Press Ctrl+C to exit",
-					color.HiBlackString("▶"), color.CyanString(formatDuration(remaining)))
 			}
 		}
 	}
@@ -1439,4 +1627,54 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// copyScreenToClipboard kopiert den aktuellen Screen-Inhalt in die Zwischenablage
+func copyScreenToClipboard() error {
+	screenBufferMux.Lock()
+	content := screenBuffer.String()
+	screenBufferMux.Unlock()
+
+	// Plattformabhängiges Kopieren in die Zwischenablage
+	var cmd *exec.Cmd
+	switch {
+	case commandExists("pbcopy"): // macOS
+		cmd = exec.Command("pbcopy")
+	case commandExists("xclip"): // Linux mit X11
+		cmd = exec.Command("xclip", "-selection", "clipboard")
+	case commandExists("wl-copy"): // Linux mit Wayland
+		cmd = exec.Command("wl-copy")
+	case commandExists("clip.exe"): // Windows (WSL) oder Windows
+		cmd = exec.Command("clip.exe")
+	default:
+		return fmt.Errorf("kein Clipboard-Tool gefunden (pbcopy/xclip/wl-copy/clip.exe)")
+	}
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("fehler beim Öffnen der stdin-Pipe: %v", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("fehler beim Starten des Clipboard-Tools: %v", err)
+	}
+
+	_, err = io.WriteString(stdin, content)
+	if err != nil {
+		return fmt.Errorf("fehler beim Schreiben in die Zwischenablage: %v", err)
+	}
+
+	stdin.Close()
+
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("fehler beim Warten auf Clipboard-Tool: %v", err)
+	}
+
+	return nil
+}
+
+// commandExists prüft ob ein Kommando verfügbar ist
+func commandExists(cmd string) bool {
+	_, err := exec.LookPath(cmd)
+	return err == nil
 }
