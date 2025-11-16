@@ -6,8 +6,10 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"netspy/pkg/discovery"
 	"netspy/pkg/scanner"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -71,6 +73,17 @@ func tickEverySecond() tea.Cmd {
 // Countdown Tick Message
 type countdownTickMsg time.Time
 
+// DNS Lookup Result enthält Hostname und Source
+type dnsLookupResult struct {
+	hostname string
+	source   string
+}
+
+// DNS Lookup Complete Message - enthält aufgelöste Hostnames
+type dnsLookupCompleteMsg struct {
+	updates map[string]dnsLookupResult // IP -> {Hostname, Source}
+}
+
 // tickCmd triggert den nächsten Scan nach dem Interval
 func tickCmd(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(t time.Time) tea.Msg {
@@ -122,6 +135,29 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			tickCmd(m.interval),
 			performBackgroundDNSLookupsCmd(m.deviceStates),
 		)
+
+	case dnsLookupCompleteMsg:
+		// DNS-Lookups abgeschlossen - Updates thread-safe anwenden
+		for ip, update := range msg.updates {
+			if state, exists := m.deviceStates[ip]; exists {
+				if update.hostname != "" {
+					state.Host.Hostname = update.hostname
+					state.Host.HostnameSource = update.source
+
+					// Update device type nach Hostname-Auflösung
+					state.Host.DeviceType = discovery.DetectDeviceType(
+						state.Host.Hostname,
+						state.Host.MAC,
+						state.Host.Vendor,
+						state.Host.Ports,
+					)
+				} else {
+					// Markiere als "versucht" auch wenn fehlgeschlagen
+					state.Host.HostnameSource = "none"
+				}
+			}
+		}
+		return m, nil
 
 	}
 
@@ -883,17 +919,59 @@ func (m watchModel) renderMediumRow(state *DeviceState) string {
 		formatDuration(uptime))
 }
 
-// performBackgroundDNSLookupsCmd startet DNS-Lookups für Devices ohne Hostname
+// performBackgroundDNSLookupsCmd startet DNS-Lookups und returned Updates als Message
 func performBackgroundDNSLookupsCmd(deviceStates map[string]*DeviceState) tea.Cmd {
 	return func() tea.Msg {
-		// Nutze die bestehende Funktion aus watch.go
-		// Diese updated deviceStates direkt (da es eine shared map ist)
-		ctx := context.Background()
-		performBackgroundDNSLookups(ctx, deviceStates)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-		// Returne nil - die DNS-Lookups aktualisieren deviceStates direkt
-		// Der nächste Countdown-Tick wird die Updates rendern
-		return nil
+		updates := make(map[string]dnsLookupResult)
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		semaphore := make(chan struct{}, 10) // Limit concurrent lookups
+
+		// Sammle IPs die DNS-Lookups brauchen
+		for ipStr, state := range deviceStates {
+			// Nur für online hosts ohne Hostname UND ohne vorherigen Lookup-Versuch
+			if state.Status != "online" || state.Host.Hostname != "" || state.Host.HostnameSource != "" {
+				continue
+			}
+
+			wg.Add(1)
+			go func(ip string, ipAddr net.IP) {
+				defer wg.Done()
+
+				// Check if context was cancelled
+				select {
+				case <-ctx.Done():
+					return
+				case semaphore <- struct{}{}:
+					defer func() { <-semaphore }()
+				}
+
+				// Comprehensive hostname resolution (DNS, mDNS, NetBIOS, LLMNR)
+				result := discovery.ResolveBackground(ipAddr, 1*time.Second)
+				mu.Lock()
+				if result.Hostname != "" {
+					updates[ip] = dnsLookupResult{
+						hostname: result.Hostname,
+						source:   result.Source,
+					}
+				} else {
+					// Auch fehlgeschlagene Versuche markieren
+					updates[ip] = dnsLookupResult{
+						hostname: "",
+						source:   "none",
+					}
+				}
+				mu.Unlock()
+			}(ipStr, state.Host.IP)
+		}
+
+		wg.Wait()
+
+		// Returne Updates als Message (thread-safe)
+		return dnsLookupCompleteMsg{updates: updates}
 	}
 }
 
