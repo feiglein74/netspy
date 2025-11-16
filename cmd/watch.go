@@ -112,7 +112,6 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	color.Yellow("Press Ctrl+C (^C) to stop\n\n")
 
 	scanCount := 0
-	tableStartLine := 0 // Track where table starts for repainting
 
 	for {
 		// Check if context is cancelled before starting new scan
@@ -233,9 +232,6 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 		// Redraw entire table (use scanStart as reference time for consistent uptime display)
 		redrawTable(deviceStates, scanStart)
-		// Lines to move UP from status line to header: separator + devices + status line
-		// (We're ON the status line, need to go up to reach header)
-		tableStartLine = len(deviceStates) + 2
 
 		// Calculate next scan time
 		scanDuration := time.Since(scanStart)
@@ -249,7 +245,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			go performBackgroundDNSLookups(ctx, deviceStates)
 
 			// Show countdown with periodic table updates (pass scanStart for consistent uptime)
-			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, tableStartLine, scanStart, winchChan)
+			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan)
 		}
 	}
 }
@@ -930,13 +926,17 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	}
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, tableLines int, scanStart time.Time, winchChan <-chan os.Signal) {
+func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	startTime := time.Now()
 	lastRedraw := -1 // Track last redraw second to avoid double-redraw
 	isRedrawing := false // Prevent concurrent redraws during resize
+
+	// Save cursor position as fixpoint (beginning of our output area)
+	// This is our anchor point - we'll always return here to redraw
+	fmt.Print("\033[s") // Save cursor position (ANSI: ESC 7 or ESC [s)
 
 	// Initial countdown display
 	fmt.Print("\r")
@@ -964,11 +964,11 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			}
 			isRedrawing = true
 
-			// Terminal size changed - clear screen and redraw everything
+			// Terminal size changed - return to fixpoint and redraw everything
 			elapsed := time.Since(startTime)
 
-			// Move to start of table
-			moveCursorUp(tableLines)
+			// Return to saved cursor position (our fixpoint)
+			fmt.Print("\033[u") // Restore cursor position (ANSI: ESC 8 or ESC [u)
 
 			// Clear from cursor to end of screen (catches ALL old content)
 			fmt.Print("\033[J")
@@ -1018,8 +1018,8 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 
 				// Alternate: DNS update on odd multiples (5, 15, 25...), reachability on even (10, 20, 30...)
 				if (currentSecond/5)%2 == 1 {
-					// DNS update: just redraw table
-					moveCursorUp(tableLines)
+					// DNS update: return to fixpoint and redraw table
+					fmt.Print("\033[u") // Restore cursor position to fixpoint
 					fmt.Print("\033[J") // Clear from cursor to end of screen
 					// Use scanStart + elapsed as reference time for consistent uptime
 					currentRefTime := scanStart.Add(elapsed)
@@ -1028,7 +1028,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				} else {
 					// Reachability check: quickly check if devices are still online
 					performQuickReachabilityCheck(states)
-					moveCursorUp(tableLines)
+					fmt.Print("\033[u") // Restore cursor position to fixpoint
 					fmt.Print("\033[J") // Clear from cursor to end of screen
 					// Use scanStart + elapsed as reference time for consistent uptime
 					currentRefTime := scanStart.Add(elapsed)
