@@ -58,8 +58,8 @@ func getTputSize() TerminalSize {
 
 // GetDisplayWidth berechnet verfügbare Breite für Tabelle (mit etwas Puffer)
 func (ts TerminalSize) GetDisplayWidth() int {
-	// Abzug für Margins und Padding
-	return ts.Width - 2
+	// Volle Terminal-Breite für Box-Layout
+	return ts.Width
 }
 
 // IsNarrow prüft ob Terminal schmal ist (< 100 Spalten)
