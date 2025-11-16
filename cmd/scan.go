@@ -519,10 +519,6 @@ func populateARPTable(network *net.IPNet) error {
 	return nil
 }
 
-func getModeName() string {
-	return scanMode
-}
-
 func createScanConfig() scanner.Config {
 	config := scanner.Config{
 		Concurrency: concurrent,
