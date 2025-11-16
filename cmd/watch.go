@@ -27,8 +27,9 @@ import (
 var (
 	watchInterval   time.Duration
 	watchMode       string
-	screenBuffer    bytes.Buffer // Buffer für aktuellen Screen-Inhalt
-	screenBufferMux sync.Mutex   // Mutex für Thread-Safe Zugriff
+	watchUI         string          // UI-Mode: "bubbletea" oder "legacy"
+	screenBuffer    bytes.Buffer    // Buffer für aktuellen Screen-Inhalt (legacy mode)
+	screenBufferMux sync.Mutex      // Mutex für Thread-Safe Zugriff (legacy mode)
 )
 
 // DeviceState verfolgt den Zustand eines entdeckten Geräts über die Zeit
@@ -70,6 +71,7 @@ func init() {
 	watchCmd.Flags().DurationVar(&watchInterval, "interval", 60*time.Second, "Scan interval")
 	watchCmd.Flags().StringVar(&watchMode, "mode", "hybrid", "Scan mode (hybrid, arp, fast, thorough, conservative)")
 	watchCmd.Flags().IntSliceVarP(&ports, "ports", "p", []int{}, "Specific ports to scan")
+	watchCmd.Flags().StringVar(&watchUI, "ui", "bubbletea", "UI mode (bubbletea, legacy)")
 }
 
 func runWatch(cmd *cobra.Command, args []string) error {
@@ -92,6 +94,17 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid CIDR: %v", err)
 	}
 
+	// Bubbletea UI verwenden wenn --ui=bubbletea
+	if watchUI == "bubbletea" {
+		return runWatchBubbletea(network, watchMode, watchInterval)
+	}
+
+	// Legacy UI (alte Implementierung)
+	return runWatchLegacy(network, netCIDR)
+}
+
+// runWatchLegacy ist die alte ANSI-basierte Implementierung
+func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 	// Geräte-Status-Map - Schlüssel ist IP-Adresse als String
 	deviceStates := make(map[string]*DeviceState)
 

@@ -1,6 +1,42 @@
 # Cross-Platform Kompatibilitäts-Notizen
 
-## Terminal-Handling per Plattform
+## UI-Implementierungen
+
+NetSpy bietet zwei UI-Modi für den `watch` Command:
+
+### 1. **Bubbletea UI** (Standard, empfohlen) ✅
+**Framework**: github.com/charmbracelet/bubbletea v1.3.10
+**Aktivierung**: `netspy watch <network> --ui bubbletea` (default)
+
+**Features**:
+- ✅ Scrollbares Device-Liste (↑/↓, PgUp/PgDn, Home/End)
+- ✅ Live-Suche (/ zum Aktivieren)
+- ✅ Responsive Layout mit Auto-Resize
+- ✅ Countdown-Timer mit Live-Updates
+- ✅ Mouse-Support (optional)
+- ✅ Alt-Screen-Buffer (sauberes Exit)
+
+**Cross-Platform Status**:
+| Plattform | Terminal | Status | Getestet |
+|-----------|----------|--------|----------|
+| Windows | Windows Terminal | ✅ **FUNKTIONIERT** | ✅ 16.11.2025 |
+| Windows | PowerShell | ✅ Sollte funktionieren | ❓ Zu testen |
+| Windows | cmd.exe | ✅ Sollte funktionieren | ❓ Zu testen |
+| Windows | Git Bash | ⚠️ Unklar (bekannte Issues) | ❓ Zu testen |
+| macOS | Terminal.app / iTerm2 | ✅ Sollte funktionieren | ❓ Zu testen |
+| Linux | gnome-terminal / xterm | ✅ Sollte funktionieren | ❓ Zu testen |
+
+**Bekannte Bubbletea Windows-Fixes** (bereits in v1.3.10):
+- ✅ Flickering Issue #1019 - GEFIXT
+- ✅ Windows Console API Support verbessert
+- ✅ Key Disambiguation für Windows
+
+### 2. **Legacy ANSI UI** (Fallback)
+**Aktivierung**: `netspy watch <network> --ui legacy`
+
+**Hinweis**: Die Legacy-Implementierung hat bekannte Probleme mit Git Bash (siehe unten).
+
+## Terminal-Handling per Plattform (Legacy UI)
 
 ### macOS (watch_unix.go)
 **Status**: ✅ Sollte funktionieren
