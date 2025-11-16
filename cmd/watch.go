@@ -684,26 +684,10 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(strings.Repeat(" ", padLen))
 	fmt.Print(color.CyanString("║\n"))
 
-	// Separator
+	// Separator before table (directly from info to table)
 	fmt.Print(color.CyanString("╠"))
 	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
 	fmt.Print(color.CyanString("╣\n"))
-
-	// Section title
-	sectionTitle := " NETWORK DEVICES"
-	padLen = width - len(sectionTitle) - 2
-	if padLen < 0 {
-		padLen = 0
-	}
-	fmt.Print(color.CyanString("║"))
-	fmt.Print(color.HiCyanString(sectionTitle))
-	fmt.Print(strings.Repeat(" ", padLen))
-	fmt.Print(color.CyanString("║\n"))
-
-	// Header separator
-	fmt.Print(color.CyanString("╟"))
-	fmt.Print(color.CyanString(strings.Repeat("─", width-2)))
-	fmt.Print(color.CyanString("╢\n"))
 
 	// Delegate to existing responsive table rendering
 	redrawTable(states, referenceTime)
