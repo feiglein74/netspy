@@ -113,7 +113,7 @@ func (a *ARPScanner) parseWindowsARPOutput(output string) ([]ARPEntry, error) {
 	arpRegex := regexp.MustCompile(`^\s+(\d+\.\d+\.\d+\.\d+)\s+([a-fA-F0-9\-]{17})\s+\w+`)
 
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
+		// Don't trim leading whitespace - regex expects it (^\s+)
 		if matches := arpRegex.FindStringSubmatch(line); matches != nil {
 			ipStr := matches[1]
 			macStr := matches[2]

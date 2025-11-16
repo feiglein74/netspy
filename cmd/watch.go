@@ -102,32 +102,25 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	// Window size change signal
-	winchChan := make(chan os.Signal, 1)
-	signal.Notify(winchChan, syscall.SIGWINCH)
+	// Window size change signal (platform-specific)
+	winchChan := getResizeChannel()
 
 	// Keyboard input channel für 'c' zum Kopieren
 	keyChan := make(chan rune, 10)
 
-	// Terminal in raw mode versetzen für direkte Tasteneingaben (macOS/Linux)
-	rawModeCmd := exec.Command("stty", "-icanon", "min", "1", "-echo")
-	rawModeCmd.Stdin = os.Stdin
-	_ = rawModeCmd.Run()
+	// Terminal in raw mode versetzen für direkte Tasteneingaben (platform-specific)
+	_ = setupTerminal()
 
 	// Stelle sicher, dass wir beim Exit wieder zurücksetzen
 	defer func() {
-		resetCmd := exec.Command("stty", "icanon", "echo")
-		resetCmd.Stdin = os.Stdin
-		_ = resetCmd.Run()
+		_ = resetTerminal()
 	}()
 
 	go func() {
 		sig := <-sigChan
 		fmt.Printf("\n\n[!] Received signal %v, shutting down...\n", sig)
-		// Terminal-State wiederherstellen
-		resetCmd := exec.Command("stty", "icanon", "echo")
-		resetCmd.Stdin = os.Stdin
-		_ = resetCmd.Run()
+		// Terminal-State wiederherstellen (platform-specific)
+		_ = resetTerminal()
 		cancel()
 	}()
 

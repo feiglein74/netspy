@@ -76,7 +76,8 @@
       "Bash(tput:*)",
       "Bash(md5:*)",
       "Bash(git rev-parse:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(timeout 8 ./netspy.exe watch:*)"
     ],
     "deny": [],
     "ask": []
