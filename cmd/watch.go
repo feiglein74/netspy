@@ -222,12 +222,14 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		// If first scan, just print table
-		// Otherwise, move cursor up and redraw
-		if scanCount > 1 {
-			// Move cursor up from status line to table header
-			linesToClear := len(deviceStates) + 2 // separator + devices (we're ON status line)
-			moveCursorUp(linesToClear)
+		// If first scan, save fixpoint before table draw
+		// Otherwise, restore to fixpoint and clear
+		if scanCount == 1 {
+			// Save cursor position as our fixpoint (ONCE, before first table)
+			fmt.Print("\033[s")
+		} else {
+			// Return to fixpoint and clear everything from there
+			fmt.Print("\033[u\033[J")
 		}
 
 		// Redraw entire table (use scanStart as reference time for consistent uptime display)
@@ -934,11 +936,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 	lastRedraw := -1 // Track last redraw second to avoid double-redraw
 	isRedrawing := false // Prevent concurrent redraws during resize
 
-	// Save cursor position as fixpoint (beginning of our output area)
-	// This is our anchor point - we'll always return here to redraw
-	fmt.Print("\033[s") // Save cursor position (ANSI: ESC 7 or ESC [s)
-
-	// Initial countdown display
+	// Initial countdown display (fixpoint already saved before table draw in runWatch)
 	fmt.Print("\r")
 	clearLine()
 	onlineCount := 0
