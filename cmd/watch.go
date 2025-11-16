@@ -847,7 +847,13 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	// Title line - use printBoxLine with properly constructed content
 	title := color.HiWhiteString(" NetSpy - Network Monitor")
 	scanInfo := color.HiYellowString(fmt.Sprintf("[Scan #%d]", scanCount))
-	titleLine := title + strings.Repeat(" ", width-len(stripANSI(title))-len(stripANSI(scanInfo))-3) + scanInfo
+	titleStripped := stripANSI(title)
+	scanInfoStripped := stripANSI(scanInfo)
+	spacesNeeded := width - runeLen(titleStripped) - runeLen(scanInfoStripped) - 4
+	if spacesNeeded < 0 {
+		spacesNeeded = 0
+	}
+	titleLine := title + strings.Repeat(" ", spacesNeeded) + scanInfo
 	printBoxLine(titleLine, width)
 
 	// Separator
