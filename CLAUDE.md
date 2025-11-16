@@ -2,6 +2,8 @@
 
 Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit mit Code in diesem Repository.
 
+**📋 Wichtig**: Siehe `PROJECT_RULES.md` für übergeordnete Projekt-Grundregeln (Sprache, Git-Commits, Dokumentation, etc.)
+
 ## Claude Code Präferenzen
 
 ### Testen & Ausführen
