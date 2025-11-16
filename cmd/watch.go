@@ -89,12 +89,16 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	// Geräte-Status-Map - Schlüssel ist IP-Adresse als String
 	deviceStates := make(map[string]*DeviceState)
 
-	// Signal-Handling für graceful Shutdown einrichten
+	// Signal-Handling für graceful Shutdown und Window-Resize einrichten
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Window size change signal
+	winchChan := make(chan os.Signal, 1)
+	signal.Notify(winchChan, syscall.SIGWINCH)
 
 	go func() {
 		sig := <-sigChan
@@ -245,7 +249,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			go performBackgroundDNSLookups(ctx, deviceStates)
 
 			// Show countdown with periodic table updates (pass scanStart for consistent uptime)
-			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, tableStartLine, scanStart)
+			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, tableStartLine, scanStart, winchChan)
 		}
 	}
 }
@@ -890,7 +894,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	}
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, tableLines int, scanStart time.Time) {
+func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, tableLines int, scanStart time.Time, winchChan <-chan os.Signal) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -916,6 +920,29 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 		select {
 		case <-ctx.Done():
 			return
+		case <-winchChan:
+			// Terminal size changed - redraw table immediately
+			elapsed := time.Since(startTime)
+			moveCursorUp(tableLines)
+			currentRefTime := scanStart.Add(elapsed)
+			redrawTable(states, currentRefTime)
+			fmt.Print("\033[2K")
+			// Redraw status line
+			remaining := duration - elapsed
+			if remaining < 0 {
+				remaining = 0
+			}
+			onlineCount := 0
+			offlineCount := 0
+			for _, state := range states {
+				if state.Status == "online" {
+					onlineCount++
+				} else {
+					offlineCount++
+				}
+			}
+			fmt.Printf("[Stats] Scan #%d | %d devices (%d online, %d offline) | Scan: %s |  Next: %s",
+				scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
 		case <-ticker.C:
 			elapsed := time.Since(startTime)
 			currentSecond := int(elapsed.Seconds())
