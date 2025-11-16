@@ -31,7 +31,44 @@ Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit 
 - **KRITISCH**: Background-Prozesse MÜSSEN vor Session-Ende beendet werden
 - **Problem**: Nach `/compact` gehen Kontext und Shell-IDs verloren → endlose System-Reminders → Token-Verschwendung
 - **Regel**: NIEMALS lange laufende Prozesse im Hintergrund starten (z.B. `brew install`)
-- **Falls doch nötig**:
+
+#### Test-Dateien: SOFORT cleanup!
+**WICHTIG**: Temporäre Test-Dateien erzeugen oft Background-Prozesse die Shell-IDs hinterlassen
+
+**❌ FALSCH**:
+```bash
+# Erstellt Background-Prozess → Shell-ID bleibt aktiv → endlose Reminders
+go run test_something.go
+# ... später ...
+rm test_something.go  # Zu spät! Shell-ID schon aktiv
+```
+
+**✅ RICHTIG**:
+```bash
+# Option 1: Inline ohne Datei
+go run -<<'EOF'
+package main
+import "fmt"
+func main() { fmt.Println("test") }
+EOF
+
+# Option 2: Datei + sofortiges Cleanup
+echo 'package main...' > test.go && go run test.go && rm test.go
+
+# Option 3: Mit timeout für lange Tests
+timeout 10 go run test.go && rm test.go
+```
+
+**Nach JEDEM Test-File**:
+```bash
+# Sofort nach Nutzung löschen
+rm test_*.go
+
+# Vor Session-Ende prüfen
+ls test_*.go 2>/dev/null && echo "⚠️ Test-Files noch vorhanden!"
+```
+
+- **Falls Background-Prozess nötig**:
   1. Prozess-ID dokumentieren und tracken
   2. Nach Abschluss prüfen: `BashOutput` um Status zu checken
   3. Bei Bedarf killen: `pkill -f 'prozessname'`
@@ -39,11 +76,15 @@ Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit 
   ```bash
   # Check für laufende Background-Prozesse
   ps aux | grep -E "(netspy|ginkgo|brew|go run)" | grep -v grep
+
+  # Check für Test-Files
+  ls test_*.go 2>/dev/null
   ```
 - **Cleanup falls nötig**:
   ```bash
   pkill -f 'netspy'
   pkill -f 'brew install'
+  rm test_*.go
   ```
 
 ### Git Workflow
