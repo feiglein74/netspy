@@ -960,13 +960,28 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			// Terminal size changed - clear screen and redraw everything
 			elapsed := time.Since(startTime)
 
-			// Clear the entire display area (move to start of table, then clear down)
+			// Move to start of table
 			moveCursorUp(tableLines)
-			fmt.Print("\033[J") // Clear from cursor to end of screen
+
+			// Clear all old table lines by overwriting with blank lines
+			// Use max possible lines (header + separator + devices + status)
+			maxOldLines := 2 + len(states) + 1 // header, separator, devices, status
+			for i := 0; i < maxOldLines; i++ {
+				fmt.Print("\r\033[2K\n") // Clear line and move down
+			}
+
+			// Move back to start
+			moveCursorUp(maxOldLines)
+
+			// Hide cursor during redraw
+			fmt.Print("\033[?25l")
 
 			// Redraw table with new terminal size
 			currentRefTime := scanStart.Add(elapsed)
 			redrawTable(states, currentRefTime)
+
+			// Show cursor again
+			fmt.Print("\033[?25h")
 
 			// Redraw status line
 			remaining := duration - elapsed
