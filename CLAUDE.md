@@ -27,6 +27,25 @@ Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit 
   - ❌ `timeout` fehlt auf macOS standardmäßig (würde auf Linux funktionieren)
   - ✅ Verwendet nur Standard-Shell-Befehle
 
+### Background-Prozess-Management
+- **KRITISCH**: Background-Prozesse MÜSSEN vor Session-Ende beendet werden
+- **Problem**: Nach `/compact` gehen Kontext und Shell-IDs verloren → endlose System-Reminders → Token-Verschwendung
+- **Regel**: NIEMALS lange laufende Prozesse im Hintergrund starten (z.B. `brew install`)
+- **Falls doch nötig**:
+  1. Prozess-ID dokumentieren und tracken
+  2. Nach Abschluss prüfen: `BashOutput` um Status zu checken
+  3. Bei Bedarf killen: `pkill -f 'prozessname'`
+- **Vor Session-Ende / /compact IMMER prüfen**:
+  ```bash
+  # Check für laufende Background-Prozesse
+  ps aux | grep -E "(netspy|ginkgo|brew|go run)" | grep -v grep
+  ```
+- **Cleanup falls nötig**:
+  ```bash
+  pkill -f 'netspy'
+  pkill -f 'brew install'
+  ```
+
 ### Git Workflow
 - **Regelmäßig auto-committen**, um Fortschritt zu tracken und Datenverlust zu vermeiden
 - Vor `/compact` oder beim Erreichen von Session-Limits IMMER committen
