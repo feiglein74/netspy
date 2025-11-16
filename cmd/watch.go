@@ -845,7 +845,9 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString("╗\n"))
 
 	// Title line - use printBoxLine with properly constructed content
-	title := color.HiWhiteString(" NetSpy - Network Monitor")
+	// Get git version info
+	gitVersion := getGitVersion()
+	title := color.HiWhiteString(fmt.Sprintf(" NetSpy - Network Monitor %s", gitVersion))
 	scanInfo := color.HiYellowString(fmt.Sprintf("[Scan #%d]", scanCount))
 	titleStripped := stripANSI(title)
 	scanInfoStripped := stripANSI(scanInfo)
@@ -1673,4 +1675,14 @@ func copyScreenToClipboard() error {
 func commandExists(cmd string) bool {
 	_, err := exec.LookPath(cmd)
 	return err == nil
+}
+
+// getGitVersion gibt die aktuelle Git-Version zurück (kurzer Hash)
+func getGitVersion() string {
+	cmd := exec.Command("git", "rev-parse", "--short", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return "dev"
+	}
+	return "(" + strings.TrimSpace(string(output)) + ")"
 }

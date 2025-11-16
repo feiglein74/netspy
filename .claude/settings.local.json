@@ -72,7 +72,9 @@
       "Bash(make:*)",
       "Bash(~/go/bin/ginkgo:*)",
       "Bash(stty:*)",
-      "Bash(timeout 10 ./netspy.exe:*)"
+      "Bash(timeout 10 ./netspy.exe:*)",
+      "Bash(tput:*)",
+      "Bash(md5:*)"
     ],
     "deny": [],
     "ask": []
