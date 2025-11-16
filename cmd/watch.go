@@ -1020,6 +1020,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				if (currentSecond/5)%2 == 1 {
 					// DNS update: just redraw table
 					moveCursorUp(tableLines)
+					fmt.Print("\033[J") // Clear from cursor to end of screen
 					// Use scanStart + elapsed as reference time for consistent uptime
 					currentRefTime := scanStart.Add(elapsed)
 					redrawTable(states, currentRefTime)
@@ -1028,6 +1029,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 					// Reachability check: quickly check if devices are still online
 					performQuickReachabilityCheck(states)
 					moveCursorUp(tableLines)
+					fmt.Print("\033[J") // Clear from cursor to end of screen
 					// Use scanStart + elapsed as reference time for consistent uptime
 					currentRefTime := scanStart.Add(elapsed)
 					redrawTable(states, currentRefTime)
