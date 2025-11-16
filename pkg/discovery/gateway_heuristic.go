@@ -1,10 +1,8 @@
 package discovery
 
 import (
-	"fmt"
 	"net"
 	"sync"
-	"time"
 )
 
 // gatewayCache speichert erkannte Gateways für Netzwerke
@@ -105,31 +103,6 @@ func isCommonGatewayIP(ip net.IP, network *net.IPNet) bool {
 	lastIP := getLastUsableIP(network)
 
 	return ip.Equal(firstIP) || ip.Equal(lastIP)
-}
-
-// hasGatewayPorts prüft ob typische Gateway-Ports offen sind
-func hasGatewayPorts(ip net.IP) bool {
-	// Typische Gateway-Dienste
-	gatewayPorts := []int{
-		53,   // DNS
-		80,   // HTTP (Web-Interface)
-		443,  // HTTPS (Web-Interface)
-		8080, // Alternativer HTTP
-	}
-
-	// Schneller Port-Check mit kurzem Timeout
-	timeout := 500 * time.Millisecond
-
-	for _, port := range gatewayPorts {
-		address := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
-		conn, err := net.DialTimeout("tcp", address, timeout)
-		if err == nil {
-			conn.Close()
-			return true // Mindestens ein Gateway-Port ist offen
-		}
-	}
-
-	return false
 }
 
 // getFirstUsableIP gibt die erste nutzbare IP im Netzwerk zurück

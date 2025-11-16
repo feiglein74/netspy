@@ -63,7 +63,13 @@
       "Bash(mv:*)",
       "Bash(chmod:*)",
       "Bash(git rm:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(go fmt:*)",
+      "Bash(go vet:*)",
+      "Bash(brew install:*)",
+      "Bash(golangci-lint run:*)",
+      "Bash(golangci-lint help:*)",
+      "Bash(make:*)"
     ],
     "deny": [],
     "ask": []
