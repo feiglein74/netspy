@@ -734,14 +734,17 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 	width := termSize.GetDisplayWidth()
 
 	// Table header with box drawing
+	// Content: " IP(16) Stat(4) Hostname(18) Uptime(8) " = 48 chars + 3 spaces = 51
+	// Plus: "║ " (2) and " ║" (2) = 55 total
 	fmt.Print(color.CyanString("║"))
 	fmt.Print(color.CyanString(" %-16s %-4s %-18s %-8s", "IP", "Stat", "Hostname", "Uptime"))
-	padLen := width - 52 // Header content length
+	contentLen := 1 + 16 + 1 + 4 + 1 + 18 + 1 + 8 // "║ " + columns + spaces
+	padLen := width - contentLen - 2 // -2 for final " ║"
 	if padLen < 0 {
 		padLen = 0
 	}
 	fmt.Print(strings.Repeat(" ", padLen))
-	fmt.Print(color.CyanString("║\n"))
+	fmt.Print(color.CyanString(" ║\n"))
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -798,12 +801,12 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 			hostname,
 			formatDurationShort(statusDuration),
 		)
-		padLen = width - 52
+		padLen = width - contentLen - 2 // Same calculation as header
 		if padLen < 0 {
 			padLen = 0
 		}
 		fmt.Print(strings.Repeat(" ", padLen))
-		fmt.Print(color.CyanString("║\n"))
+		fmt.Print(color.CyanString(" ║\n"))
 	}
 }
 
@@ -812,15 +815,19 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 	width := termSize.GetDisplayWidth()
 
 	// Table header with box drawing
+	// Content: " IP(18) Status(11) Hostname(20) MAC(18) Type(14) RTT(8) Flaps(5) "
+	// = 18+11+20+18+14+8+5 = 94 chars + 6 spaces = 100
+	// Plus "║ " (2) and " ║" (2) = 104 total
 	fmt.Print(color.CyanString("║"))
 	fmt.Print(color.CyanString(" %-18s %-11s %-20s %-18s %-14s %-8s %-5s",
 		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "Flaps"))
-	padLen := width - 101 // Header content length
+	contentLen := 1 + 18 + 1 + 11 + 1 + 20 + 1 + 18 + 1 + 14 + 1 + 8 + 1 + 5
+	padLen := width - contentLen - 2
 	if padLen < 0 {
 		padLen = 0
 	}
 	fmt.Print(strings.Repeat(" ", padLen))
-	fmt.Print(color.CyanString("║\n"))
+	fmt.Print(color.CyanString(" ║\n"))
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -902,12 +909,12 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 			rttText,
 			flapNum,
 		)
-		padLen = width - 101
+		padLen = width - contentLen - 2
 		if padLen < 0 {
 			padLen = 0
 		}
 		fmt.Print(strings.Repeat(" ", padLen))
-		fmt.Print(color.CyanString("║\n"))
+		fmt.Print(color.CyanString(" ║\n"))
 	}
 }
 
@@ -933,8 +940,9 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "First Seen", "Uptime/Down", "Flaps")
 
 	// Calculate padding
-	headerLen := 20 + 1 + 10 + 1 + hostnameWidth + 1 + 18 + 1 + deviceTypeWidth + 1 + 8 + 1 + 13 + 1 + 16 + 1 + 5
-	padLen := termWidth - headerLen - 3 // -3 for "║ " and " ║"
+	// Content length: all columns + spaces between them + leading space
+	headerLen := 1 + 20 + 1 + 10 + 1 + hostnameWidth + 1 + 18 + 1 + deviceTypeWidth + 1 + 8 + 1 + 13 + 1 + 16 + 1 + 5
+	padLen := termWidth - headerLen - 2 // -2 for "║" and " ║"
 	if padLen < 0 {
 		padLen = 0
 	}
@@ -942,7 +950,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	fmt.Print(color.CyanString("║"))
 	fmt.Print(color.CyanString(" " + headerContent))
 	fmt.Print(strings.Repeat(" ", padLen))
-	fmt.Print(color.CyanString("║\n"))
+	fmt.Print(color.CyanString(" ║\n"))
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -1049,7 +1057,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			flapNum,
 		)
 		fmt.Print(strings.Repeat(" ", padLen))
-		fmt.Print(color.CyanString("║\n"))
+		fmt.Print(color.CyanString(" ║\n"))
 	}
 }
 
