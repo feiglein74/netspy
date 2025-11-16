@@ -320,18 +320,34 @@ func (m watchModel) View() string {
 	s.WriteString("\n")
 
 	// Table Header
+	totalDevices := len(m.sortedIPs)
 	headerLine := fmt.Sprintf("%-15s %-7s %-20s %-18s %-15s %s",
 		"IP Address", "Status", "Hostname", "MAC", "Vendor", "Uptime")
+
+	// Füge Platzhalter für Scrollbar hinzu wenn nötig
+	if totalDevices > m.viewport.maxVisible {
+		headerLine += "   " // 3 chars für Scrollbar-Spalte
+	}
+
 	s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86")).Render(headerLine))
 	s.WriteString("\n")
 	s.WriteString(strings.Repeat("─", m.width))
 	s.WriteString("\n")
 
-	// Device List (nur sichtbare Zeilen)
+	// Device List (nur sichtbare Zeilen) mit Scrollbar
 	visibleDevices := m.getVisibleDevices()
-	for _, ipStr := range visibleDevices {
+
+	for i, ipStr := range visibleDevices {
 		state := m.deviceStates[ipStr]
-		s.WriteString(m.renderDeviceRow(state))
+		rowContent := m.renderDeviceRow(state)
+
+		// Scrollbar am rechten Rand (wenn mehr Devices als sichtbar)
+		if totalDevices > m.viewport.maxVisible {
+			scrollbarChar := m.getScrollbarChar(i)
+			rowContent += "  " + scrollbarChar
+		}
+
+		s.WriteString(rowContent)
 		s.WriteString("\n")
 	}
 
@@ -376,6 +392,31 @@ func (m watchModel) getVisibleDevices() []string {
 	}
 
 	return m.sortedIPs[start:end]
+}
+
+// getScrollbarChar gibt das Scrollbar-Zeichen für die gegebene Zeile zurück
+func (m watchModel) getScrollbarChar(visibleLineIndex int) string {
+	totalDevices := len(m.sortedIPs)
+	visibleCount := m.viewport.maxVisible
+
+	// Berechne Scrollbar-Position und Größe
+	// thumbSize = Verhältnis sichtbar/total * Anzahl sichtbare Zeilen
+	thumbSize := (visibleCount * visibleCount) / totalDevices
+	if thumbSize < 1 {
+		thumbSize = 1
+	}
+
+	// thumbStart = Position des Thumbs basierend auf Offset
+	thumbStart := (m.viewport.offset * visibleCount) / totalDevices
+
+	// Prüfe ob aktuelle Zeile im Thumb-Bereich liegt
+	if visibleLineIndex >= thumbStart && visibleLineIndex < thumbStart+thumbSize {
+		// Im Thumb-Bereich
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render("█")
+	}
+
+	// Im Track-Bereich
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("░")
 }
 
 // renderDeviceRow rendert eine einzelne Device-Zeile
