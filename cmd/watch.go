@@ -227,7 +227,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		}
 
 		// Redraw entire table (use scanStart as reference time for consistent uptime display)
-		redrawTable(deviceStates, scanCount, time.Since(scanStart), scanStart)
+		redrawTable(deviceStates, scanStart)
 		// Lines to move UP from status line to header: separator + devices + status line
 		// (We're ON the status line, need to go up to reach header)
 		tableStartLine = len(deviceStates) + 2
@@ -315,7 +315,7 @@ func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.
 		// Generate all IPs in network
 		ips := discovery.GenerateIPsFromCIDR(netCIDR)
 
-		// Scanner-Konfiguration (conservative mode für watch)
+		// Scanner configuration (conservative mode for watch)
 		config := scanner.Config{
 			Concurrency: 40,
 			Timeout:     500 * time.Millisecond,
@@ -428,7 +428,7 @@ func performARPScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.Hos
 		// Generate all IPs in network
 		ips := discovery.GenerateIPsFromCIDR(netCIDR)
 
-		// Scanner-Konfiguration (conservative mode für watch)
+		// Scanner configuration (conservative mode for watch)
 		config := scanner.Config{
 			Concurrency: 40,
 			Timeout:     500 * time.Millisecond,
@@ -601,7 +601,7 @@ func clearLine() {
 	fmt.Print("\033[2K\r") // Clear entire line and move to start
 }
 
-func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration time.Duration, referenceTime time.Time) {
+func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 	// Hide cursor during redraw to prevent visible cursor jumping
 	fmt.Print("\033[?25l")
 	defer fmt.Print("\033[?25h") // Show cursor when done
@@ -769,7 +769,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 					moveCursorUp(tableLines)
 					// Use scanStart + elapsed as reference time for consistent uptime
 					currentRefTime := scanStart.Add(elapsed)
-					redrawTable(states, scanCount, scanDuration, currentRefTime)
+					redrawTable(states, currentRefTime)
 					fmt.Print("\033[2K")
 				} else {
 					// Reachability check: quickly check if devices are still online
@@ -777,7 +777,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 					moveCursorUp(tableLines)
 					// Use scanStart + elapsed as reference time for consistent uptime
 					currentRefTime := scanStart.Add(elapsed)
-					redrawTable(states, scanCount, scanDuration, currentRefTime)
+					redrawTable(states, currentRefTime)
 					fmt.Print("\033[2K")
 				}
 			} else {
