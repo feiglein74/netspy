@@ -957,12 +957,17 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 		case <-ctx.Done():
 			return
 		case <-winchChan:
-			// Terminal size changed - redraw table immediately
+			// Terminal size changed - clear screen and redraw everything
 			elapsed := time.Since(startTime)
+
+			// Clear the entire display area (move to start of table, then clear down)
 			moveCursorUp(tableLines)
+			fmt.Print("\033[J") // Clear from cursor to end of screen
+
+			// Redraw table with new terminal size
 			currentRefTime := scanStart.Add(elapsed)
 			redrawTable(states, currentRefTime)
-			fmt.Print("\033[2K")
+
 			// Redraw status line
 			remaining := duration - elapsed
 			if remaining < 0 {
