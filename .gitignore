@@ -49,3 +49,9 @@ dist/
 tmp/
 temp/
 _ul/
+
+# Private/Internal TODO files (not for GitHub)
+TODO.private.md
+TODO.internal.md
+.todo/
+notes/
