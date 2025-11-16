@@ -218,22 +218,21 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			}
 		}
 
+		// Calculate scan duration
+		scanDuration := time.Since(scanStart)
+
 		// Lock to prevent concurrent redraws (scan vs SIGWINCH)
 		redrawMutex.Lock()
 
 		// Clear screen and redraw everything (fullscreen mode)
 		fmt.Print("\033[2J\033[H") // Clear screen + move to home
-		color.Cyan("NetSpy Watch Mode\n")
-		color.White("Network: %s | Interval: %v | Mode: %s\n", network, watchInterval, watchMode)
-		color.Yellow("Press Ctrl+C (^C) to stop\n\n")
 
-		// Redraw entire table (use scanStart as reference time for consistent uptime display)
-		redrawTable(deviceStates, scanStart)
+		// Draw btop-inspired layout
+		drawBtopLayout(deviceStates, scanStart, network, watchInterval, watchMode, scanCount, scanDuration)
 
 		redrawMutex.Unlock()
 
 		// Calculate next scan time
-		scanDuration := time.Since(scanStart)
 		nextScan := watchInterval - scanDuration
 		if nextScan < 0 {
 			nextScan = 0
@@ -601,6 +600,122 @@ func clearLine() {
 	fmt.Print("\033[2K\r") // Clear entire line and move to start
 }
 
+// drawBtopLayout renders a btop-inspired fullscreen layout
+func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration) {
+	termSize := output.GetTerminalSize()
+	width := termSize.GetDisplayWidth()
+
+	// Count stats
+	onlineCount := 0
+	offlineCount := 0
+	totalFlaps := 0
+	for _, state := range states {
+		if state.Status == "online" {
+			onlineCount++
+		} else {
+			offlineCount++
+		}
+		totalFlaps += state.FlapCount
+	}
+
+	// ╔═══════════════════════════════════════════════════════════════╗
+	// ║ NetSpy - Network Monitor                          [Scan #123] ║
+	// ╠═══════════════════════════════════════════════════════════════╣
+	// ║ Network: 10.0.0.0/24  │  Mode: hybrid  │  Interval: 30s      ║
+	// ║ Devices: 15 (↑14 ↓1)  │  Flaps: 3      │  Scan: 2.3s         ║
+	// ╠═══════════════════════════════════════════════════════════════╣
+	// ║                      NETWORK DEVICES                          ║
+	// ╟───────────────────────────────────────────────────────────────╢
+	// ║ IP Address    Status   Hostname         MAC      Type    RTT ║
+	// ╟───────────────────────────────────────────────────────────────╢
+	// ║ 10.0.0.1 [G]  online   gateway          aa:bb... Router  2ms ║
+	// ╚═══════════════════════════════════════════════════════════════╝
+
+	// Top border with title
+	fmt.Print(color.CyanString("╔"))
+	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString("╗\n"))
+
+	// Title line
+	title := " NetSpy - Network Monitor"
+	scanInfo := fmt.Sprintf("[Scan #%d] ", scanCount)
+	padding := width - len(title) - len(scanInfo) - 2
+	if padding < 0 {
+		padding = 0
+	}
+	fmt.Print(color.CyanString("║"))
+	fmt.Print(color.HiWhiteString(title))
+	fmt.Print(strings.Repeat(" ", padding))
+	fmt.Print(color.HiYellowString(scanInfo))
+	fmt.Print(color.CyanString("║\n"))
+
+	// Separator
+	fmt.Print(color.CyanString("╠"))
+	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString("╣\n"))
+
+	// Info line 1
+	line1 := fmt.Sprintf(" Network: %s  │  Mode: %s  │  Interval: %v", network, mode, interval)
+	padLen := width - len(line1) - 2
+	if padLen < 0 {
+		padLen = 0
+	}
+	fmt.Print(color.CyanString("║"))
+	fmt.Print(color.WhiteString(line1))
+	fmt.Print(strings.Repeat(" ", padLen))
+	fmt.Print(color.CyanString("║\n"))
+
+	// Info line 2
+	line2 := fmt.Sprintf(" Devices: %d (%s%d %s%d)  │  Flaps: %d  │  Scan: %s",
+		len(states),
+		color.GreenString("↑"), onlineCount,
+		color.RedString("↓"), offlineCount,
+		totalFlaps,
+		formatDuration(scanDuration))
+	// Strip ANSI codes for length calculation
+	line2Len := len(fmt.Sprintf(" Devices: %d (↑%d ↓%d)  │  Flaps: %d  │  Scan: %s",
+		len(states), onlineCount, offlineCount, totalFlaps, formatDuration(scanDuration)))
+	padLen = width - line2Len - 2
+	if padLen < 0 {
+		padLen = 0
+	}
+	fmt.Print(color.CyanString("║"))
+	fmt.Print(line2)
+	fmt.Print(strings.Repeat(" ", padLen))
+	fmt.Print(color.CyanString("║\n"))
+
+	// Separator
+	fmt.Print(color.CyanString("╠"))
+	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString("╣\n"))
+
+	// Section title
+	sectionTitle := " NETWORK DEVICES"
+	padLen = width - len(sectionTitle) - 2
+	if padLen < 0 {
+		padLen = 0
+	}
+	fmt.Print(color.CyanString("║"))
+	fmt.Print(color.HiCyanString(sectionTitle))
+	fmt.Print(strings.Repeat(" ", padLen))
+	fmt.Print(color.CyanString("║\n"))
+
+	// Header separator
+	fmt.Print(color.CyanString("╟"))
+	fmt.Print(color.CyanString(strings.Repeat("─", width-2)))
+	fmt.Print(color.CyanString("╢\n"))
+
+	// Delegate to existing responsive table rendering
+	redrawTable(states, referenceTime)
+
+	// Bottom border (without newline - we'll add status line below)
+	fmt.Print(color.CyanString("╚"))
+	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString("╝"))
+
+	// Status line will be printed by showCountdownWithTableUpdates
+}
+
 func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 	// Hide cursor during redraw to prevent visible cursor jumping
 	fmt.Print("\033[?25l")
@@ -632,13 +747,17 @@ func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 
 // redrawNarrowTable - Kompakte Ansicht für schmale Terminals (< 100 cols)
 func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize) {
-	// Print header with proper line clearing
-	fmt.Print("\r")
-	clearLine()
-	color.Cyan("%-16s %-4s %-18s %-8s\n", "IP", "Stat", "Hostname", "Uptime")
-	fmt.Print("\r")
-	clearLine()
-	color.White("%s\n", strings.Repeat("─", min(termSize.GetDisplayWidth(), 55)))
+	width := termSize.GetDisplayWidth()
+
+	// Table header with box drawing
+	fmt.Print(color.CyanString("║"))
+	fmt.Print(color.CyanString(" %-16s %-4s %-18s %-8s", "IP", "Stat", "Hostname", "Uptime"))
+	padLen := width - 52 // Header content length
+	if padLen < 0 {
+		padLen = 0
+	}
+	fmt.Print(strings.Repeat(" ", padLen))
+	fmt.Print(color.CyanString("║\n"))
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -686,28 +805,38 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		// Format and pad before coloring to maintain alignment
 		coloredStatus := statusColor(fmt.Sprintf("%-3s", ""))
 
-		fmt.Print("\r")
-		clearLine()
-		fmt.Printf("%-16s %s%s %-18s %-8s\n",
+		// Device row with box drawing
+		fmt.Print(color.CyanString("║"))
+		fmt.Printf(" %-16s %s%s %-18s %-8s",
 			displayIP,
 			statusIcon,
 			coloredStatus,
 			hostname,
 			formatDurationShort(statusDuration),
 		)
+		padLen = width - 52
+		if padLen < 0 {
+			padLen = 0
+		}
+		fmt.Print(strings.Repeat(" ", padLen))
+		fmt.Print(color.CyanString("║\n"))
 	}
 }
 
 // redrawMediumTable - Standard-Ansicht für mittlere Terminals (100-139 cols)
 func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize output.TerminalSize) {
-	// Print header with proper line clearing
-	fmt.Print("\r")
-	clearLine()
-	color.Cyan("%-18s %-11s %-20s %-18s %-14s %-8s %-5s\n",
-		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "Flaps")
-	fmt.Print("\r")
-	clearLine()
-	color.White("%s\n", strings.Repeat("─", min(termSize.GetDisplayWidth(), 100)))
+	width := termSize.GetDisplayWidth()
+
+	// Table header with box drawing
+	fmt.Print(color.CyanString("║"))
+	fmt.Print(color.CyanString(" %-18s %-11s %-20s %-18s %-14s %-8s %-5s",
+		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "Flaps"))
+	padLen := width - 101 // Header content length
+	if padLen < 0 {
+		padLen = 0
+	}
+	fmt.Print(strings.Repeat(" ", padLen))
+	fmt.Print(color.CyanString("║\n"))
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -777,9 +906,9 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 		// Pad status text before coloring
 		coloredStatus := statusColor(fmt.Sprintf("%-7s", statusText))
 
-		fmt.Print("\r")
-		clearLine()
-		fmt.Printf("%-18s %s %s %-20s %-18s %-14s %-8s %s\n",
+		// Device row with box drawing
+		fmt.Print(color.CyanString("║"))
+		fmt.Printf(" %-18s %s %s %-20s %-18s %-14s %-8s %s",
 			displayIP,
 			statusIcon,
 			coloredStatus,
@@ -789,6 +918,12 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 			rttText,
 			flapNum,
 		)
+		padLen = width - 101
+		if padLen < 0 {
+			padLen = 0
+		}
+		fmt.Print(strings.Repeat(" ", padLen))
+		fmt.Print(color.CyanString("║\n"))
 	}
 }
 
@@ -807,16 +942,23 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	hostnameWidth := max(25, min(50, int(float64(remainingWidth)*0.6)))
 	deviceTypeWidth := max(17, remainingWidth-hostnameWidth)
 
-	// Print header with proper line clearing
-	fmt.Print("\r")
-	clearLine()
-	headerFormat := fmt.Sprintf("%%-%ds %%-10s %%-%ds %%-18s %%-%ds %%-8s %%-13s %%-16s %%-5s\n",
+	// Table header with box drawing
+	headerFormat := fmt.Sprintf("%%-%ds %%-10s %%-%ds %%-18s %%-%ds %%-8s %%-13s %%-16s %%-5s",
 		20, hostnameWidth, deviceTypeWidth)
-	color.Cyan(headerFormat,
+	headerContent := fmt.Sprintf(headerFormat,
 		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "First Seen", "Uptime/Down", "Flaps")
-	fmt.Print("\r")
-	clearLine()
-	color.White("%s\n", strings.Repeat("─", min(termWidth, 200)))
+
+	// Calculate padding
+	headerLen := 20 + 1 + 10 + 1 + hostnameWidth + 1 + 18 + 1 + deviceTypeWidth + 1 + 8 + 1 + 13 + 1 + 16 + 1 + 5
+	padLen := termWidth - headerLen - 3 // -3 for "║ " and " ║"
+	if padLen < 0 {
+		padLen = 0
+	}
+
+	fmt.Print(color.CyanString("║"))
+	fmt.Print(color.CyanString(" " + headerContent))
+	fmt.Print(strings.Repeat(" ", padLen))
+	fmt.Print(color.CyanString("║\n"))
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -905,12 +1047,12 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		coloredStatus := statusColor(fmt.Sprintf("%-6s", statusText))
 
 		// Use dynamic format string with calculated widths
-		rowFormat := fmt.Sprintf("%%-20s %%s %%s %%-%ds %%s %%-%ds %%-8s %%-13s %%-16s %%s\n",
+		rowFormat := fmt.Sprintf("%%-20s %%s %%s %%-%ds %%s %%-%ds %%-8s %%-13s %%-16s %%s",
 			hostnameWidth, deviceTypeWidth)
 
-		fmt.Print("\r")
-		clearLine()
-		fmt.Printf(rowFormat,
+		// Device row with box drawing
+		fmt.Print(color.CyanString("║"))
+		fmt.Printf(" "+rowFormat,
 			displayIP,
 			statusIcon,
 			coloredStatus,
@@ -922,6 +1064,8 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			formatDuration(statusDuration),
 			flapNum,
 		)
+		fmt.Print(strings.Repeat(" ", padLen))
+		fmt.Print(color.CyanString("║\n"))
 	}
 }
 
@@ -932,32 +1076,17 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 	startTime := time.Now()
 	lastRedraw := -1 // Track last redraw second to avoid double-redraw
 
-	// Helper function to redraw entire screen
-	redrawFullScreen := func(refTime time.Time) {
+	// Helper function to redraw entire screen with btop layout
+	redrawFullScreen := func(refTime time.Time, currentScanDuration time.Duration) {
 		// Clear screen and move to home
 		fmt.Print("\033[2J\033[H")
-		// Redraw header
-		color.Cyan("NetSpy Watch Mode\n")
-		color.White("Network: %s | Interval: %v | Mode: %s\n", network, watchInterval, watchMode)
-		color.Yellow("Press Ctrl+C (^C) to stop\n\n")
-		// Redraw table
-		redrawTable(states, refTime)
+		// Draw btop-inspired layout
+		drawBtopLayout(states, refTime, network, watchInterval, watchMode, scanCount, currentScanDuration)
 	}
 
-	// Initial countdown display
-	fmt.Print("\r")
-	clearLine()
-	onlineCount := 0
-	offlineCount := 0
-	for _, state := range states {
-		if state.Status == "online" {
-			onlineCount++
-		} else {
-			offlineCount++
-		}
-	}
-	fmt.Printf("[Scan #%d] %d devices (%d online, %d offline) | Scan: %s | Next: %s",
-		scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(duration))
+	// Initial countdown display (status line below box)
+	fmt.Printf("\n%s Next scan in: %s | Press Ctrl+C to exit",
+		color.HiBlackString("▶"), color.CyanString(formatDuration(duration)))
 
 	for {
 		select {
@@ -977,29 +1106,20 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			fmt.Print("\033[?25l")
 
 			// Full screen redraw
-			redrawFullScreen(currentRefTime)
+			redrawFullScreen(currentRefTime, scanDuration)
 
 			// Show cursor again
 			fmt.Print("\033[?25h")
 
 			redrawMutex.Unlock()
 
-			// Redraw status line (outside lock - just text)
+			// Status line below box
 			remaining := duration - elapsed
 			if remaining < 0 {
 				remaining = 0
 			}
-			onlineCount := 0
-			offlineCount := 0
-			for _, state := range states {
-				if state.Status == "online" {
-					onlineCount++
-				} else {
-					offlineCount++
-				}
-			}
-			fmt.Printf("[Stats] Scan #%d | %d devices (%d online, %d offline) | Scan: %s |  Next: %s",
-				scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
+			fmt.Printf("\n%s Next scan in: %s | Press Ctrl+C to exit",
+				color.HiBlackString("▶"), color.CyanString(formatDuration(remaining)))
 		case <-ticker.C:
 			elapsed := time.Since(startTime)
 			currentSecond := int(elapsed.Seconds())
@@ -1019,22 +1139,16 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 					// DNS update: full screen redraw
 					redrawMutex.Lock()
 					currentRefTime := scanStart.Add(elapsed)
-					redrawFullScreen(currentRefTime)
+					redrawFullScreen(currentRefTime, scanDuration)
 					redrawMutex.Unlock()
-					fmt.Print("\033[2K")
 				} else {
 					// Reachability check: quickly check if devices are still online
 					performQuickReachabilityCheck(states)
 					redrawMutex.Lock()
 					currentRefTime := scanStart.Add(elapsed)
-					redrawFullScreen(currentRefTime)
+					redrawFullScreen(currentRefTime, scanDuration)
 					redrawMutex.Unlock()
-					fmt.Print("\033[2K")
 				}
-			} else {
-				// Not doing anything special, just update status line in place
-				fmt.Print("\r")
-				clearLine()
 			}
 
 			// ALWAYS calculate remaining time fresh (accounts for any processing delays)
@@ -1043,19 +1157,17 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				remaining = 0
 			}
 
-			// Count stats
-			onlineCount := 0
-			offlineCount := 0
-			for _, state := range states {
-				if state.Status == "online" {
-					onlineCount++
-				} else {
-					offlineCount++
-				}
+			// Status line below box
+			if currentSecond%5 == 0 && currentSecond == lastRedraw {
+				// After full redraw, show status
+				fmt.Printf("\n%s Next scan in: %s | Press Ctrl+C to exit",
+					color.HiBlackString("▶"), color.CyanString(formatDuration(remaining)))
+			} else {
+				// Just update countdown
+				fmt.Print("\r")
+				fmt.Printf("%s Next scan in: %s | Press Ctrl+C to exit",
+					color.HiBlackString("▶"), color.CyanString(formatDuration(remaining)))
 			}
-
-			fmt.Printf("[Stats] Scan #%d | %d devices (%d online, %d offline) | Scan: %s |  Next: %s",
-				scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
 		}
 	}
 }
