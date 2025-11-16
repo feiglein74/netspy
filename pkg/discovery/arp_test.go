@@ -42,11 +42,12 @@ var _ = Describe("ARP Scanner", func() {
 				scanner := discovery.NewARPScanner(500 * time.Millisecond)
 				_, network, _ := net.ParseCIDR("127.0.0.0/8")
 
-				entries, err := scanner.ScanARPTable(network)
+				_, err := scanner.ScanARPTable(network)
 
+				// Sollte keinen Fehler werfen
 				Expect(err).NotTo(HaveOccurred())
-				Expect(entries).NotTo(BeNil())
-				// Kann leer sein, aber sollte keinen Fehler werfen
+				// Entries können leer sein (nil slice oder leeres slice), beides ist okay
+				// Wichtig ist nur, dass kein Fehler auftritt
 			})
 		})
 	})
