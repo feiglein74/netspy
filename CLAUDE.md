@@ -32,6 +32,8 @@ Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit 
 - **Problem**: Nach `/compact` gehen Kontext und Shell-IDs verloren → endlose System-Reminders → Token-Verschwendung
 - **Regel**: NIEMALS lange laufende Prozesse im Hintergrund starten (z.B. `brew install`)
 
+**📚 Vollständige Regeln**: Siehe `BACKGROUND_PROCESS_RULES.md` für universelle, sprach-unabhängige Best Practices
+
 #### Test-Dateien: SOFORT cleanup!
 **WICHTIG**: Temporäre Test-Dateien erzeugen oft Background-Prozesse die Shell-IDs hinterlassen
 
