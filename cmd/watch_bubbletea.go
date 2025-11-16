@@ -485,11 +485,11 @@ func (m watchModel) renderMediumLayout(s *strings.Builder, visibleDevices []stri
 	}
 }
 
-// renderWideLayout - Volle Ansicht (>= 140 cols)
+// renderWideLayout - Volle Ansicht mit allen Details (>= 140 cols)
 func (m watchModel) renderWideLayout(s *strings.Builder, visibleDevices []string, totalDevices int) {
-	// Header
-	headerLine := fmt.Sprintf("%-15s %-7s %-20s %-18s %-15s %s",
-		"IP Address", "Status", "Hostname", "MAC", "Vendor", "Uptime")
+	// Header - mit zusätzlichen Spalten: DeviceType, RTT
+	headerLine := fmt.Sprintf("%-15s %-7s %-20s %-18s %-15s %-12s %-6s %s",
+		"IP Address", "Status", "Hostname", "MAC", "Vendor", "Type", "RTT", "Uptime")
 	if totalDevices > m.viewport.maxVisible {
 		headerLine += "   "
 	}
@@ -498,10 +498,10 @@ func (m watchModel) renderWideLayout(s *strings.Builder, visibleDevices []string
 	s.WriteString(strings.Repeat("─", m.width))
 	s.WriteString("\n")
 
-	// Rows (aktuell identisch zu medium, kann später erweitert werden)
+	// Rows - mit allen Details
 	for i, ipStr := range visibleDevices {
 		state := m.deviceStates[ipStr]
-		row := m.renderMediumRow(state)
+		row := m.renderWideRow(state)
 		if totalDevices > m.viewport.maxVisible {
 			row += "  " + m.getScrollbarChar(i)
 		}
@@ -540,6 +540,79 @@ func (m watchModel) renderNarrowRow(state *DeviceState) string {
 
 	return fmt.Sprintf("%-15s %-15s %-20s %s",
 		ipStr, statusStr, hostname, formatDuration(uptime))
+}
+
+// renderWideRow - Vollständige Zeile mit allen Details
+func (m watchModel) renderWideRow(state *DeviceState) string {
+	// Status Icon und Color
+	statusIcon := "●"
+	statusColor := lipgloss.Color("82") // grün
+	if state.Status == "offline" {
+		statusColor = lipgloss.Color("196") // rot
+	}
+	statusStr := lipgloss.NewStyle().Foreground(statusColor).Render(fmt.Sprintf("%s %s", statusIcon, state.Status))
+
+	// IP mit Gateway-Marker
+	ipStr := state.Host.IP.String()
+	if state.Host.IsGateway {
+		ipStr += " [G]"
+	}
+
+	// Hostname (gekürzt)
+	hostname := state.Host.Hostname
+	if hostname == "" {
+		hostname = "-"
+	}
+	if len(hostname) > 20 {
+		hostname = hostname[:17] + "..."
+	}
+
+	// MAC
+	mac := state.Host.MAC
+	if mac == "" {
+		mac = "-"
+	}
+
+	// Vendor
+	vendor := state.Host.Vendor
+	if vendor == "" {
+		vendor = "-"
+	}
+	if len(vendor) > 15 {
+		vendor = vendor[:12] + "..."
+	}
+
+	// Device Type
+	deviceType := state.Host.DeviceType
+	if deviceType == "" {
+		deviceType = "-"
+	}
+	if len(deviceType) > 12 {
+		deviceType = deviceType[:9] + "..."
+	}
+
+	// RTT (Response Time)
+	rttStr := "-"
+	if state.Host.RTT > 0 {
+		if state.Host.RTT < time.Millisecond {
+			rttStr = fmt.Sprintf("%dµs", state.Host.RTT.Microseconds())
+		} else {
+			rttStr = fmt.Sprintf("%dms", state.Host.RTT.Milliseconds())
+		}
+	}
+
+	// Uptime
+	uptime := time.Since(state.StatusSince)
+
+	return fmt.Sprintf("%-15s %-15s %-20s %-18s %-15s %-12s %-6s %s",
+		ipStr,
+		statusStr,
+		hostname,
+		mac,
+		vendor,
+		deviceType,
+		rttStr,
+		formatDuration(uptime))
 }
 
 // renderMediumRow - Standard-Zeile (mit MAC und Vendor)
