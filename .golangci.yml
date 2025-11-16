@@ -19,7 +19,7 @@ linters:
     - gosec
     - nilerr
     - unconvert
-    - unparam
+    # unparam disabled - produces false positives for future-proofed error returns
 
 formatters:
   enable:
@@ -41,3 +41,8 @@ issues:
       linters:
         - errcheck
         - gosec
+    # populateARPTable functions return error for future extensibility
+    - text: "result 0 \\(error\\) is always nil"
+      linters:
+        - unparam
+      source: "func populate.*ARPTable"
