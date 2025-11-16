@@ -799,14 +799,29 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 
 // redrawWideTable - Volle Ansicht für breite Terminals (>= 140 cols)
 func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize) {
+	// Calculate dynamic column widths based on terminal size
+	termWidth := termSize.GetDisplayWidth()
+
+	// Fixed columns: IP(20) + Status(10) + MAC(18) + RTT(8) + FirstSeen(13) + Uptime(16) + Flaps(5) = 90
+	// Spaces between columns: 8 spaces = 8
+	// Total fixed: 98
+	// Remaining for Hostname + DeviceType
+	remainingWidth := termWidth - 98
+
+	// Distribute remaining width: 60% hostname, 40% deviceType (with minimums)
+	hostnameWidth := max(25, min(50, int(float64(remainingWidth)*0.6)))
+	deviceTypeWidth := max(17, remainingWidth-hostnameWidth)
+
 	// Print header with proper line clearing
 	fmt.Print("\r")
 	clearLine()
-	color.Cyan("%-20s %-10s %-25s %-18s %-17s %-8s %-13s %-16s %-5s\n",
+	headerFormat := fmt.Sprintf("%%-%ds %%-10s %%-%ds %%-18s %%-%ds %%-8s %%-13s %%-16s %%-5s\n",
+		20, hostnameWidth, deviceTypeWidth)
+	color.Cyan(headerFormat,
 		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "First Seen", "Uptime/Down", "Flaps")
 	fmt.Print("\r")
 	clearLine()
-	color.White("%s\n", strings.Repeat("─", min(termSize.GetDisplayWidth(), 140)))
+	color.White("%s\n", strings.Repeat("─", min(termWidth, 200)))
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -836,9 +851,10 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			displayIP = ipStr + " [G]"
 		}
 
+		// Hostname - use dynamic width
 		hostname := getHostname(state.Host)
-		if len(hostname) > 23 {
-			hostname = hostname[:20] + "…"
+		if len(hostname) > hostnameWidth-1 {
+			hostname = hostname[:hostnameWidth-2] + "…"
 		}
 
 		// Format MAC address - handle color after padding
@@ -851,13 +867,13 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			macPadded = color.YellowString(macPadded)
 		}
 
-		// Show device type if available, otherwise show vendor
+		// Show device type if available, otherwise show vendor - use dynamic width
 		deviceInfo := state.Host.DeviceType
 		if deviceInfo == "" || deviceInfo == "Unknown" {
 			deviceInfo = getVendor(state.Host)
 		}
-		if len(deviceInfo) > 15 {
-			deviceInfo = deviceInfo[:12] + "…"
+		if len(deviceInfo) > deviceTypeWidth-1 {
+			deviceInfo = deviceInfo[:deviceTypeWidth-2] + "…"
 		}
 
 		firstSeen := state.FirstSeen.Format("15:04:05")
@@ -893,9 +909,13 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		// Pad status text before coloring
 		coloredStatus := statusColor(fmt.Sprintf("%-6s", statusText))
 
+		// Use dynamic format string with calculated widths
+		rowFormat := fmt.Sprintf("%%-20s %%s %%s %%-%ds %%s %%-%ds %%-8s %%-13s %%-16s %%s\n",
+			hostnameWidth, deviceTypeWidth)
+
 		fmt.Print("\r")
 		clearLine()
-		fmt.Printf("%-20s %s %s %-25s %s %-17s %-8s %-13s %-16s %s\n",
+		fmt.Printf(rowFormat,
 			displayIP,
 			statusIcon,
 			coloredStatus,
@@ -1283,6 +1303,14 @@ func formatDurationShort(d time.Duration) string {
 // min returns the minimum of two integers
 func min(a, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+// max returns the maximum of two integers
+func max(a, b int) int {
+	if a > b {
 		return a
 	}
 	return b
