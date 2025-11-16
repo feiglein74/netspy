@@ -69,7 +69,10 @@
       "Bash(brew install:*)",
       "Bash(golangci-lint run:*)",
       "Bash(golangci-lint help:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Bash(~/go/bin/ginkgo:*)",
+      "Bash(stty:*)",
+      "Bash(timeout 10 ./netspy.exe:*)"
     ],
     "deny": [],
     "ask": []

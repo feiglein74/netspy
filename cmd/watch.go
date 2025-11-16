@@ -613,9 +613,11 @@ func clearLine() {
 
 // printBoxLine prints a line within the box with proper padding
 func printBoxLine(content string, width int) {
-	// Calculate visible length (without ANSI codes)
-	visibleLen := len(stripANSI(content))
-	padding := width - visibleLen - 3 // -3 for "║ " and " ║"
+	// Calculate visible length (without ANSI codes, UTF-8 aware)
+	visibleContent := stripANSI(content)
+	visibleLen := runeLen(visibleContent)
+	// -4 für: "║" (1) + " " (1) + " " (1) + "║" (1)
+	padding := width - visibleLen - 4
 	if padding < 0 {
 		padding = 0
 	}
@@ -665,7 +667,8 @@ func printTableRow(content string, width int) {
 	// Berechne sichtbare Länge (ohne ANSI codes)
 	visibleContent := stripANSI(content)
 	visibleLen := runeLen(visibleContent)
-	padding := width - visibleLen - 3 // -3 for "║ " and " ║"
+	// -4 für: "║" (1) + " " (1) + " " (1) + "║" (1)
+	padding := width - visibleLen - 4
 	if padding < 0 {
 		padding = 0
 	}
@@ -927,18 +930,12 @@ func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize) {
 	width := termSize.GetDisplayWidth()
 
-	// Table header with box drawing
-	// Content: " IP(16) Stat(4) Hostname(18) Uptime(8) " = 48 chars + 3 spaces = 51
-	// Plus: "║ " (2) and " ║" (2) = 55 total
-	fmt.Print(color.CyanString("║"))
-	fmt.Print(color.CyanString(" %-16s %-4s %-18s %-8s", "IP", "Stat", "Hostname", "Uptime"))
-	contentLen := 1 + 16 + 1 + 4 + 1 + 18 + 1 + 8 // "║ " + columns + spaces
-	padLen := width - contentLen - 2 // -2 for final " ║"
-	if padLen < 0 {
-		padLen = 0
-	}
-	fmt.Print(strings.Repeat(" ", padLen))
-	fmt.Print(color.CyanString(" ║\n"))
+	// Table header - use padRight für UTF-8-aware padding
+	headerContent := padRight("IP", 16) + " " +
+		padRight("Stat", 4) + " " +
+		padRight("Hostname", 18) + " " +
+		padRight("Uptime", 8)
+	printTableRow(color.CyanString(headerContent), width)
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -965,13 +962,17 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		if state.Host.IsGateway {
 			displayIP = ipStr + " G"
 		}
-		if len(displayIP) > 16 {
-			displayIP = displayIP[:16]
+		// UTF-8-aware truncation
+		displayIPRunes := []rune(displayIP)
+		if len(displayIPRunes) > 16 {
+			displayIP = string(displayIPRunes[:16])
 		}
 
 		hostname := getHostname(state.Host)
-		if len(hostname) > 16 {
-			hostname = hostname[:13] + "…"
+		// UTF-8-aware truncation
+		hostnameRunes := []rune(hostname)
+		if len(hostnameRunes) > 18 {
+			hostname = string(hostnameRunes[:17]) + "…"
 		}
 
 		// Calculate status duration
@@ -983,24 +984,16 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 			statusDuration = referenceTime.Sub(state.StatusSince)
 		}
 
-		// Format and pad before coloring to maintain alignment
-		coloredStatus := statusColor(fmt.Sprintf("%-3s", ""))
+		// Format colored status with padding
+		coloredStatus := statusColor(padRight("", 3))
 
-		// Device row with box drawing
-		fmt.Print(color.CyanString("║"))
-		fmt.Printf(" %-16s %s%s %-18s %-8s",
-			displayIP,
-			statusIcon,
-			coloredStatus,
-			hostname,
-			formatDurationShort(statusDuration),
-		)
-		padLen = width - contentLen - 2 // Same calculation as header
-		if padLen < 0 {
-			padLen = 0
-		}
-		fmt.Print(strings.Repeat(" ", padLen))
-		fmt.Print(color.CyanString(" ║\n"))
+		// Assemble row with UTF-8-aware padding
+		rowContent := padRight(displayIP, 16) + " " +
+			statusIcon + coloredStatus + " " +
+			padRight(hostname, 18) + " " +
+			padRight(formatDurationShort(statusDuration), 8)
+
+		printTableRow(rowContent, width)
 	}
 }
 
@@ -1008,20 +1001,15 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize output.TerminalSize) {
 	width := termSize.GetDisplayWidth()
 
-	// Table header with box drawing
-	// Content: " IP(18) Status(11) Hostname(20) MAC(18) Type(14) RTT(8) Flaps(5) "
-	// = 18+11+20+18+14+8+5 = 94 chars + 6 spaces = 100
-	// Plus "║ " (2) and " ║" (2) = 104 total
-	fmt.Print(color.CyanString("║"))
-	fmt.Print(color.CyanString(" %-18s %-11s %-20s %-18s %-14s %-8s %-5s",
-		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "Flaps"))
-	contentLen := 1 + 18 + 1 + 11 + 1 + 20 + 1 + 18 + 1 + 14 + 1 + 8 + 1 + 5
-	padLen := width - contentLen - 2
-	if padLen < 0 {
-		padLen = 0
-	}
-	fmt.Print(strings.Repeat(" ", padLen))
-	fmt.Print(color.CyanString(" ║\n"))
+	// Table header - use padRight für UTF-8-aware padding
+	headerContent := padRight("IP Address", 18) + " " +
+		padRight("Status", 11) + " " +
+		padRight("Hostname", 20) + " " +
+		padRight("MAC Address", 18) + " " +
+		padRight("Device Type", 14) + " " +
+		padRight("RTT", 8) + " " +
+		padRight("Flaps", 5)
+	printTableRow(color.CyanString(headerContent), width)
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -1052,8 +1040,10 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 		}
 
 		hostname := getHostname(state.Host)
-		if len(hostname) > 18 {
-			hostname = hostname[:15] + "…"
+		// UTF-8-aware truncation
+		hostnameRunes := []rune(hostname)
+		if len(hostnameRunes) > 20 {
+			hostname = string(hostnameRunes[:19]) + "…"
 		}
 
 		// Format MAC
@@ -1061,14 +1051,20 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 		if mac == "" {
 			mac = "-"
 		}
+		macPadded := padRight(mac, 18)
+		if isLocallyAdministered(mac) {
+			macPadded = color.YellowString(macPadded)
+		}
 
 		// Show device type if available, otherwise show vendor
 		deviceInfo := state.Host.DeviceType
 		if deviceInfo == "" || deviceInfo == "Unknown" {
 			deviceInfo = getVendor(state.Host)
 		}
-		if len(deviceInfo) > 12 {
-			deviceInfo = deviceInfo[:9] + "…"
+		// UTF-8-aware truncation
+		deviceInfoRunes := []rune(deviceInfo)
+		if len(deviceInfoRunes) > 14 {
+			deviceInfo = string(deviceInfoRunes[:13]) + "…"
 		}
 
 		// Format RTT
@@ -1082,33 +1078,27 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 			}
 		}
 
-		// Format flap count - pad before coloring
-		flapNum := fmt.Sprintf("%-5s", fmt.Sprintf("%d", state.FlapCount))
+		// Format flap count - UTF-8 aware padding
+		flapStr := fmt.Sprintf("%d", state.FlapCount)
+		flapNum := padRight(flapStr, 5)
 		if state.FlapCount > 0 {
 			flapNum = color.YellowString(flapNum)
 		}
 
 		// Pad status text before coloring
-		coloredStatus := statusColor(fmt.Sprintf("%-7s", statusText))
+		coloredStatus := statusColor(padRight(statusText, 7))
 
-		// Device row with box drawing
-		fmt.Print(color.CyanString("║"))
-		fmt.Printf(" %-18s %s %s %-20s %-18s %-14s %-8s %s",
-			displayIP,
-			statusIcon,
-			coloredStatus,
-			hostname,
-			mac,
-			deviceInfo,
-			rttText,
-			flapNum,
-		)
-		padLen = width - contentLen - 2
-		if padLen < 0 {
-			padLen = 0
-		}
-		fmt.Print(strings.Repeat(" ", padLen))
-		fmt.Print(color.CyanString(" ║\n"))
+		// Assemble row with UTF-8-aware padding
+		rowContent := padRight(displayIP, 18) + " " +
+			statusIcon + " " +
+			coloredStatus + " " +
+			padRight(hostname, 20) + " " +
+			macPadded + " " +
+			padRight(deviceInfo, 14) + " " +
+			padRight(rttText, 8) + " " +
+			flapNum
+
+		printTableRow(rowContent, width)
 	}
 }
 
