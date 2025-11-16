@@ -26,13 +26,13 @@ var (
 
 // DeviceState verfolgt den Zustand eines entdeckten Geräts über die Zeit
 type DeviceState struct {
-	Host               scanner.Host
-	FirstSeen          time.Time
-	LastSeen           time.Time
-	Status             string        // "online" or "offline"
-	StatusSince        time.Time     // When current status started
-	FlapCount          int           // Number of times status has changed (flapping counter)
-	TotalOfflineTime   time.Duration // Accumulated time spent offline (for continuous uptime calculation)
+	Host             scanner.Host
+	FirstSeen        time.Time
+	LastSeen         time.Time
+	Status           string        // "online" or "offline"
+	StatusSince      time.Time     // When current status started
+	FlapCount        int           // Number of times status has changed (flapping counter)
+	TotalOfflineTime time.Duration // Accumulated time spent offline (for continuous uptime calculation)
 }
 
 // watchCmd repräsentiert den watch-Befehl
@@ -641,7 +641,7 @@ func redrawTable(states map[string]*DeviceState, scanCount int, scanDuration tim
 		// Prepare ALL data BEFORE clearing the line (to minimize flicker)
 		statusIcon := "[+]"
 		statusColor := color.GreenString
-		statusText := "online "  // Extra space to match "offline" length
+		statusText := "online " // Extra space to match "offline" length
 		if state.Status == "offline" {
 			statusIcon = "[-]"
 			statusColor = color.RedString

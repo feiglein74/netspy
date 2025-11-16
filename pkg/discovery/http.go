@@ -11,12 +11,12 @@ import (
 
 // HTTPBanner contains information extracted from HTTP headers
 type HTTPBanner struct {
-	Server      string // Server header (e.g., "nginx/1.18.0")
-	PoweredBy   string // X-Powered-By header (e.g., "PHP/7.4")
-	StatusCode  int    // HTTP status code
-	Port        int    // Port where banner was found
-	Protocol    string // "http" or "https"
-	Title       string // Page title (optional)
+	Server     string // Server header (e.g., "nginx/1.18.0")
+	PoweredBy  string // X-Powered-By header (e.g., "PHP/7.4")
+	StatusCode int    // HTTP status code
+	Port       int    // Port where banner was found
+	Protocol   string // "http" or "https"
+	Title      string // Page title (optional)
 }
 
 // String returns a formatted string representation of the banner

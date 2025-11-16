@@ -12,17 +12,17 @@ import (
 
 // Host repräsentiert einen entdeckten Netzwerk-Host
 type Host struct {
-	IP               net.IP        `json:"ip"`
-	Hostname         string        `json:"hostname,omitempty"`
-	HostnameSource   string        `json:"hostname_source,omitempty"` // "netbios", "dns", "vendor"
-	MAC              string        `json:"mac,omitempty"`
-	Vendor           string        `json:"vendor,omitempty"`
-	DeviceType       string        `json:"device_type,omitempty"` // "Smartphone", "Computer", "IoT", etc.
-	HTTPBanner       string        `json:"http_banner,omitempty"` // HTTP server banner (e.g., "nginx/1.18.0")
-	RTT              time.Duration `json:"rtt,omitempty"`
-	Ports            []int         `json:"ports,omitempty"`
-	Online           bool          `json:"online"`
-	IsGateway        bool          `json:"is_gateway,omitempty"` // True wenn Host ein Gateway ist (lokal oder heuristisch erkannt)
+	IP             net.IP        `json:"ip"`
+	Hostname       string        `json:"hostname,omitempty"`
+	HostnameSource string        `json:"hostname_source,omitempty"` // "netbios", "dns", "vendor"
+	MAC            string        `json:"mac,omitempty"`
+	Vendor         string        `json:"vendor,omitempty"`
+	DeviceType     string        `json:"device_type,omitempty"` // "Smartphone", "Computer", "IoT", etc.
+	HTTPBanner     string        `json:"http_banner,omitempty"` // HTTP server banner (e.g., "nginx/1.18.0")
+	RTT            time.Duration `json:"rtt,omitempty"`
+	Ports          []int         `json:"ports,omitempty"`
+	Online         bool          `json:"online"`
+	IsGateway      bool          `json:"is_gateway,omitempty"` // True wenn Host ein Gateway ist (lokal oder heuristisch erkannt)
 }
 
 // Config speichert die Scanner-Konfiguration

@@ -216,8 +216,8 @@ func isLocallyAdministeredMAC(mac string) bool {
 	// Check the second character (second nibble of first octet)
 	secondChar := strings.ToUpper(string(mac[1]))
 	return secondChar == "2" || secondChar == "3" || secondChar == "6" ||
-	       secondChar == "7" || secondChar == "A" || secondChar == "B" ||
-	       secondChar == "E" || secondChar == "F"
+		secondChar == "7" || secondChar == "A" || secondChar == "B" ||
+		secondChar == "E" || secondChar == "F"
 }
 
 // containsAny prüft ob String einen der Teilstrings enthält
