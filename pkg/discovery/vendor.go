@@ -4,6 +4,8 @@ import "strings"
 
 // GetMACVendor gibt den Vendor-Namen für eine gegebene MAC-Adresse zurück OUI
 func GetMACVendor(mac string) string {
+	// Normalize MAC address format
+	mac = normalizeMACForLookup(mac)
 	if len(mac) < 8 {
 		return ""
 	}
@@ -15,6 +17,23 @@ func GetMACVendor(mac string) string {
 	}
 
 	return ""
+}
+
+// normalizeMACForLookup converts MAC address to standard format AA:BB:CC:DD:EE:FF
+func normalizeMACForLookup(mac string) string {
+	// Remove all separators (colons, dashes, dots)
+	mac = strings.ReplaceAll(mac, ":", "")
+	mac = strings.ReplaceAll(mac, "-", "")
+	mac = strings.ReplaceAll(mac, ".", "")
+
+	// Ensure we have at least 6 characters (3 octets for OUI)
+	if len(mac) < 6 {
+		return ""
+	}
+
+	// Insert colons to create AA:BB:CC format
+	// Take first 6 hex chars and format as AA:BB:CC
+	return strings.ToUpper(mac[0:2] + ":" + mac[2:4] + ":" + mac[4:6])
 }
 
 // ouiDatabase contains MAC OUI to vendor mappings

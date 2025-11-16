@@ -36,27 +36,33 @@ var _ = Describe("Ping", func() {
 				_, network, _ := net.ParseCIDR("192.168.1.0/30")
 				ips := discovery.GenerateIPsFromCIDR(network)
 
-				// /30 hat 4 IPs: Netzwerk, 2 Hosts, Broadcast
-				Expect(ips).To(HaveLen(4))
+				// /30 hat 4 IPs total: Netzwerk (.0), 2 Hosts (.1, .2), Broadcast (.3)
+				// Aber wir scannen nur Hosts (ohne .0 und .3)
+				Expect(ips).To(HaveLen(2))
+				Expect(ips[0].String()).To(Equal("192.168.1.1"))
+				Expect(ips[1].String()).To(Equal("192.168.1.2"))
 			})
 
 			It("should generate all IPs for /29", func() {
 				_, network, _ := net.ParseCIDR("10.0.0.0/29")
 				ips := discovery.GenerateIPsFromCIDR(network)
 
-				// /29 hat 8 IPs
-				Expect(ips).To(HaveLen(8))
+				// /29 hat 8 IPs total, aber wir scannen nur 6 Hosts (ohne .0 und .7)
+				Expect(ips).To(HaveLen(6))
+				Expect(ips[0].String()).To(Equal("10.0.0.1"))
+				Expect(ips[5].String()).To(Equal("10.0.0.6"))
 			})
 		})
 
 		Context("with /24 subnet", func() {
-			It("should generate 256 IPs", func() {
+			It("should generate 254 host IPs (excluding network and broadcast)", func() {
 				_, network, _ := net.ParseCIDR("192.168.1.0/24")
 				ips := discovery.GenerateIPsFromCIDR(network)
 
-				Expect(ips).To(HaveLen(256))
-				Expect(ips[0].String()).To(Equal("192.168.1.0"))
-				Expect(ips[255].String()).To(Equal("192.168.1.255"))
+				// /24 hat 256 IPs total, aber wir scannen nur 254 Hosts (ohne .0 und .255)
+				Expect(ips).To(HaveLen(254))
+				Expect(ips[0].String()).To(Equal("192.168.1.1"))
+				Expect(ips[253].String()).To(Equal("192.168.1.254"))
 			})
 		})
 

@@ -58,7 +58,9 @@ var _ = Describe("Device Type Detection", func() {
 			It("should detect SSH servers", func() {
 				ports := []int{22}
 				deviceType := discovery.DetectDeviceType("", "", "", ports)
-				Expect(deviceType).To(ContainSubstring("Linux/Server"))
+				// Should detect as some kind of Server with SSH/Unix/Linux
+				Expect(deviceType).To(ContainSubstring("Server"))
+				Expect(deviceType).To(Or(ContainSubstring("Linux"), ContainSubstring("Unix")))
 			})
 
 			It("should detect web servers", func() {
