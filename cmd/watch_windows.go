@@ -6,14 +6,46 @@ import (
 	"os"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"netspy/pkg/output"
 )
 
-// setupTerminal is a no-op on Windows (raw mode not supported)
+var (
+	kernel32                       = syscall.NewLazyDLL("kernel32.dll")
+	procGetStdHandle               = kernel32.NewProc("GetStdHandle")
+	procGetConsoleMode             = kernel32.NewProc("GetConsoleMode")
+	procSetConsoleMode             = kernel32.NewProc("SetConsoleMode")
+	stdOutputHandle        uintptr = 0xFFFFFFF5 // STD_OUTPUT_HANDLE
+	enableVirtualTerminal  uint32  = 0x0004     // ENABLE_VIRTUAL_TERMINAL_PROCESSING
+)
+
+// setupTerminal enables ANSI/VT100 escape code support on Windows
 func setupTerminal() error {
-	// Windows terminal doesn't support stty-like raw mode
-	// Keyboard input will still work, just not in raw mode
+	// Try to enable VT processing for native Windows terminals (cmd.exe, PowerShell, Windows Terminal)
+	// This will silently fail in Git Bash/MSYS2 (which is fine - they have native ANSI support)
+
+	handle, _, _ := procGetStdHandle.Call(stdOutputHandle)
+	if handle == 0 || handle == uintptr(syscall.InvalidHandle) {
+		// Not a Windows console (e.g., Git Bash, MSYS2, pipe, file)
+		// These environments typically support ANSI natively, so just return
+		return nil
+	}
+
+	// Get current console mode
+	var mode uint32
+	ret, _, _ := procGetConsoleMode.Call(handle, uintptr(unsafe.Pointer(&mode)))
+	if ret == 0 {
+		// GetConsoleMode failed - probably not a console (Git Bash, redirected output)
+		// Return success - ANSI might work anyway
+		return nil
+	}
+
+	// Enable Virtual Terminal Processing
+	mode |= enableVirtualTerminal
+	procSetConsoleMode.Call(handle, uintptr(mode))
+	// Don't check return value - even if it fails, we tried our best
+
 	return nil
 }
 

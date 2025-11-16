@@ -229,17 +229,20 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		// Lock to prevent concurrent redraws (scan vs SIGWINCH)
 		redrawMutex.Lock()
 
-		// Clear screen and redraw everything (fullscreen mode)
-		fmt.Print("\033[2J\033[H") // Clear screen + move to home
-
 		// Calculate next scan time for status display
 		nextScan := watchInterval - scanDuration
 		if nextScan < 0 {
 			nextScan = 0
 		}
 
-		// Draw btop-inspired layout (includes status line now)
+		// Move cursor to home and redraw (no clear = less flicker on slow terminals like Windows)
+		fmt.Print("\033[H") // Move to home (0,0) without clearing
+
+		// Draw layout (will overwrite old content)
 		drawBtopLayout(deviceStates, scanStart, network, watchInterval, watchMode, scanCount, scanDuration, nextScan)
+
+		// Clear any remaining lines from previous draw (if screen shrunk)
+		fmt.Print("\033[J") // Clear from cursor to end of screen
 
 		redrawMutex.Unlock()
 
@@ -669,14 +672,25 @@ func printTableRow(content string, width int) {
 	// -4 für: "║" (1) + " " (1) + " " (1) + "║" (1)
 	padding := width - visibleLen - 4
 
-	// DEBUG: Log wenn Padding negativ oder zu groß ist
+	// Safety: Wenn Inhalt zu lang ist (z.B. schmales Terminal), truncate statt negative padding
 	if padding < 0 {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Negative padding! width=%d, visibleLen=%d, padding=%d\n", width, visibleLen, padding)
-		padding = 0
-	}
-	if padding > width {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Excessive padding! width=%d, visibleLen=%d, padding=%d\n", width, visibleLen, padding)
-		padding = 0
+		// Content ist zu lang - kürzen auf verfügbare Breite
+		maxContentLen := width - 4 // -4 für "║ " und " ║"
+		if maxContentLen < 3 {
+			maxContentLen = 3 // Mindestens 3 Zeichen
+		}
+		// Truncate content (UTF-8-aware)
+		contentRunes := []rune(stripANSI(content))
+		if len(contentRunes) > maxContentLen {
+			content = string(contentRunes[:maxContentLen-1]) + "…"
+		}
+		// Recalculate
+		visibleContent = stripANSI(content)
+		visibleLen = runeLen(visibleContent)
+		padding = width - visibleLen - 4
+		if padding < 0 {
+			padding = 0
+		}
 	}
 
 	fmt.Print(color.CyanString("║"))
@@ -1260,10 +1274,12 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 
 	// Helper function to redraw entire screen with btop layout
 	redrawFullScreen := func(refTime time.Time, currentScanDuration time.Duration, remaining time.Duration) {
-		// Clear screen and move to home
-		fmt.Print("\033[2J\033[H")
+		// Move to home and redraw (no clear = less flicker)
+		fmt.Print("\033[H")
 		// Draw btop-inspired layout (includes status line inside box)
 		drawBtopLayout(states, refTime, network, watchInterval, watchMode, scanCount, currentScanDuration, remaining)
+		// Clear any leftover content
+		fmt.Print("\033[J")
 	}
 
 	for {
