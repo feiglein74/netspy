@@ -908,6 +908,9 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
 	fmt.Print(color.CyanString("╝\n"))
 
+	// DEBUG: Terminal-Größe ausgeben (NACH der Box, damit es sichtbar bleibt)
+	fmt.Printf("\n[DEBUG] TerminalSize: Width=%d, GetDisplayWidth()=%d\n", termSize.Width, width)
+
 	// Capture screen content für späteres Kopieren - VEREINFACHT
 	// Verwende die gleiche Logik wie oben, nur ohne Farben
 	go captureScreenSimple(states, referenceTime, network, interval, mode, scanCount, scanDuration, nextScanIn)
