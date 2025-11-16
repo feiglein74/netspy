@@ -363,21 +363,21 @@ func enhanceHost(host scanner.Host) scanner.Host {
 	start := time.Now()
 	// Try common web ports first (most devices)
 	if conn, err := net.DialTimeout("tcp", net.JoinHostPort(host.IP.String(), "80"), 500*time.Millisecond); err == nil {
-		conn.Close()
+		_ = conn.Close() // Ignore close error
 		enhanced.RTT = time.Since(start)
 	} else if conn, err := net.DialTimeout("tcp", net.JoinHostPort(host.IP.String(), "443"), 500*time.Millisecond); err == nil {
-		conn.Close()
+		_ = conn.Close() // Ignore close error
 		enhanced.RTT = time.Since(start)
 	} else if conn, err := net.DialTimeout("tcp", net.JoinHostPort(host.IP.String(), "22"), 500*time.Millisecond); err == nil {
-		conn.Close()
+		_ = conn.Close() // Ignore close error
 		enhanced.RTT = time.Since(start)
 	} else if conn, err := net.DialTimeout("tcp", net.JoinHostPort(host.IP.String(), "445"), 500*time.Millisecond); err == nil {
 		// Port 445 (SMB) - always open on Windows systems
-		conn.Close()
+		_ = conn.Close() // Ignore close error
 		enhanced.RTT = time.Since(start)
 	} else if conn, err := net.DialTimeout("tcp", net.JoinHostPort(host.IP.String(), "135"), 500*time.Millisecond); err == nil {
 		// Port 135 (RPC) - Windows RPC endpoint mapper
-		conn.Close()
+		_ = conn.Close() // Ignore close error
 		enhanced.RTT = time.Since(start)
 	}
 
@@ -421,7 +421,7 @@ func scanSpecificPorts(ip net.IP, portList []int) []int {
 		go func(p int) {
 			defer wg.Done()
 			if conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip.String(), p), 300*time.Millisecond); err == nil {
-				conn.Close()
+				_ = conn.Close() // Ignore close error
 				mutex.Lock()
 				openPorts = append(openPorts, p)
 				mutex.Unlock()
@@ -487,13 +487,13 @@ func populateARPTable(network *net.IPNet) error {
 			// Quick ping to populate ARP table
 			conn, err := net.DialTimeout("tcp", net.JoinHostPort(targetIP.String(), "80"), 200*time.Millisecond)
 			if err == nil {
-				conn.Close()
+				_ = conn.Close() // Ignore close error
 			}
 
 			// Also try UDP
 			conn, err = net.DialTimeout("udp", net.JoinHostPort(targetIP.String(), "53"), 100*time.Millisecond)
 			if err == nil {
-				conn.Close()
+				_ = conn.Close() // Ignore close error
 			}
 
 			// Progress tracking
@@ -530,21 +530,22 @@ func createScanConfig() scanner.Config {
 	}
 
 	// Conservative defaults to avoid false positives
-	if scanMode == "thorough" {
+	switch scanMode {
+	case "thorough":
 		if config.Concurrency == 0 {
 			config.Concurrency = 20
 		}
 		if config.Timeout == 0 {
 			config.Timeout = 1500 * time.Millisecond
 		}
-	} else if scanMode == "fast" {
+	case "fast":
 		if config.Concurrency == 0 {
 			config.Concurrency = 100
 		}
 		if config.Timeout == 0 {
 			config.Timeout = 200 * time.Millisecond
 		}
-	} else {
+	default:
 		// Conservative mode (default)
 		if config.Concurrency == 0 {
 			config.Concurrency = 40

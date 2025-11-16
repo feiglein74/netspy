@@ -295,7 +295,7 @@ func (a *ARPScanner) RefreshARPTable(network *net.IPNet) error {
 			// Very short ping just to trigger ARP
 			conn, err := net.DialTimeout("tcp", net.JoinHostPort(targetIP.String(), "80"), 100*time.Millisecond)
 			if err == nil {
-				conn.Close()
+				_ = conn.Close() // Ignore close error
 			}
 		}(ip)
 	}

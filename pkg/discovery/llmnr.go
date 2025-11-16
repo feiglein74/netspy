@@ -28,10 +28,10 @@ func QueryLLMNRName(ip net.IP, timeout time.Duration) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to dial LLMNR: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() // Ignore close error
 
 	// Set deadline
-	conn.SetDeadline(time.Now().Add(timeout))
+	_ = conn.SetDeadline(time.Now().Add(timeout)) // Ignore error - connection will timeout anyway
 
 	// Build LLMNR query
 	query := buildLLMNRQuery(ip)
@@ -178,9 +178,9 @@ func QueryLLMNRDirect(ip net.IP, timeout time.Duration) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to LLMNR port: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() // Ignore close error
 
-	conn.SetDeadline(time.Now().Add(timeout))
+	_ = conn.SetDeadline(time.Now().Add(timeout)) // Ignore error - connection will timeout anyway
 
 	// Build PTR query
 	query := buildLLMNRQuery(ip)

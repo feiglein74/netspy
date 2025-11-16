@@ -49,7 +49,7 @@ func (p *Pinger) conservativePing(ip net.IP, start time.Time) (time.Duration, er
 
 	for _, port := range reliablePorts {
 		if conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip.String(), port), portTimeout); err == nil {
-			conn.Close()
+			_ = conn.Close() // Ignore close error
 			return time.Since(start), nil
 		}
 	}
@@ -61,19 +61,19 @@ func (p *Pinger) conservativePing(ip net.IP, start time.Time) (time.Duration, er
 func (p *Pinger) fastPing(ip net.IP, start time.Time) (time.Duration, error) {
 	// Try HTTP first (most common)
 	if conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip.String(), "80"), p.timeout); err == nil {
-		conn.Close()
+		_ = conn.Close() // Ignore close error
 		return time.Since(start), nil
 	}
 
 	// Try HTTPS
 	if conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip.String(), "443"), p.timeout/2); err == nil {
-		conn.Close()
+		_ = conn.Close() // Ignore close error
 		return time.Since(start), nil
 	}
 
 	// Try Windows SMB (common for Windows machines without web services)
 	if conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip.String(), "445"), p.timeout/2); err == nil {
-		conn.Close()
+		_ = conn.Close() // Ignore close error
 		return time.Since(start), nil
 	}
 
@@ -93,10 +93,10 @@ func (p *Pinger) thoroughPing(ip net.IP, start time.Time) (time.Duration, error)
 
 	for _, port := range commonPorts {
 		if conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip.String(), port), portTimeout); err == nil {
-			conn.Close()
+			_ = conn.Close() // Ignore close error
 			// Validate this isn't a false positive by trying a second connection
 			if conn2, err2 := net.DialTimeout("tcp", net.JoinHostPort(ip.String(), port), portTimeout); err2 == nil {
-				conn2.Close()
+				_ = conn2.Close() // Ignore close error
 				return time.Since(start), nil
 			}
 		}

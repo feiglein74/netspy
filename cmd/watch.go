@@ -497,7 +497,7 @@ func populateARPTableQuiet(ctx context.Context, network *net.IPNet) error {
 			// Quick ping to populate ARP table
 			conn, err := net.DialTimeout("tcp", net.JoinHostPort(targetIP.String(), "80"), 20*time.Millisecond)
 			if err == nil {
-				conn.Close()
+				_ = conn.Close() // Ignore close error
 			}
 		}(ip)
 	}
@@ -841,7 +841,7 @@ func performQuickReachabilityCheck(deviceStates map[string]*DeviceState) {
 			ports := []string{"80", "443", "22", "445", "135"}
 			for _, port := range ports {
 				if conn, err := net.DialTimeout("tcp", net.JoinHostPort(ip, port), 200*time.Millisecond); err == nil {
-					conn.Close()
+					_ = conn.Close() // Ignore close error
 					s.Host.RTT = time.Since(start)
 					measured = true
 					break
@@ -985,7 +985,6 @@ func detectAndSelectNetwork() (string, error) {
 				ip = v.IP
 				ipNet = v
 			case *net.IPAddr:
-				ip = v.IP
 				// Skip if we can't get the network
 				continue
 			}

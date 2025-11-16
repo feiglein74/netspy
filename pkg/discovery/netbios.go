@@ -18,10 +18,10 @@ func QueryNetBIOSName(ip net.IP, timeout time.Duration) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() // Ignore close error
 
 	// Set read deadline
-	conn.SetReadDeadline(time.Now().Add(timeout))
+	_ = conn.SetReadDeadline(time.Now().Add(timeout)) // Ignore error - connection will timeout anyway
 
 	// Build NetBIOS Name Query packet
 	query := buildNetBIOSQuery()
