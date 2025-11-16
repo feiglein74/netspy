@@ -106,11 +106,6 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		cancel()
 	}()
 
-	// Print header once
-	color.Cyan("NetSpy Watch Mode\n")
-	color.White("Network: %s | Interval: %v | Mode: %s\n", network, watchInterval, watchMode)
-	color.Yellow("Press Ctrl+C (^C) to stop\n\n")
-
 	scanCount := 0
 	var redrawMutex sync.Mutex // Prevent concurrent redraws
 
@@ -226,15 +221,11 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		// Lock to prevent concurrent redraws (scan vs SIGWINCH)
 		redrawMutex.Lock()
 
-		// Clear screen and move to home position for clean redraw
-		if scanCount > 1 {
-			// Clear entire screen and move cursor to home (0,0)
-			fmt.Print("\033[2J\033[H")
-			// Redraw header
-			color.Cyan("NetSpy Watch Mode\n")
-			color.White("Network: %s | Interval: %v | Mode: %s\n", network, watchInterval, watchMode)
-			color.Yellow("Press Ctrl+C (^C) to stop\n\n")
-		}
+		// Clear screen and redraw everything (fullscreen mode)
+		fmt.Print("\033[2J\033[H") // Clear screen + move to home
+		color.Cyan("NetSpy Watch Mode\n")
+		color.White("Network: %s | Interval: %v | Mode: %s\n", network, watchInterval, watchMode)
+		color.Yellow("Press Ctrl+C (^C) to stop\n\n")
 
 		// Redraw entire table (use scanStart as reference time for consistent uptime display)
 		redrawTable(deviceStates, scanStart)
