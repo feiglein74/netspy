@@ -669,9 +669,17 @@ func printTableRow(content string, width int) {
 	visibleLen := runeLen(visibleContent)
 	// -4 für: "║" (1) + " " (1) + " " (1) + "║" (1)
 	padding := width - visibleLen - 4
+
+	// DEBUG: Log wenn Padding negativ oder zu groß ist
 	if padding < 0 {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Negative padding! width=%d, visibleLen=%d, padding=%d\n", width, visibleLen, padding)
 		padding = 0
 	}
+	if padding > width {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Excessive padding! width=%d, visibleLen=%d, padding=%d\n", width, visibleLen, padding)
+		padding = 0
+	}
+
 	fmt.Print(color.CyanString("║"))
 	fmt.Print(" " + content)
 	fmt.Print(strings.Repeat(" ", padding))
@@ -1117,9 +1125,10 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 
 	// Fixed columns: IP(20) + Status(10) + MAC(18) + RTT(8) + FirstSeen(13) + Uptime(16) + Flaps(5) = 90
 	// Spaces between columns: 8 spaces = 8
-	// Total fixed: 98
+	// Borders: "║ " + " ║" = 4
+	// Total fixed: 90 + 8 + 4 = 102
 	// Remaining for Hostname + DeviceType
-	remainingWidth := termWidth - 98
+	remainingWidth := termWidth - 102
 
 	// Distribute remaining width: 60% hostname, 40% deviceType (with minimums)
 	hostnameWidth := max(25, min(50, int(float64(remainingWidth)*0.6)))
