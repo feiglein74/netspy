@@ -617,6 +617,7 @@ func printBoxLine(content string, width int) {
 	// Calculate visible length (without ANSI codes, UTF-8 aware)
 	visibleContent := stripANSI(content)
 	visibleLen := runeLen(visibleContent)
+
 	// -4 für: "║" (1) + " " (1) + " " (1) + "║" (1)
 	padding := width - visibleLen - 4
 	if padding < 0 {
@@ -630,21 +631,25 @@ func printBoxLine(content string, width int) {
 
 // stripANSI removes ANSI escape codes to get actual visible length
 func stripANSI(s string) string {
-	// Simple regex-free approach: count non-escape characters
+	// UTF-8-sicherer Ansatz: Arbeite mit Runes, nicht Bytes
 	result := ""
 	inEscape := false
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\033' {
+	runes := []rune(s)
+
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		if r == '\033' {  // ESC character
 			inEscape = true
 			continue
 		}
 		if inEscape {
-			if (s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z') {
+			// ANSI Escape-Sequenzen enden mit einem Buchstaben
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
 				inEscape = false
 			}
 			continue
 		}
-		result += string(s[i])
+		result += string(r)
 	}
 	return result
 }
@@ -856,7 +861,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	// Title line - use printBoxLine with properly constructed content
 	// Get git version info
 	gitVersion := getGitVersion()
-	title := color.HiWhiteString(fmt.Sprintf(" NetSpy - Network Monitor %s", gitVersion))
+	title := color.HiWhiteString(fmt.Sprintf("NetSpy - Network Monitor %s", gitVersion))
 	scanInfo := color.HiYellowString(fmt.Sprintf("[Scan #%d]", scanCount))
 	titleStripped := stripANSI(title)
 	scanInfoStripped := stripANSI(scanInfo)
@@ -873,11 +878,11 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString("╣\n"))
 
 	// Info line 1
-	line1 := fmt.Sprintf(" Network: %s  │  Mode: %s  │  Interval: %v", network, mode, interval)
+	line1 := fmt.Sprintf("Network: %s  │  Mode: %s  │  Interval: %v", network, mode, interval)
 	printBoxLine(line1, width)
 
 	// Info line 2
-	line2 := fmt.Sprintf(" Devices: %d (%s%d %s%d)  │  Flaps: %d  │  Scan: %s",
+	line2 := fmt.Sprintf("Devices: %d (%s%d %s%d)  │  Flaps: %d  │  Scan: %s",
 		len(states),
 		color.GreenString("↑"), onlineCount,
 		color.RedString("↓"), offlineCount,
@@ -899,8 +904,8 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString("╣\n"))
 
 	// Status line (inside box)
-	statusLine := fmt.Sprintf(" %s Next scan in: %s │ Press Ctrl+C to exit or 'c' to copy",
-		color.HiBlackString("▶"),
+	statusLine := fmt.Sprintf("%s Next scan in: %s │ Press Ctrl+C to exit or 'c' to copy",
+		color.CyanString("▶"),  // Cyan wie die Box-Borders
 		color.CyanString(formatDuration(nextScanIn)))
 	printBoxLine(statusLine, width)
 
@@ -908,9 +913,6 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString("╚"))
 	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
 	fmt.Print(color.CyanString("╝\n"))
-
-	// DEBUG: Terminal-Größe ausgeben (NACH der Box, damit es sichtbar bleibt)
-	fmt.Printf("\n[DEBUG] TerminalSize: Width=%d, GetDisplayWidth()=%d\n", termSize.Width, width)
 
 	// Capture screen content für späteres Kopieren - VEREINFACHT
 	// Verwende die gleiche Logik wie oben, nur ohne Farben
