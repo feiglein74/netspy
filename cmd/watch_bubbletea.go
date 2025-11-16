@@ -349,43 +349,15 @@ func (m watchModel) View() string {
 
 	s.WriteString("\n")
 
-	// Table Header
-	totalDevices := len(m.sortedIPs)
-	headerLine := fmt.Sprintf("%-15s %-7s %-20s %-18s %-15s %s",
-		"IP Address", "Status", "Hostname", "MAC", "Vendor", "Uptime")
-
-	// Füge Platzhalter für Scrollbar hinzu wenn nötig
-	if totalDevices > m.viewport.maxVisible {
-		headerLine += "   " // 3 chars für Scrollbar-Spalte
-	}
-
-	s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86")).Render(headerLine))
-	s.WriteString("\n")
-	s.WriteString(strings.Repeat("─", m.width))
-	s.WriteString("\n")
-
-	// Device List (nur sichtbare Zeilen) mit Scrollbar
-	visibleDevices := m.getVisibleDevices()
-
-	for i, ipStr := range visibleDevices {
-		state := m.deviceStates[ipStr]
-		rowContent := m.renderDeviceRow(state)
-
-		// Scrollbar am rechten Rand (wenn mehr Devices als sichtbar)
-		if totalDevices > m.viewport.maxVisible {
-			scrollbarChar := m.getScrollbarChar(i)
-			rowContent += "  " + scrollbarChar
-		}
-
-		s.WriteString(rowContent)
-		s.WriteString("\n")
-	}
+	// Device List mit responsivem Layout
+	m.renderDeviceList(&s)
 
 	// Scroll Indicator
 	if len(m.sortedIPs) > m.viewport.maxVisible {
 		totalDevices := len(m.sortedIPs)
+		visibleCount := len(m.getVisibleDevices())
 		showing := m.viewport.offset + 1
-		showingEnd := m.viewport.offset + len(visibleDevices)
+		showingEnd := m.viewport.offset + visibleCount
 		scrollInfo := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")).
 			Render(fmt.Sprintf("\nShowing %d-%d of %d devices", showing, showingEnd, totalDevices))
@@ -449,8 +421,129 @@ func (m watchModel) getScrollbarChar(visibleLineIndex int) string {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("░")
 }
 
-// renderDeviceRow rendert eine einzelne Device-Zeile
-func (m watchModel) renderDeviceRow(state *DeviceState) string {
+// renderDeviceList rendert die Device-Liste mit responsivem Layout
+func (m watchModel) renderDeviceList(s *strings.Builder) {
+	totalDevices := len(m.sortedIPs)
+	visibleDevices := m.getVisibleDevices()
+
+	// Entscheide Layout basierend auf Terminal-Breite
+	if m.width < 100 {
+		m.renderNarrowLayout(s, visibleDevices, totalDevices)
+	} else if m.width < 140 {
+		m.renderMediumLayout(s, visibleDevices, totalDevices)
+	} else {
+		m.renderWideLayout(s, visibleDevices, totalDevices)
+	}
+}
+
+// renderNarrowLayout - Kompakte Ansicht für schmale Terminals (< 100 cols)
+func (m watchModel) renderNarrowLayout(s *strings.Builder, visibleDevices []string, totalDevices int) {
+	// Header
+	headerLine := fmt.Sprintf("%-15s %-7s %-20s %s", "IP Address", "Status", "Hostname", "Uptime")
+	if totalDevices > m.viewport.maxVisible {
+		headerLine += "   "
+	}
+	s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86")).Render(headerLine))
+	s.WriteString("\n")
+	s.WriteString(strings.Repeat("─", m.width))
+	s.WriteString("\n")
+
+	// Rows
+	for i, ipStr := range visibleDevices {
+		state := m.deviceStates[ipStr]
+		row := m.renderNarrowRow(state)
+		if totalDevices > m.viewport.maxVisible {
+			row += "  " + m.getScrollbarChar(i)
+		}
+		s.WriteString(row)
+		s.WriteString("\n")
+	}
+}
+
+// renderMediumLayout - Standard-Ansicht (100-140 cols)
+func (m watchModel) renderMediumLayout(s *strings.Builder, visibleDevices []string, totalDevices int) {
+	// Header
+	headerLine := fmt.Sprintf("%-15s %-7s %-20s %-18s %-15s %s",
+		"IP Address", "Status", "Hostname", "MAC", "Vendor", "Uptime")
+	if totalDevices > m.viewport.maxVisible {
+		headerLine += "   "
+	}
+	s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86")).Render(headerLine))
+	s.WriteString("\n")
+	s.WriteString(strings.Repeat("─", m.width))
+	s.WriteString("\n")
+
+	// Rows
+	for i, ipStr := range visibleDevices {
+		state := m.deviceStates[ipStr]
+		row := m.renderMediumRow(state)
+		if totalDevices > m.viewport.maxVisible {
+			row += "  " + m.getScrollbarChar(i)
+		}
+		s.WriteString(row)
+		s.WriteString("\n")
+	}
+}
+
+// renderWideLayout - Volle Ansicht (>= 140 cols)
+func (m watchModel) renderWideLayout(s *strings.Builder, visibleDevices []string, totalDevices int) {
+	// Header
+	headerLine := fmt.Sprintf("%-15s %-7s %-20s %-18s %-15s %s",
+		"IP Address", "Status", "Hostname", "MAC", "Vendor", "Uptime")
+	if totalDevices > m.viewport.maxVisible {
+		headerLine += "   "
+	}
+	s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86")).Render(headerLine))
+	s.WriteString("\n")
+	s.WriteString(strings.Repeat("─", m.width))
+	s.WriteString("\n")
+
+	// Rows (aktuell identisch zu medium, kann später erweitert werden)
+	for i, ipStr := range visibleDevices {
+		state := m.deviceStates[ipStr]
+		row := m.renderMediumRow(state)
+		if totalDevices > m.viewport.maxVisible {
+			row += "  " + m.getScrollbarChar(i)
+		}
+		s.WriteString(row)
+		s.WriteString("\n")
+	}
+}
+
+// renderNarrowRow - Kompakte Zeile (nur IP, Status, Hostname, Uptime)
+func (m watchModel) renderNarrowRow(state *DeviceState) string {
+	// Status Icon
+	statusIcon := "●"
+	statusColor := lipgloss.Color("82") // grün
+	if state.Status == "offline" {
+		statusColor = lipgloss.Color("196") // rot
+	}
+	statusStr := lipgloss.NewStyle().Foreground(statusColor).Render(fmt.Sprintf("%s %s", statusIcon, state.Status))
+
+	// IP mit Gateway-Marker
+	ipStr := state.Host.IP.String()
+	if state.Host.IsGateway {
+		ipStr += " [G]"
+	}
+
+	// Hostname (gekürzt)
+	hostname := state.Host.Hostname
+	if hostname == "" {
+		hostname = "-"
+	}
+	if len(hostname) > 20 {
+		hostname = hostname[:17] + "..."
+	}
+
+	// Uptime
+	uptime := time.Since(state.StatusSince)
+
+	return fmt.Sprintf("%-15s %-15s %-20s %s",
+		ipStr, statusStr, hostname, formatDuration(uptime))
+}
+
+// renderMediumRow - Standard-Zeile (mit MAC und Vendor)
+func (m watchModel) renderMediumRow(state *DeviceState) string {
 	// Status Icon und Color
 	statusIcon := "●"
 	statusColor := lipgloss.Color("82") // grün
