@@ -92,6 +92,9 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKeypress(msg)
 
+	case tea.MouseMsg:
+		return m.handleMouse(msg)
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -114,8 +117,35 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastScanTime = time.Now()
 		m.nextScanTime = m.lastScanTime.Add(m.interval)
 
-		// Schedule nächsten Scan
-		return m, tickCmd(m.interval)
+		// Start Background DNS Lookups für neue Devices
+		return m, tea.Batch(
+			tickCmd(m.interval),
+			performBackgroundDNSLookupsCmd(m.deviceStates),
+		)
+
+	}
+
+	return m, nil
+}
+
+// handleMouse verarbeitet Mouse-Events (Scroll-Wheel)
+func (m watchModel) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// Nur Scroll-Events verarbeiten
+	switch msg.Type {
+	case tea.MouseWheelUp:
+		// Scroll up = nach oben in der Liste
+		if m.viewport.offset > 0 {
+			m.viewport.offset--
+		}
+	case tea.MouseWheelDown:
+		// Scroll down = nach unten in der Liste
+		maxOffset := len(m.sortedIPs) - m.viewport.maxVisible
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if m.viewport.offset < maxOffset {
+			m.viewport.offset++
+		}
 	}
 
 	return m, nil
@@ -469,6 +499,20 @@ func (m watchModel) renderDeviceRow(state *DeviceState) string {
 		mac,
 		vendor,
 		formatDuration(uptime))
+}
+
+// performBackgroundDNSLookupsCmd startet DNS-Lookups für Devices ohne Hostname
+func performBackgroundDNSLookupsCmd(deviceStates map[string]*DeviceState) tea.Cmd {
+	return func() tea.Msg {
+		// Nutze die bestehende Funktion aus watch.go
+		// Diese updated deviceStates direkt (da es eine shared map ist)
+		ctx := context.Background()
+		performBackgroundDNSLookups(ctx, deviceStates)
+
+		// Returne nil - die DNS-Lookups aktualisieren deviceStates direkt
+		// Der nächste Countdown-Tick wird die Updates rendern
+		return nil
+	}
 }
 
 // performScanCmd führt Scan aus und returned scanCompleteMsg
