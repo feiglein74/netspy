@@ -20,6 +20,7 @@ import (
 	"netspy/pkg/scanner"
 
 	"github.com/fatih/color"
+	"github.com/mattn/go-runewidth"
 	"github.com/spf13/cobra"
 )
 
@@ -648,9 +649,9 @@ func stripANSI(s string) string {
 	return result
 }
 
-// runeLen gibt die Anzahl der Runes (Zeichen) in einem String zurück
+// runeLen gibt die Display-Breite eines Strings zurück (berücksichtigt wide characters)
 func runeLen(s string) int {
-	return len([]rune(s))
+	return runewidth.StringWidth(s)
 }
 
 // padRight padded einen String rechts mit Leerzeichen bis zur gewünschten Rune-Länge
