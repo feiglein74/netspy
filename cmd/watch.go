@@ -688,12 +688,15 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 			statusDuration = referenceTime.Sub(state.StatusSince)
 		}
 
+		// Format and pad before coloring to maintain alignment
+		coloredStatus := statusColor(fmt.Sprintf("%-3s", ""))
+
 		fmt.Print("\r")
 		clearLine()
-		fmt.Printf("%-16s %s%-3s %-18s %-8s\n",
+		fmt.Printf("%-16s %s%s %-18s %-8s\n",
 			displayIP,
 			statusIcon,
-			statusColor("   "),
+			coloredStatus,
 			hostname,
 			formatDurationShort(statusDuration),
 		)
@@ -770,23 +773,26 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 			}
 		}
 
-		// Format flap count
-		flapText := fmt.Sprintf("%d", state.FlapCount)
+		// Format flap count - pad before coloring
+		flapNum := fmt.Sprintf("%-5s", fmt.Sprintf("%d", state.FlapCount))
 		if state.FlapCount > 0 {
-			flapText = color.YellowString(flapText)
+			flapNum = color.YellowString(flapNum)
 		}
+
+		// Pad status text before coloring
+		coloredStatus := statusColor(fmt.Sprintf("%-7s", statusText))
 
 		fmt.Print("\r")
 		clearLine()
-		fmt.Printf("%-18s %s %-7s %-20s %-18s %-14s %-8s %s\n",
+		fmt.Printf("%-18s %s %s %-20s %-18s %-14s %-8s %s\n",
 			displayIP,
 			statusIcon,
-			statusColor(statusText),
+			coloredStatus,
 			hostname,
 			mac,
 			deviceInfo,
 			rttText,
-			flapText,
+			flapNum,
 		)
 	}
 }
@@ -835,8 +841,15 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			hostname = hostname[:20] + "…"
 		}
 
-		// Format MAC address with color coding for local MACs
-		mac := formatMAC(state.Host.MAC)
+		// Format MAC address - handle color after padding
+		mac := state.Host.MAC
+		if mac == "" || mac == "-" {
+			mac = "-"
+		}
+		macPadded := fmt.Sprintf("%-18s", mac)
+		if isLocallyAdministered(mac) {
+			macPadded = color.YellowString(macPadded)
+		}
 
 		// Show device type if available, otherwise show vendor
 		deviceInfo := state.Host.DeviceType
@@ -871,25 +884,28 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			}
 		}
 
-		// Format flap count with warning color if > 0
-		flapText := fmt.Sprintf("%d", state.FlapCount)
+		// Format flap count - pad before coloring
+		flapNum := fmt.Sprintf("%-5s", fmt.Sprintf("%d", state.FlapCount))
 		if state.FlapCount > 0 {
-			flapText = color.YellowString(flapText)
+			flapNum = color.YellowString(flapNum)
 		}
+
+		// Pad status text before coloring
+		coloredStatus := statusColor(fmt.Sprintf("%-6s", statusText))
 
 		fmt.Print("\r")
 		clearLine()
-		fmt.Printf("%-20s %s %-7s %-25s %s %-17s %-8s %-13s %-16s %s\n",
+		fmt.Printf("%-20s %s %s %-25s %s %-17s %-8s %-13s %-16s %s\n",
 			displayIP,
 			statusIcon,
-			statusColor(statusText),
+			coloredStatus,
 			hostname,
-			mac,
+			macPadded,
 			deviceInfo,
 			rttText,
 			firstSeen,
 			formatDuration(statusDuration),
-			flapText,
+			flapNum,
 		)
 	}
 }
