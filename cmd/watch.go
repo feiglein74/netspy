@@ -226,16 +226,14 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		// Lock to prevent concurrent redraws (scan vs SIGWINCH)
 		redrawMutex.Lock()
 
-		// If first scan, save fixpoint before table draw
-		// Otherwise, restore to fixpoint and clear screen
-		if scanCount == 1 {
-			// Save cursor position as our fixpoint (ONCE, before first table)
-			fmt.Print("\033[s")
-		} else {
-			// Return to fixpoint
-			fmt.Print("\033[u")
-			// Clear entire screen from cursor to end
-			fmt.Print("\033[0J") // ED (Erase in Display): 0 = from cursor to end of screen
+		// Clear screen and move to home position for clean redraw
+		if scanCount > 1 {
+			// Clear entire screen and move cursor to home (0,0)
+			fmt.Print("\033[2J\033[H")
+			// Redraw header
+			color.Cyan("NetSpy Watch Mode\n")
+			color.White("Network: %s | Interval: %v | Mode: %s\n", network, watchInterval, watchMode)
+			color.Yellow("Press Ctrl+C (^C) to stop\n\n")
 		}
 
 		// Redraw entire table (use scanStart as reference time for consistent uptime display)
@@ -255,7 +253,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			go performBackgroundDNSLookups(ctx, deviceStates)
 
 			// Show countdown with periodic table updates (pass scanStart for consistent uptime)
-			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, &redrawMutex)
+			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, &redrawMutex, network, watchInterval, watchMode)
 		}
 	}
 }
@@ -936,14 +934,26 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	}
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, redrawMutex *sync.Mutex) {
+func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	startTime := time.Now()
 	lastRedraw := -1 // Track last redraw second to avoid double-redraw
 
-	// Initial countdown display (fixpoint already saved before table draw in runWatch)
+	// Helper function to redraw entire screen
+	redrawFullScreen := func(refTime time.Time) {
+		// Clear screen and move to home
+		fmt.Print("\033[2J\033[H")
+		// Redraw header
+		color.Cyan("NetSpy Watch Mode\n")
+		color.White("Network: %s | Interval: %v | Mode: %s\n", network, watchInterval, watchMode)
+		color.Yellow("Press Ctrl+C (^C) to stop\n\n")
+		// Redraw table
+		redrawTable(states, refTime)
+	}
+
+	// Initial countdown display
 	fmt.Print("\r")
 	clearLine()
 	onlineCount := 0
@@ -968,21 +978,15 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				continue
 			}
 
-			// Terminal size changed - return to fixpoint and redraw everything
+			// Terminal size changed - redraw entire screen
 			elapsed := time.Since(startTime)
-
-			// Return to saved cursor position (our fixpoint)
-			fmt.Print("\033[u") // Restore cursor position (ANSI: ESC 8 or ESC [u)
-
-			// Clear from cursor to end of screen (catches ALL old content)
-			fmt.Print("\033[0J")
+			currentRefTime := scanStart.Add(elapsed)
 
 			// Hide cursor during redraw
 			fmt.Print("\033[?25l")
 
-			// Redraw table with new terminal size
-			currentRefTime := scanStart.Add(elapsed)
-			redrawTable(states, currentRefTime)
+			// Full screen redraw
+			redrawFullScreen(currentRefTime)
 
 			// Show cursor again
 			fmt.Print("\033[?25h")
@@ -1021,24 +1025,18 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 
 				// Alternate: DNS update on odd multiples (5, 15, 25...), reachability on even (10, 20, 30...)
 				if (currentSecond/5)%2 == 1 {
-					// DNS update: return to fixpoint and redraw table
+					// DNS update: full screen redraw
 					redrawMutex.Lock()
-					fmt.Print("\033[u") // Restore cursor position to fixpoint
-					fmt.Print("\033[0J") // Clear from cursor to end of screen
-					// Use scanStart + elapsed as reference time for consistent uptime
 					currentRefTime := scanStart.Add(elapsed)
-					redrawTable(states, currentRefTime)
+					redrawFullScreen(currentRefTime)
 					redrawMutex.Unlock()
 					fmt.Print("\033[2K")
 				} else {
 					// Reachability check: quickly check if devices are still online
 					performQuickReachabilityCheck(states)
 					redrawMutex.Lock()
-					fmt.Print("\033[u") // Restore cursor position to fixpoint
-					fmt.Print("\033[0J") // Clear from cursor to end of screen
-					// Use scanStart + elapsed as reference time for consistent uptime
 					currentRefTime := scanStart.Add(elapsed)
-					redrawTable(states, currentRefTime)
+					redrawFullScreen(currentRefTime)
 					redrawMutex.Unlock()
 					fmt.Print("\033[2K")
 				}
