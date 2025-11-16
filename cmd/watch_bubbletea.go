@@ -436,10 +436,24 @@ func (m watchModel) renderDeviceList(s *strings.Builder) {
 	}
 }
 
-// renderNarrowLayout - Kompakte Ansicht für schmale Terminals (< 100 cols)
+// renderNarrowLayout - Kompakte Ansicht für schmale Terminals mit dynamischen Breiten (< 100 cols)
 func (m watchModel) renderNarrowLayout(s *strings.Builder, visibleDevices []string, totalDevices int) {
-	// Header
-	headerLine := fmt.Sprintf("%-15s %-7s %-20s %s", "IP Address", "Status", "Hostname", "Uptime")
+	// Berechne dynamische Spaltenbreiten
+	// Fixed: IP(15) + Status(15) + Uptime(10) = 40 + Spaces(3) = 43
+	fixedWidth := 43
+	if totalDevices > m.viewport.maxVisible {
+		fixedWidth += 3 // Scrollbar
+	}
+
+	// Verfügbare Breite für Hostname
+	hostnameWidth := m.width - fixedWidth
+	if hostnameWidth < 15 {
+		hostnameWidth = 15 // Minimum
+	}
+
+	// Header mit dynamischer Hostname-Breite
+	headerLine := fmt.Sprintf("%-15s %-15s %-*s %s",
+		"IP Address", "Status", hostnameWidth, "Hostname", "Uptime")
 	if totalDevices > m.viewport.maxVisible {
 		headerLine += "   "
 	}
@@ -448,10 +462,10 @@ func (m watchModel) renderNarrowLayout(s *strings.Builder, visibleDevices []stri
 	s.WriteString(strings.Repeat("─", m.width))
 	s.WriteString("\n")
 
-	// Rows
+	// Rows mit dynamischer Breite
 	for i, ipStr := range visibleDevices {
 		state := m.deviceStates[ipStr]
-		row := m.renderNarrowRow(state)
+		row := m.renderNarrowRowDynamic(state, hostnameWidth)
 		if totalDevices > m.viewport.maxVisible {
 			row += "  " + m.getScrollbarChar(i)
 		}
@@ -460,11 +474,28 @@ func (m watchModel) renderNarrowLayout(s *strings.Builder, visibleDevices []stri
 	}
 }
 
-// renderMediumLayout - Standard-Ansicht (100-140 cols)
+// renderMediumLayout - Standard-Ansicht mit dynamischen Breiten (100-140 cols)
 func (m watchModel) renderMediumLayout(s *strings.Builder, visibleDevices []string, totalDevices int) {
-	// Header
-	headerLine := fmt.Sprintf("%-15s %-7s %-20s %-18s %-15s %s",
-		"IP Address", "Status", "Hostname", "MAC", "Vendor", "Uptime")
+	// Berechne dynamische Spaltenbreiten
+	// Fixed: IP(15) + Status(15) + MAC(18) + Uptime(10) = 58 + Spaces(5) = 63
+	fixedWidth := 63
+	if totalDevices > m.viewport.maxVisible {
+		fixedWidth += 3 // Scrollbar
+	}
+
+	// Verfügbare Breite für Hostname und Vendor
+	dynamicWidth := m.width - fixedWidth
+	if dynamicWidth < 25 {
+		dynamicWidth = 25 // Minimum
+	}
+
+	// Verteile dynamische Breite: 60% Hostname, 40% Vendor
+	hostnameWidth := max(15, (dynamicWidth*60)/100)
+	vendorWidth := max(10, dynamicWidth-hostnameWidth)
+
+	// Header mit dynamischen Breiten
+	headerLine := fmt.Sprintf("%-15s %-15s %-*s %-18s %-*s %s",
+		"IP Address", "Status", hostnameWidth, "Hostname", "MAC", vendorWidth, "Vendor", "Uptime")
 	if totalDevices > m.viewport.maxVisible {
 		headerLine += "   "
 	}
@@ -473,10 +504,10 @@ func (m watchModel) renderMediumLayout(s *strings.Builder, visibleDevices []stri
 	s.WriteString(strings.Repeat("─", m.width))
 	s.WriteString("\n")
 
-	// Rows
+	// Rows mit dynamischen Breiten
 	for i, ipStr := range visibleDevices {
 		state := m.deviceStates[ipStr]
-		row := m.renderMediumRow(state)
+		row := m.renderMediumRowDynamic(state, hostnameWidth, vendorWidth)
 		if totalDevices > m.viewport.maxVisible {
 			row += "  " + m.getScrollbarChar(i)
 		}
@@ -532,7 +563,40 @@ func (m watchModel) renderWideLayout(s *strings.Builder, visibleDevices []string
 	}
 }
 
-// renderNarrowRow - Kompakte Zeile (nur IP, Status, Hostname, Uptime)
+// renderNarrowRowDynamic - Kompakte Zeile mit dynamischer Hostname-Breite
+func (m watchModel) renderNarrowRowDynamic(state *DeviceState, hostnameWidth int) string {
+	// Status Icon und Color
+	statusIcon := "●"
+	statusColor := lipgloss.Color("82") // grün
+	if state.Status == "offline" {
+		statusColor = lipgloss.Color("196") // rot
+	}
+	statusStr := lipgloss.NewStyle().Foreground(statusColor).Render(fmt.Sprintf("%s %s", statusIcon, state.Status))
+
+	// IP mit Gateway-Marker
+	ipStr := state.Host.IP.String()
+	if state.Host.IsGateway {
+		ipStr += " [G]"
+	}
+
+	// Hostname (dynamisch gekürzt)
+	hostname := state.Host.Hostname
+	if hostname == "" {
+		hostname = "-"
+	}
+	hostnameRunes := []rune(hostname)
+	if len(hostnameRunes) > hostnameWidth {
+		hostname = string(hostnameRunes[:hostnameWidth-3]) + "..."
+	}
+
+	// Uptime
+	uptime := time.Since(state.StatusSince)
+
+	return fmt.Sprintf("%-15s %-15s %-*s %s",
+		ipStr, statusStr, hostnameWidth, hostname, formatDuration(uptime))
+}
+
+// renderNarrowRow - Kompakte Zeile (deprecated, wird nicht mehr verwendet)
 func (m watchModel) renderNarrowRow(state *DeviceState) string {
 	// Status Icon
 	statusIcon := "●"
@@ -707,7 +771,63 @@ func (m watchModel) renderWideRow(state *DeviceState) string {
 		formatDuration(uptime))
 }
 
-// renderMediumRow - Standard-Zeile (mit MAC und Vendor)
+// renderMediumRowDynamic - Zeile mit dynamischen Hostname- und Vendor-Breiten
+func (m watchModel) renderMediumRowDynamic(state *DeviceState, hostnameWidth, vendorWidth int) string {
+	// Status Icon und Color
+	statusIcon := "●"
+	statusColor := lipgloss.Color("82") // grün
+	if state.Status == "offline" {
+		statusColor = lipgloss.Color("196") // rot
+	}
+	statusStr := lipgloss.NewStyle().
+		Foreground(statusColor).
+		Render(fmt.Sprintf("%s %s", statusIcon, state.Status))
+
+	// IP mit Gateway-Marker
+	ipStr := state.Host.IP.String()
+	if state.Host.IsGateway {
+		ipStr += " [G]"
+	}
+
+	// Hostname (dynamisch gekürzt)
+	hostname := state.Host.Hostname
+	if hostname == "" {
+		hostname = "-"
+	}
+	hostnameRunes := []rune(hostname)
+	if len(hostnameRunes) > hostnameWidth {
+		hostname = string(hostnameRunes[:hostnameWidth-3]) + "..."
+	}
+
+	// MAC
+	mac := state.Host.MAC
+	if mac == "" {
+		mac = "-"
+	}
+
+	// Vendor (dynamisch gekürzt)
+	vendor := state.Host.Vendor
+	if vendor == "" {
+		vendor = "-"
+	}
+	vendorRunes := []rune(vendor)
+	if len(vendorRunes) > vendorWidth {
+		vendor = string(vendorRunes[:vendorWidth-3]) + "..."
+	}
+
+	// Uptime
+	uptime := time.Since(state.StatusSince)
+
+	return fmt.Sprintf("%-15s %-15s %-*s %-18s %-*s %s",
+		ipStr,
+		statusStr,
+		hostnameWidth, hostname,
+		mac,
+		vendorWidth, vendor,
+		formatDuration(uptime))
+}
+
+// renderMediumRow - Zeile mit MAC und Vendor (deprecated, wird nicht mehr verwendet)
 func (m watchModel) renderMediumRow(state *DeviceState) string {
 	// Status Icon und Color
 	statusIcon := "●"
