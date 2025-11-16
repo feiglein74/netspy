@@ -112,6 +112,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	color.Yellow("Press Ctrl+C (^C) to stop\n\n")
 
 	scanCount := 0
+	var redrawMutex sync.Mutex // Prevent concurrent redraws
 
 	for {
 		// Check if context is cancelled before starting new scan
@@ -222,18 +223,25 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			}
 		}
 
+		// Lock to prevent concurrent redraws (scan vs SIGWINCH)
+		redrawMutex.Lock()
+
 		// If first scan, save fixpoint before table draw
-		// Otherwise, restore to fixpoint and clear
+		// Otherwise, restore to fixpoint and clear screen
 		if scanCount == 1 {
 			// Save cursor position as our fixpoint (ONCE, before first table)
 			fmt.Print("\033[s")
 		} else {
-			// Return to fixpoint and clear everything from there
-			fmt.Print("\033[u\033[J")
+			// Return to fixpoint
+			fmt.Print("\033[u")
+			// Clear entire screen from cursor to end
+			fmt.Print("\033[0J") // ED (Erase in Display): 0 = from cursor to end of screen
 		}
 
 		// Redraw entire table (use scanStart as reference time for consistent uptime display)
 		redrawTable(deviceStates, scanStart)
+
+		redrawMutex.Unlock()
 
 		// Calculate next scan time
 		scanDuration := time.Since(scanStart)
@@ -247,7 +255,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			go performBackgroundDNSLookups(ctx, deviceStates)
 
 			// Show countdown with periodic table updates (pass scanStart for consistent uptime)
-			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan)
+			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, &redrawMutex)
 		}
 	}
 }
@@ -928,13 +936,12 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	}
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal) {
+func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, redrawMutex *sync.Mutex) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	startTime := time.Now()
 	lastRedraw := -1 // Track last redraw second to avoid double-redraw
-	isRedrawing := false // Prevent concurrent redraws during resize
 
 	// Initial countdown display (fixpoint already saved before table draw in runWatch)
 	fmt.Print("\r")
@@ -956,11 +963,10 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 		case <-ctx.Done():
 			return
 		case <-winchChan:
-			// Debounce: Skip if already redrawing
-			if isRedrawing {
+			// Try to acquire lock - skip if already redrawing
+			if !redrawMutex.TryLock() {
 				continue
 			}
-			isRedrawing = true
 
 			// Terminal size changed - return to fixpoint and redraw everything
 			elapsed := time.Since(startTime)
@@ -969,7 +975,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			fmt.Print("\033[u") // Restore cursor position (ANSI: ESC 8 or ESC [u)
 
 			// Clear from cursor to end of screen (catches ALL old content)
-			fmt.Print("\033[J")
+			fmt.Print("\033[0J")
 
 			// Hide cursor during redraw
 			fmt.Print("\033[?25l")
@@ -981,7 +987,9 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			// Show cursor again
 			fmt.Print("\033[?25h")
 
-			// Redraw status line
+			redrawMutex.Unlock()
+
+			// Redraw status line (outside lock - just text)
 			remaining := duration - elapsed
 			if remaining < 0 {
 				remaining = 0
@@ -997,9 +1005,6 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			}
 			fmt.Printf("[Stats] Scan #%d | %d devices (%d online, %d offline) | Scan: %s |  Next: %s",
 				scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
-
-			// Allow next redraw after short delay
-			isRedrawing = false
 		case <-ticker.C:
 			elapsed := time.Since(startTime)
 			currentSecond := int(elapsed.Seconds())
@@ -1017,20 +1022,24 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				// Alternate: DNS update on odd multiples (5, 15, 25...), reachability on even (10, 20, 30...)
 				if (currentSecond/5)%2 == 1 {
 					// DNS update: return to fixpoint and redraw table
+					redrawMutex.Lock()
 					fmt.Print("\033[u") // Restore cursor position to fixpoint
-					fmt.Print("\033[J") // Clear from cursor to end of screen
+					fmt.Print("\033[0J") // Clear from cursor to end of screen
 					// Use scanStart + elapsed as reference time for consistent uptime
 					currentRefTime := scanStart.Add(elapsed)
 					redrawTable(states, currentRefTime)
+					redrawMutex.Unlock()
 					fmt.Print("\033[2K")
 				} else {
 					// Reachability check: quickly check if devices are still online
 					performQuickReachabilityCheck(states)
+					redrawMutex.Lock()
 					fmt.Print("\033[u") // Restore cursor position to fixpoint
-					fmt.Print("\033[J") // Clear from cursor to end of screen
+					fmt.Print("\033[0J") // Clear from cursor to end of screen
 					// Use scanStart + elapsed as reference time for consistent uptime
 					currentRefTime := scanStart.Add(elapsed)
 					redrawTable(states, currentRefTime)
+					redrawMutex.Unlock()
 					fmt.Print("\033[2K")
 				}
 			} else {
