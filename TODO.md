@@ -1,5 +1,8 @@
 # NetSpy TODO
 
+> **Hinweis:** Dies ist die öffentliche TODO-Liste für GitHub.
+> Interne/private TODOs gehören in `TODO.private.md` (wird nicht committed).
+
 ## High Priority
 
 ### 🎨 UI/UX Improvements
@@ -17,12 +20,22 @@
   - Verifizieren dass Windows 10+ funktioniert
 
 ### 🧪 Testing & Quality
-- [ ] Fix failing tests (16 von 42 Tests schlagen fehl)
+- [ ] **Code Quality Tools einrichten**
+  - [ ] golangci-lint Konfiguration
+  - [ ] go vet in Build-Prozess integrieren
+  - [ ] go fmt Pre-Commit Hook
+  - [ ] Code Coverage Reporting (Ziel: >80%)
+- [ ] **Fix failing tests** (16 von 48 Tests schlagen fehl)
   - [ ] `GenerateIPsFromCIDR` - IP-Range-Logik (erwartet alle IPs inkl. Netz/Broadcast)
   - [ ] `DetectDeviceType` - Gibt leere Strings zurück statt Gerätetypen
   - [ ] `GetMACVendor` - MAC-Format-Handling (Dashes, ohne Separator)
   - [ ] `ScanARPTable` - Gibt nil statt leeres Array zurück
   - [ ] `Scanner.Scan` - Localhost-Detection schlägt fehl
+- [ ] **Tests für pkg/output/ hinzufügen** (aktuell keine Tests)
+- [ ] **CI/CD Pipeline**
+  - [ ] GitHub Actions Workflow für Tests
+  - [ ] Automatische Releases
+  - [ ] Multi-Platform Builds (Linux, macOS, Windows)
 - [ ] Linux vollständig testen (ARP, Gateway, Watch-Mode)
 
 ### ⚙️ Configuration
@@ -42,6 +55,16 @@
 - [ ] Improve mDNS/LLMNR reliability (some devices don't respond)
 
 ## Done ✅
+
+### v0.1.2 (2025-11-16)
+- [x] **Heuristische Gateway-Erkennung für entfernte Netzwerke**
+  - Erkennt `.1` und `.254` als typische Gateways in Remote-Netzwerken
+  - Funktioniert für /8, /16, /24 Netzwerke
+  - `IsLikelyGateway()` kombiniert lokale + heuristische Erkennung
+  - Gateway-Cache für Performance
+  - `IsGateway` Feld in Host-Struktur
+  - Tests für heuristische Erkennung
+  - Gateway-Marker [G] funktioniert in allen Modi
 
 ### v0.1.1 (2025-11-15)
 - [x] **Plattformspezifische Gateway-Erkennung** - Windows, macOS, Linux Support
