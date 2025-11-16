@@ -473,6 +473,10 @@ func (m watchModel) renderDeviceRow(state *DeviceState) string {
 	if hostname == "" {
 		hostname = "-"
 	}
+	// Kürze zu lange Hostnames (max 20 Zeichen für %-20s)
+	if len(hostname) > 20 {
+		hostname = hostname[:17] + "..."
+	}
 
 	// MAC
 	mac := state.Host.MAC
