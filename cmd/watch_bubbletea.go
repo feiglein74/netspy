@@ -485,11 +485,33 @@ func (m watchModel) renderMediumLayout(s *strings.Builder, visibleDevices []stri
 	}
 }
 
-// renderWideLayout - Volle Ansicht mit allen Details (>= 140 cols)
+// renderWideLayout - Volle Ansicht mit allen Details und dynamischen Spaltenbreiten (>= 140 cols)
 func (m watchModel) renderWideLayout(s *strings.Builder, visibleDevices []string, totalDevices int) {
-	// Header - mit zusätzlichen Spalten: DeviceType, RTT
-	headerLine := fmt.Sprintf("%-15s %-7s %-20s %-18s %-15s %-12s %-6s %s",
-		"IP Address", "Status", "Hostname", "MAC", "Vendor", "Type", "RTT", "Uptime")
+	// Berechne dynamische Spaltenbreiten basierend auf Terminal-Breite
+	// Fixe Spalten: IP(15) + Status(15) + MAC(18) + RTT(6) + Uptime(10) = 64
+	// Spaces zwischen Spalten: 7 Spaces = 7
+	// Scrollbar (optional): 3
+	// Total fixed = 64 + 7 = 71 (+ 3 wenn Scrollbar)
+	fixedWidth := 71
+	if totalDevices > m.viewport.maxVisible {
+		fixedWidth += 3 // Scrollbar-Platz
+	}
+
+	// Verfügbare Breite für dynamische Spalten (Hostname, Vendor, Type)
+	dynamicWidth := m.width - fixedWidth
+	if dynamicWidth < 30 {
+		dynamicWidth = 30 // Minimum
+	}
+
+	// Verteile dynamische Breite: 40% Hostname, 30% Vendor, 30% Type
+	hostnameWidth := max(15, (dynamicWidth*40)/100)
+	vendorWidth := max(10, (dynamicWidth*30)/100)
+	typeWidth := max(10, dynamicWidth-hostnameWidth-vendorWidth)
+
+	// Header mit dynamischen Breiten
+	headerLine := fmt.Sprintf("%-15s %-15s %-*s %-18s %-*s %-*s %-6s %s",
+		"IP Address", "Status", hostnameWidth, "Hostname", "MAC",
+		vendorWidth, "Vendor", typeWidth, "Type", "RTT", "Uptime")
 	if totalDevices > m.viewport.maxVisible {
 		headerLine += "   "
 	}
@@ -498,10 +520,10 @@ func (m watchModel) renderWideLayout(s *strings.Builder, visibleDevices []string
 	s.WriteString(strings.Repeat("─", m.width))
 	s.WriteString("\n")
 
-	// Rows - mit allen Details
+	// Rows mit dynamischen Breiten
 	for i, ipStr := range visibleDevices {
 		state := m.deviceStates[ipStr]
-		row := m.renderWideRow(state)
+		row := m.renderWideRowDynamic(state, hostnameWidth, vendorWidth, typeWidth)
 		if totalDevices > m.viewport.maxVisible {
 			row += "  " + m.getScrollbarChar(i)
 		}
@@ -542,7 +564,77 @@ func (m watchModel) renderNarrowRow(state *DeviceState) string {
 		ipStr, statusStr, hostname, formatDuration(uptime))
 }
 
-// renderWideRow - Vollständige Zeile mit allen Details
+// renderWideRowDynamic - Vollständige Zeile mit dynamischen Spaltenbreiten
+func (m watchModel) renderWideRowDynamic(state *DeviceState, hostnameWidth, vendorWidth, typeWidth int) string {
+	// Status Icon und Color
+	statusIcon := "●"
+	statusColor := lipgloss.Color("82") // grün
+	if state.Status == "offline" {
+		statusColor = lipgloss.Color("196") // rot
+	}
+	statusStr := lipgloss.NewStyle().Foreground(statusColor).Render(fmt.Sprintf("%s %s", statusIcon, state.Status))
+
+	// IP mit Gateway-Marker
+	ipStr := state.Host.IP.String()
+	if state.Host.IsGateway {
+		ipStr += " [G]"
+	}
+
+	// Hostname (dynamisch gekürzt)
+	hostname := state.Host.Hostname
+	if hostname == "" {
+		hostname = "-"
+	}
+	hostnameRunes := []rune(hostname)
+	if len(hostnameRunes) > hostnameWidth {
+		hostname = string(hostnameRunes[:hostnameWidth-3]) + "..."
+	}
+
+	// MAC
+	mac := state.Host.MAC
+	if mac == "" {
+		mac = "-"
+	}
+
+	// Vendor (dynamisch gekürzt)
+	vendor := state.Host.Vendor
+	if vendor == "" {
+		vendor = "-"
+	}
+	vendorRunes := []rune(vendor)
+	if len(vendorRunes) > vendorWidth {
+		vendor = string(vendorRunes[:vendorWidth-3]) + "..."
+	}
+
+	// Device Type (dynamisch gekürzt)
+	deviceType := state.Host.DeviceType
+	if deviceType == "" {
+		deviceType = "-"
+	}
+	typeRunes := []rune(deviceType)
+	if len(typeRunes) > typeWidth {
+		deviceType = string(typeRunes[:typeWidth-3]) + "..."
+	}
+
+	// RTT
+	rttStr := "-"
+	if state.Host.RTT > 0 {
+		if state.Host.RTT < time.Millisecond {
+			rttStr = fmt.Sprintf("%dµs", state.Host.RTT.Microseconds())
+		} else {
+			rttStr = fmt.Sprintf("%dms", state.Host.RTT.Milliseconds())
+		}
+	}
+
+	// Uptime
+	uptime := time.Since(state.StatusSince)
+
+	return fmt.Sprintf("%-15s %-15s %-*s %-18s %-*s %-*s %-6s %s",
+		ipStr, statusStr, hostnameWidth, hostname, mac,
+		vendorWidth, vendor, typeWidth, deviceType, rttStr, formatDuration(uptime))
+}
+
+// renderWideRow - Vollständige Zeile mit allen Details (deprecated, wird nicht mehr verwendet)
 func (m watchModel) renderWideRow(state *DeviceState) string {
 	// Status Icon und Color
 	statusIcon := "●"
