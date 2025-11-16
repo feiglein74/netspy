@@ -7,19 +7,42 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
-### Hinzugefügt
+### Added
+- **Bubbletea UI für watch-Modus** - Moderne Terminal-UI mit Charmbracelet Bubbletea Framework
+  - Scrollbares Device-Liste (↑/↓, PgUp/PgDn, Home/End) für große Netzwerke (>20 Devices)
+  - Live-Suche mit `/` zum Filtern nach IP, Hostname, MAC oder Vendor
+  - Responsive Layout mit automatischem Resize
+  - Live Countdown-Timer mit sekündlichen Updates
+  - Mouse-Support (optional)
+  - Alt-Screen-Buffer für sauberes Exit ohne Terminal-Scrollen
+- `--ui` Flag für `watch` Command: `bubbletea` (default) oder `legacy`
+- Cross-Platform Keyboard-Handling durch Bubbletea (Windows, macOS, Linux)
+
+### Changed
+- Bubbletea ist jetzt der Standard-UI-Modus für `watch`
+- Legacy ANSI-UI verfügbar via `--ui legacy`
+
+### Fixed
+- Windows Terminal Compatibility verbessert durch Bubbletea Framework
+- Flickering Issues auf Windows durch Bubbletea v1.3.10 Fixes
+- Scrolling funktioniert jetzt auch bei großen Netzwerken (254+ Devices)
+
 - Ginkgo/Gomega BDD Testing Framework (42 Specs in 11 Test-Dateien)
 - Plattformspezifische Tests (Windows, macOS, Linux) mit Build-Tags
 - Netzwerk-Auto-Detection für Watch-Command
 - Unified Scan Mode Flags (--mode statt separate Flags)
 
-### Geändert
+### Changed (cont.)
 - Deutsche Code-Kommentare in allen Dateien
 - CLAUDE.md auf Deutsch übersetzt
 - Ausführungspräferenz auf kompilierte Binary geändert
 
-### Behoben
+### Fixed (cont.)
 - Spinner-Ausgabe auf macOS korrigiert (ANSI-Escape-Codes statt Carriage Return)
+
+### Dependencies
+- Added `github.com/charmbracelet/bubbletea` v1.3.10
+- Added `github.com/charmbracelet/lipgloss` v1.1.0
 
 ## [0.1.0] - Initial Release
 
