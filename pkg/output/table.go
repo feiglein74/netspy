@@ -60,156 +60,33 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 	// Terminal-Größe ermitteln
 	termSize := GetTerminalSize()
 
-	// Hybrid-Modus: alles anzeigen (responsive)
+	// Responsive Ausgabe basierend auf verfügbaren Daten
 	if hasMAC && hasRTT {
+		// Hybrid-Modus: ARP + Ping/Port Daten
 		return printResponsiveHybridTable(hosts, termSize)
-	} else if hasMAC && false {
-		// Placeholder für alte Logik - wird durch responsive ersetzt
-		color.Cyan("%-20s %-30s %-8s %-18s %-20s %-25s %-12s\n",
-			"IP Address", "Hostname", "RTT", "MAC Address", "Device Type", "HTTP Banner", "Ports")
-		color.White("%s\n", strings.Repeat("-", 140))
-
-		for _, host := range hosts {
-			hostname := host.Hostname
-			if hostname == "" {
-				hostname = "-"
-			}
-			// Truncate long hostnames
-			if len(hostname) > 28 {
-				hostname = hostname[:25] + "…"
-			}
-
-			rtt := "-"
-			if host.RTT > 0 {
-				rtt = fmt.Sprintf("%.0fms", float64(host.RTT.Microseconds())/1000.0)
-			}
-
-			mac := host.MAC
-			if mac == "" {
-				mac = "-"
-			}
-
-			// Show device type if available, otherwise show vendor
-			deviceInfo := host.DeviceType
-			if deviceInfo == "" || deviceInfo == "Unknown" {
-				deviceInfo = host.Vendor
-			}
-			if deviceInfo == "" {
-				deviceInfo = "-"
-			}
-			// Truncate if too long
-			if len(deviceInfo) > 18 {
-				deviceInfo = deviceInfo[:15] + "…"
-			}
-
-			ports := "-"
-			if len(host.Ports) > 0 {
-				portStrs := make([]string, len(host.Ports))
-				for i, p := range host.Ports {
-					portStrs[i] = fmt.Sprintf("%d", p)
-				}
-				ports = strings.Join(portStrs, ",")
-				// Truncate if too long
-				if len(ports) > 10 {
-					ports = ports[:10] + "…"
-				}
-			}
-
-			// Check if this is the gateway
-			ipStr := host.IP.String()
-			if host.IsGateway {
-				ipStr = ipStr + " [G]"
-			}
-
-			// HTTP Banner
-			httpBanner := host.HTTPBanner
-			if httpBanner == "" {
-				httpBanner = "-"
-			}
-			// Truncate if too long
-			if len(httpBanner) > 23 {
-				httpBanner = httpBanner[:20] + "…"
-			}
-
-			fmt.Printf("%-20s %-30s %-8s %-18s %-20s %-25s %-12s\n",
-				ipStr,
-				hostname,
-				rtt,
-				mac,
-				deviceInfo,
-				httpBanner,
-				ports,
-			)
-		}
 	} else if hasMAC {
-		// Nur-ARP-Modus
-		color.Cyan("%-20s %-25s %-18s %-20s\n", "IP Address", "Hostname", "MAC Address", "Device Type")
-		color.White("%s\n", strings.Repeat("-", 90))
-
-		for _, host := range hosts {
-			hostname := host.Hostname
-			if hostname == "" {
-				hostname = "-"
-			}
-
-			mac := host.MAC
-			if mac == "" {
-				mac = "-"
-			}
-
-			// Show device type if available, otherwise show vendor
-			deviceInfo := host.DeviceType
-			if deviceInfo == "" || deviceInfo == "Unknown" {
-				deviceInfo = host.Vendor
-			}
-			if deviceInfo == "" {
-				deviceInfo = "-"
-			}
-
-			// Check if this is the gateway
-			ipStr := host.IP.String()
-			if host.IsGateway {
-				ipStr = ipStr + " [G]"
-			}
-
-			fmt.Printf("%-20s %-25s %-18s %-20s\n",
-				ipStr,
-				hostname,
-				mac,
-				deviceInfo,
-			)
-		}
+		// ARP-Modus: MAC-Adressen vorhanden
+		return printResponsiveARPTable(hosts, termSize)
 	} else {
-		// Nur-Ping-Modus
-		color.Cyan("%-15s %-30s %-10s\n", "IP Address", "Hostname", "RTT")
-		color.White("%s\n", strings.Repeat("-", 60))
+		// Ping-Modus: Nur IP/Hostname/RTT
+		return printResponsivePingTable(hosts, termSize)
+	}
+}
 
-		for _, host := range hosts {
-			hostname := host.Hostname
-			if hostname == "" {
-				hostname = "-"
-			}
-
-			rtt := "-"
-			if host.RTT > 0 {
-				rtt = fmt.Sprintf("%.2fms", float64(host.RTT.Microseconds())/1000.0)
-			}
-
-			// Check if this is the gateway
-			ipStr := host.IP.String()
-			if host.IsGateway {
-				ipStr = ipStr + " [G]"
-			}
-
-			fmt.Printf("%-15s %-30s %-10s\n",
-				ipStr,
-				hostname,
-				rtt,
-			)
-		}
+// Legacy code removed - alle Modi nutzen jetzt responsive Tables
+func printSimpleTableOld(hosts []scanner.Host, totalScanned int) error {
+	if len(hosts) == 0 {
+		color.Red("[ERROR] No active hosts found (scanned %d addresses)\n", totalScanned)
+		return nil
 	}
 
-	fmt.Println()
+	termSize := GetTerminalSize()
+	_ = termSize // Unused in legacy code
+
+	if false {
+		// Legacy code - not used anymore
+		fmt.Println("Legacy code path - should not be reached")
+	}
 	return nil
 }
 
