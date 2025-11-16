@@ -99,7 +99,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid CIDR: %v", err)
 	}
 
-	// Scanner-Konfiguration erstellen
+	// Create scanner configuration
 	config := createScanConfig()
 	s := scanner.New(config)
 
@@ -190,7 +190,7 @@ func runHybridScan(network string) error {
 			return fmt.Errorf("invalid network specification: %v", err)
 		}
 
-		// Scanner-Konfiguration erstellen (conservative mode für Genauigkeit)
+		// Create scanner configuration (conservative mode for accuracy)
 		config := createScanConfig()
 		s := scanner.New(config)
 
@@ -302,7 +302,7 @@ func runARPScan(network string) error {
 			return fmt.Errorf("invalid network specification: %v", err)
 		}
 
-		// Scanner-Konfiguration erstellen (conservative mode für Genauigkeit)
+		// Create scanner configuration (conservative mode for accuracy)
 		config := createScanConfig()
 		s := scanner.New(config)
 

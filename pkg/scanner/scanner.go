@@ -25,7 +25,7 @@ type Host struct {
 	IsGateway      bool          `json:"is_gateway,omitempty"` // True wenn Host ein Gateway ist (lokal oder heuristisch erkannt)
 }
 
-// Config speichert die Scanner-Konfiguration
+// Config stores the scanner configuration
 type Config struct {
 	Concurrency int
 	Timeout     time.Duration
