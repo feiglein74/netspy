@@ -936,6 +936,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 
 	startTime := time.Now()
 	lastRedraw := -1 // Track last redraw second to avoid double-redraw
+	isRedrawing := false // Prevent concurrent redraws during resize
 
 	// Initial countdown display
 	fmt.Print("\r")
@@ -957,21 +958,20 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 		case <-ctx.Done():
 			return
 		case <-winchChan:
+			// Debounce: Skip if already redrawing
+			if isRedrawing {
+				continue
+			}
+			isRedrawing = true
+
 			// Terminal size changed - clear screen and redraw everything
 			elapsed := time.Since(startTime)
 
 			// Move to start of table
 			moveCursorUp(tableLines)
 
-			// Clear all old table lines by overwriting with blank lines
-			// Use max possible lines (header + separator + devices + status)
-			maxOldLines := 2 + len(states) + 1 // header, separator, devices, status
-			for i := 0; i < maxOldLines; i++ {
-				fmt.Print("\r\033[2K\n") // Clear line and move down
-			}
-
-			// Move back to start
-			moveCursorUp(maxOldLines)
+			// Clear from cursor to end of screen (catches ALL old content)
+			fmt.Print("\033[J")
 
 			// Hide cursor during redraw
 			fmt.Print("\033[?25l")
@@ -999,6 +999,9 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			}
 			fmt.Printf("[Stats] Scan #%d | %d devices (%d online, %d offline) | Scan: %s |  Next: %s",
 				scanCount, len(states), onlineCount, offlineCount, formatDuration(scanDuration), formatDuration(remaining))
+
+			// Allow next redraw after short delay
+			isRedrawing = false
 		case <-ticker.C:
 			elapsed := time.Since(startTime)
 			currentSecond := int(elapsed.Seconds())
