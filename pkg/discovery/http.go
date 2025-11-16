@@ -69,7 +69,8 @@ func grabBannerFromPort(ip string, port int, protocol string, timeout time.Durat
 		Timeout: timeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, // Skip certificate validation
+				// #nosec G402 - Skip cert validation for local network scanning (self-signed certs)
+				InsecureSkipVerify: true,
 			},
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -97,7 +98,7 @@ func grabBannerFromPort(ip string, port int, protocol string, timeout time.Durat
 			return nil
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // Ignore close error
 
 	// Extract banner information
 	banner := &HTTPBanner{

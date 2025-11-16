@@ -181,7 +181,7 @@ func (s *Scanner) scanPorts(ip net.IP, ports []int) []int {
 		go func(p int) {
 			defer wg.Done()
 			if conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip.String(), p), s.config.Timeout/2); err == nil {
-				conn.Close()
+				_ = conn.Close() // Ignore close error
 				mutex.Lock()
 				openPorts = append(openPorts, p)
 				mutex.Unlock()

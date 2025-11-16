@@ -31,7 +31,7 @@ Features:
 			os.Exit(0)
 		}
 		// Sonst Standard-Hilfe anzeigen
-		cmd.Help()
+		_ = cmd.Help() // Ignore error - just displaying help
 	},
 }
 
@@ -53,8 +53,8 @@ func init() {
 	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "show version information")
 
 	// Flags an Viper binden
-	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
-	viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
+	_ = viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
+	_ = viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
 }
 
 // getVersion gibt die aktuelle Version zurück
