@@ -10,19 +10,22 @@ Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit 
 - **Alternativ**: `go run main.go` kann ebenfalls verwendet werden
 - **Beispiel Binary**: `netspy.exe watch 10.0.0.0/24 --interval 30s`
 
-### ⚠️ macOS-spezifische Hinweise
-- **WICHTIG**: macOS hat kein `timeout` Command standardmäßig
-- **NIEMALS `timeout` verwenden** - funktioniert nicht auf macOS!
-- **Stattdessen diese macOS-kompatible Alternative verwenden**:
+### Zeitlich begrenzte Prozess-Ausführung (Plattform-übergreifend)
+- **WICHTIG**: `timeout` Command ist auf macOS nicht standardmäßig verfügbar
+- **Verwende immer diese plattform-übergreifende Alternative**:
   ```bash
   # Prozess für bestimmte Zeit laufen lassen (z.B. 8 Sekunden)
+  # Funktioniert auf macOS, Linux, Windows (Git Bash)
   ./netspy.exe watch 10.0.0.0/24 --interval 30s &
   NETSPY_PID=$!
   sleep 8
   pkill -9 netspy.exe
   wait $NETSPY_PID 2>/dev/null || true
   ```
-- **Erklärung**: Prozess im Hintergrund starten (`&`), PID speichern, gewünschte Zeit warten (`sleep`), dann töten (`pkill`)
+- **Warum**:
+  - ✅ Funktioniert auf allen Plattformen
+  - ❌ `timeout` fehlt auf macOS standardmäßig (würde auf Linux funktionieren)
+  - ✅ Verwendet nur Standard-Shell-Befehle
 
 ### Git Workflow
 - **Regelmäßig auto-committen**, um Fortschritt zu tracken und Datenverlust zu vermeiden
