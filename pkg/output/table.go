@@ -74,21 +74,6 @@ func printSimpleTable(hosts []scanner.Host, totalScanned int) error {
 }
 
 // Legacy code removed - alle Modi nutzen jetzt responsive Tables
-func printSimpleTableOld(hosts []scanner.Host, totalScanned int) error {
-	if len(hosts) == 0 {
-		color.Red("[ERROR] No active hosts found (scanned %d addresses)\n", totalScanned)
-		return nil
-	}
-
-	termSize := GetTerminalSize()
-	_ = termSize // Unused in legacy code
-
-	if false {
-		// Legacy code - not used anymore
-		fmt.Println("Legacy code path - should not be reached")
-	}
-	return nil
-}
 
 func printJSON(hosts []scanner.Host) error {
 	data, err := json.MarshalIndent(hosts, "", "  ")

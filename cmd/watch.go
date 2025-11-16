@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"netspy/pkg/discovery"
+	"netspy/pkg/output"
 	"netspy/pkg/scanner"
 
 	"github.com/fatih/color"
@@ -617,13 +618,28 @@ func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 		}
 	}
 
+	// Get terminal size for responsive layout
+	termSize := output.GetTerminalSize()
+
+	// Choose layout based on terminal width
+	if termSize.IsNarrow() {
+		redrawNarrowTable(states, referenceTime, termSize)
+	} else if termSize.IsMedium() {
+		redrawMediumTable(states, referenceTime, termSize)
+	} else {
+		redrawWideTable(states, referenceTime, termSize)
+	}
+}
+
+// redrawNarrowTable - Kompakte Ansicht für schmale Terminals (< 100 cols)
+func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize) {
 	// Print header with proper line clearing
 	fmt.Print("\r")
 	clearLine()
-	color.Cyan("IP Address           Status     Hostname                  MAC Address        Device Type       RTT      First Seen    Uptime/Downtime  Flaps\n")
+	color.Cyan("%-16s %-4s %-18s %-8s\n", "IP", "Stat", "Hostname", "Uptime")
 	fmt.Print("\r")
 	clearLine()
-	color.White("%s\n", strings.Repeat("─", 136))
+	color.White("%s\n", strings.Repeat("─", min(termSize.GetDisplayWidth(), 55)))
 
 	// Sort IPs
 	ips := make([]string, 0, len(states))
@@ -638,14 +654,176 @@ func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 	for _, ipStr := range ips {
 		state := states[ipStr]
 
-		// Prepare ALL data BEFORE clearing the line (to minimize flicker)
+		statusIcon := "+"
+		statusColor := color.GreenString
+		if state.Status == "offline" {
+			statusIcon = "-"
+			statusColor = color.RedString
+		}
+
+		// Check if this is the gateway and add marker to IP
+		displayIP := ipStr
+		if state.Host.IsGateway {
+			displayIP = ipStr + " G"
+		}
+		if len(displayIP) > 16 {
+			displayIP = displayIP[:16]
+		}
+
+		hostname := getHostname(state.Host)
+		if len(hostname) > 16 {
+			hostname = hostname[:13] + "…"
+		}
+
+		// Calculate status duration
+		var statusDuration time.Duration
+		if state.Status == "online" {
+			totalTime := referenceTime.Sub(state.FirstSeen)
+			statusDuration = totalTime - state.TotalOfflineTime
+		} else {
+			statusDuration = referenceTime.Sub(state.StatusSince)
+		}
+
+		fmt.Print("\r")
+		clearLine()
+		fmt.Printf("%-16s %s%-3s %-18s %-8s\n",
+			displayIP,
+			statusIcon,
+			statusColor("   "),
+			hostname,
+			formatDurationShort(statusDuration),
+		)
+	}
+}
+
+// redrawMediumTable - Standard-Ansicht für mittlere Terminals (100-139 cols)
+func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize output.TerminalSize) {
+	// Print header with proper line clearing
+	fmt.Print("\r")
+	clearLine()
+	color.Cyan("%-18s %-6s %-20s %-18s %-14s %-8s %-5s\n",
+		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "Flaps")
+	fmt.Print("\r")
+	clearLine()
+	color.White("%s\n", strings.Repeat("─", min(termSize.GetDisplayWidth(), 100)))
+
+	// Sort IPs
+	ips := make([]string, 0, len(states))
+	for ip := range states {
+		ips = append(ips, ip)
+	}
+	sort.Slice(ips, func(i, j int) bool {
+		return compareIPs(ips[i], ips[j])
+	})
+
+	// Print each device
+	for _, ipStr := range ips {
+		state := states[ipStr]
+
 		statusIcon := "[+]"
 		statusColor := color.GreenString
-		statusText := "online " // Extra space to match "offline" length
+		statusText := "online"
 		if state.Status == "offline" {
 			statusIcon = "[-]"
 			statusColor = color.RedString
 			statusText = "offline"
+		}
+
+		// Check if this is the gateway and add marker to IP
+		displayIP := ipStr
+		if state.Host.IsGateway {
+			displayIP = ipStr + " [G]"
+		}
+
+		hostname := getHostname(state.Host)
+		if len(hostname) > 18 {
+			hostname = hostname[:15] + "…"
+		}
+
+		// Format MAC
+		mac := state.Host.MAC
+		if mac == "" {
+			mac = "-"
+		}
+
+		// Show device type if available, otherwise show vendor
+		deviceInfo := state.Host.DeviceType
+		if deviceInfo == "" || deviceInfo == "Unknown" {
+			deviceInfo = getVendor(state.Host)
+		}
+		if len(deviceInfo) > 12 {
+			deviceInfo = deviceInfo[:9] + "…"
+		}
+
+		// Format RTT
+		rttText := "-"
+		if state.Host.RTT > 0 {
+			rtt := state.Host.RTT
+			if rtt < time.Millisecond {
+				rttText = fmt.Sprintf("%.0fµs", float64(rtt.Microseconds()))
+			} else {
+				rttText = fmt.Sprintf("%.0fms", float64(rtt.Microseconds())/1000.0)
+			}
+		}
+
+		// Format flap count
+		flapText := fmt.Sprintf("%d", state.FlapCount)
+		if state.FlapCount > 0 {
+			flapText = color.YellowString(flapText)
+		}
+
+		fmt.Print("\r")
+		clearLine()
+		fmt.Printf("%-18s %s %-7s %-20s %-18s %-14s %-8s %s\n",
+			displayIP,
+			statusIcon,
+			statusColor(statusText),
+			hostname,
+			mac,
+			deviceInfo,
+			rttText,
+			flapText,
+		)
+	}
+}
+
+// redrawWideTable - Volle Ansicht für breite Terminals (>= 140 cols)
+func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize) {
+	// Print header with proper line clearing
+	fmt.Print("\r")
+	clearLine()
+	color.Cyan("%-20s %-6s %-25s %-18s %-17s %-8s %-13s %-16s %-5s\n",
+		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "First Seen", "Uptime/Down", "Flaps")
+	fmt.Print("\r")
+	clearLine()
+	color.White("%s\n", strings.Repeat("─", min(termSize.GetDisplayWidth(), 140)))
+
+	// Sort IPs
+	ips := make([]string, 0, len(states))
+	for ip := range states {
+		ips = append(ips, ip)
+	}
+	sort.Slice(ips, func(i, j int) bool {
+		return compareIPs(ips[i], ips[j])
+	})
+
+	// Print each device
+	for _, ipStr := range ips {
+		state := states[ipStr]
+
+		statusIcon := "[+]"
+		statusColor := color.GreenString
+		statusText := "online"
+		if state.Status == "offline" {
+			statusIcon = "[-]"
+			statusColor = color.RedString
+			statusText = "offline"
+		}
+
+		// Check if this is the gateway and add marker to IP
+		displayIP := ipStr
+		if state.Host.IsGateway {
+			displayIP = ipStr + " [G]"
 		}
 
 		hostname := getHostname(state.Host)
@@ -661,8 +839,8 @@ func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 		if deviceInfo == "" || deviceInfo == "Unknown" {
 			deviceInfo = getVendor(state.Host)
 		}
-		if len(deviceInfo) > 16 {
-			deviceInfo = deviceInfo[:13] + "…"
+		if len(deviceInfo) > 15 {
+			deviceInfo = deviceInfo[:12] + "…"
 		}
 
 		firstSeen := state.FirstSeen.Format("15:04:05")
@@ -670,11 +848,9 @@ func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 		// Calculate uptime/downtime based on status
 		var statusDuration time.Duration
 		if state.Status == "online" {
-			// Uptime = (time since first seen) - (total time spent offline)
 			totalTime := referenceTime.Sub(state.FirstSeen)
 			statusDuration = totalTime - state.TotalOfflineTime
 		} else {
-			// Downtime = time since went offline
 			statusDuration = referenceTime.Sub(state.StatusSince)
 		}
 
@@ -697,20 +873,14 @@ func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 			flapText = color.YellowString(flapText)
 		}
 
-		// Check if this is the gateway and add marker to IP
-		if state.Host.IsGateway {
-			ipStr = ipStr + " [G]"
-		}
-
-		// Print device line with proper line clearing
 		fmt.Print("\r")
 		clearLine()
 		fmt.Printf("%-20s %s %-7s %-25s %s %-17s %-8s %-13s %-16s %s\n",
-			ipStr,
+			displayIP,
 			statusIcon,
 			statusColor(statusText),
 			hostname,
-			mac, // Already padded by formatMAC
+			mac,
 			deviceInfo,
 			rttText,
 			firstSeen,
@@ -718,9 +888,6 @@ func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 			flapText,
 		)
 	}
-
-	// Don't print status line here - showCountdownWithTableUpdates handles it
-	// This prevents "calculating..." from appearing during table redraws
 }
 
 func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, tableLines int, scanStart time.Time) {
@@ -1055,4 +1222,25 @@ func detectAndSelectNetwork() (string, error) {
 		selectedNetwork.Name)
 
 	return selectedNetwork.Network, nil
+}
+
+// formatDurationShort formats duration in compact format (e.g., "5m", "2h", "3d")
+func formatDurationShort(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	} else if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	} else if d < 24*time.Hour {
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	} else {
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
