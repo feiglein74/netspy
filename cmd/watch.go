@@ -708,7 +708,7 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 	// Print header with proper line clearing
 	fmt.Print("\r")
 	clearLine()
-	color.Cyan("%-18s %-6s %-20s %-18s %-14s %-8s %-5s\n",
+	color.Cyan("%-18s %-11s %-20s %-18s %-14s %-8s %-5s\n",
 		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "Flaps")
 	fmt.Print("\r")
 	clearLine()
@@ -802,7 +802,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	// Print header with proper line clearing
 	fmt.Print("\r")
 	clearLine()
-	color.Cyan("%-20s %-6s %-25s %-18s %-17s %-8s %-13s %-16s %-5s\n",
+	color.Cyan("%-20s %-10s %-25s %-18s %-17s %-8s %-13s %-16s %-5s\n",
 		"IP Address", "Status", "Hostname", "MAC Address", "Device Type", "RTT", "First Seen", "Uptime/Down", "Flaps")
 	fmt.Print("\r")
 	clearLine()
