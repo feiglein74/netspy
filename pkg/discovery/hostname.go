@@ -92,12 +92,24 @@ func ResolveFast(ip net.IP, timeout time.Duration) HostnameResult {
 
 // ResolveBackground performs slow resolution methods in background
 // Use this for watch mode where we want thorough resolution
+// Order: DNS first (reliable), then protocol-specific methods, HTTP last (fallback only)
 func ResolveBackground(ip net.IP, timeout time.Duration) HostnameResult {
-	// Try HTTP first (very successful for IoT devices with web interfaces)
-	if name, err := QueryHTTPHostname(ip.String(), timeout); err == nil && name != "" {
+	// Try DNS first (most reliable and official)
+	if names, err := net.LookupAddr(ip.String()); err == nil && len(names) > 0 {
+		hostname := cleanHostname(names[0])
+		if hostname != "" {
+			return HostnameResult{
+				Hostname: hostname,
+				Source:   "dns",
+			}
+		}
+	}
+
+	// Try mDNS (good for Apple/IoT devices)
+	if name, err := QueryMDNSName(ip, timeout/2); err == nil && name != "" {
 		return HostnameResult{
-			Hostname: name,
-			Source:   "http",
+			Hostname: cleanHostname(name),
+			Source:   "mdns",
 		}
 	}
 
@@ -109,7 +121,7 @@ func ResolveBackground(ip net.IP, timeout time.Duration) HostnameResult {
 		}
 	}
 
-	// Try LLMNR
+	// Try LLMNR (Windows fallback)
 	if name, err := QueryLLMNRDirect(ip, timeout/2); err == nil && name != "" {
 		return HostnameResult{
 			Hostname: cleanHostname(name),
@@ -117,22 +129,11 @@ func ResolveBackground(ip net.IP, timeout time.Duration) HostnameResult {
 		}
 	}
 
-	// Try mDNS
-	if name, err := QueryMDNSName(ip, timeout/2); err == nil && name != "" {
+	// HTTP as last resort (slow, unreliable, can give false positives)
+	if name, err := QueryHTTPHostname(ip.String(), timeout); err == nil && name != "" {
 		return HostnameResult{
-			Hostname: cleanHostname(name),
-			Source:   "mdns",
-		}
-	}
-
-	// Fallback to DNS
-	if names, err := net.LookupAddr(ip.String()); err == nil && len(names) > 0 {
-		hostname := cleanHostname(names[0])
-		if hostname != "" {
-			return HostnameResult{
-				Hostname: hostname,
-				Source:   "dns",
-			}
+			Hostname: name,
+			Source:   "http",
 		}
 	}
 

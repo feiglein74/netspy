@@ -237,12 +237,25 @@ func extractHostnameFromTitle(title string) string {
 		return ""
 	}
 
-	// Common generic titles to skip
+	lowerTitle := strings.ToLower(title)
+
+	// Skip HTTP status codes (e.g., "401 Unauthorized", "403 Forbidden", "404 Not Found")
+	httpStatusPrefixes := []string{
+		"400 ", "401 ", "402 ", "403 ", "404 ", "405 ", "406 ", "407 ", "408 ", "409 ",
+		"410 ", "500 ", "501 ", "502 ", "503 ", "504 ",
+	}
+	for _, prefix := range httpStatusPrefixes {
+		if strings.HasPrefix(lowerTitle, prefix) {
+			return ""
+		}
+	}
+
+	// Common generic titles to skip (exact match)
 	genericTitles := []string{
 		"home", "index", "login", "admin", "dashboard",
-		"welcome", "404", "error", "forbidden", "unauthorized",
+		"welcome", "error", "forbidden", "unauthorized",
+		"not found", "access denied", "bad request",
 	}
-	lowerTitle := strings.ToLower(title)
 	for _, generic := range genericTitles {
 		if lowerTitle == generic {
 			return ""
@@ -266,15 +279,13 @@ func QueryHTTPHostname(ip string, timeout time.Duration) (string, error) {
 		return "", fmt.Errorf("no HTTP response")
 	}
 
-	// Prefer actual hostname over title
+	// banner.Hostname is already filtered (extractHostnameFromTitle was applied in grabBannerFromPort)
 	if banner.Hostname != "" {
 		return banner.Hostname, nil
 	}
 
-	// Fallback to title if it looks like a device name
-	if banner.Title != "" {
-		return banner.Title, nil
-	}
+	// Note: banner.Title might contain unfiltered data, don't use it directly
+	// All filtering happens in grabBannerFromPort -> banner.Hostname
 
 	return "", fmt.Errorf("no hostname in HTTP response")
 }
