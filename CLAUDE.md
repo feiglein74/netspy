@@ -9,6 +9,11 @@ Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit 
 ### Testen & Ausführen
 - **Kompilierte Binary bevorzugen**: `./netspy.exe` oder `netspy.exe` verwenden
 - **Build-Befehl**: `go build -o netspy.exe` (falls Binary nicht existiert)
+- **WICHTIG**: Go kann IMMER über laufende Binaries kompilieren - NIEMALS vorher `taskkill` oder `pkill` nutzen!
+  - Go nutzt temporäre Dateien und ersetzt die Binary erst nach erfolgreichem Build
+  - Laufende Prozesse behalten die alte Version, neue Starts nutzen die neue Version
+  - **❌ FALSCH**: `taskkill /F /IM netspy.exe && go build -o netspy.exe`
+  - **✅ RICHTIG**: `go build -o netspy.exe` (einfach bauen, Go regelt den Rest)
 - **Alternativ**: `go run main.go` kann ebenfalls verwendet werden
 - **Beispiel Binary**: `netspy.exe watch 10.0.0.0/24 --interval 30s`
 

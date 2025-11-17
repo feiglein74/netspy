@@ -99,7 +99,10 @@ func detectByHostname(hostname string) string {
 		return DeviceTypeNetwork
 	}
 
-	// IoT devices - includes tasmota and other IoT keywords
+	// IoT devices - includes tasmota, home automation, and other IoT keywords
+	if containsAny(hostname, []string{"homeassistant", "home-assistant", "openhab", "domoticz"}) {
+		return DeviceTypeIoT
+	}
 	if containsAny(hostname, []string{"hue-", "philips-hue", "ring-", "nest-", "alexa", "echo-", "tasmota"}) {
 		return DeviceTypeIoT
 	}

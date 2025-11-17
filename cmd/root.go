@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"netspy/pkg/discovery"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -44,7 +45,7 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(initConfig, initLearnedVendors)
 
 	// Globale Flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.netspy.yaml)")
@@ -80,4 +81,11 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	}
+}
+
+// initLearnedVendors initialisiert die Learned-Vendors-Datenbank
+func initLearnedVendors() {
+	// Versuche die Learned-Vendors-Datei zu laden
+	// Fehler werden ignoriert, da die Datei beim ersten Start nicht existiert
+	_ = discovery.InitLearnedVendors()
 }

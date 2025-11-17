@@ -114,7 +114,8 @@ func ResolveBackground(ip net.IP, timeout time.Duration) HostnameResult {
 	}
 
 	// Try NetBIOS (good for Windows)
-	if name, err := QueryNetBIOSName(ip, timeout/2); err == nil && name != "" {
+	// Use native method (nbtstat on Windows, UDP on Unix)
+	if name, err := QueryNetBIOSNameNative(ip); err == nil && name != "" {
 		return HostnameResult{
 			Hostname: cleanHostname(name),
 			Source:   "netbios",

@@ -92,7 +92,9 @@
       "Bash(strings:*)",
       "Bash(grep:*)",
       "Bash(head:*)",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Bash(nslookup:*)",
+      "Bash(nbtstat:*)"
     ],
     "deny": [],
     "ask": []
