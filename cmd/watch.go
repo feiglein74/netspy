@@ -915,8 +915,8 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString("╣\n"))
 
 	// Calculate fixed column widths for stable layout (prevent jumping when numbers change)
-	// Total width available: width - 4 (borders) - 6 (pipes and spaces) = width - 10
-	availableWidth := width - 10
+	// Total width available: width - 4 (borders "║ " + " ║") - 10 (two separators "  │  ") = width - 14
+	availableWidth := width - 14
 	col1Width := availableWidth / 3
 	col2Width := availableWidth / 3
 	col3Width := availableWidth - col1Width - col2Width // Remainder goes to col3
