@@ -188,7 +188,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 		cancel()
 	}()
 
-	// Keyboard-Listener für 'c' zum Kopieren und ESC zum Beenden
+	// Keyboard-Listener für 'c' zum Kopieren, 'n'/'p' für Paging und ESC zum Beenden
 	go func() {
 		buf := make([]byte, 1)
 		for {
@@ -198,6 +198,10 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 			}
 			if buf[0] == 'c' || buf[0] == 'C' {
 				keyChan <- rune(buf[0])
+			} else if buf[0] == 'n' || buf[0] == 'N' {
+				keyChan <- 'n' // Next page
+			} else if buf[0] == 'p' || buf[0] == 'P' {
+				keyChan <- 'p' // Previous page
 			} else if buf[0] == 27 { // ESC key
 				cancel() // Beende das Programm
 				return
@@ -208,6 +212,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 	scanCount := 0
 	var redrawMutex sync.Mutex // Prevent concurrent redraws
 	var activeThreads int32    // Tracks active background DNS lookup threads (atomic counter)
+	var currentPage int32 = 1  // Current page for host list pagination (atomic for thread-safety)
 
 	for {
 		// Check if context is cancelled before starting new scan
@@ -317,7 +322,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 		fmt.Print("\033[H") // Move to home (0,0) without clearing
 
 		// Draw layout (will overwrite old content)
-		drawBtopLayout(deviceStates, scanStart, network, watchInterval, watchMode, scanCount, scanDuration, nextScan, &activeThreads)
+		drawBtopLayout(deviceStates, scanStart, network, watchInterval, watchMode, scanCount, scanDuration, nextScan, &activeThreads, &currentPage)
 
 		// Clear any remaining lines from previous draw (if screen shrunk)
 		fmt.Print("\033[J") // Clear from cursor to end of screen
@@ -332,7 +337,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 			go performBackgroundDNSLookups(ctx, deviceStates, &activeThreads, threadConfig)
 
 			// Show countdown with periodic table updates (pass scanStart for consistent uptime)
-			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, keyChan, &redrawMutex, network, watchInterval, watchMode, &activeThreads, threadConfig)
+			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, keyChan, &redrawMutex, network, watchInterval, watchMode, &activeThreads, &currentPage, threadConfig)
 		}
 	}
 }
@@ -1027,7 +1032,7 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 }
 
 // drawBtopLayout renders a btop-inspired fullscreen layout
-func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration, activeThreads *int32) {
+func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration, activeThreads *int32, currentPage *int32) {
 	termSize := output.GetTerminalSize()
 	width := termSize.GetDisplayWidth()
 
@@ -1125,7 +1130,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString("╣\n"))
 
 	// Delegate to existing responsive table rendering
-	redrawTable(states, referenceTime)
+	redrawTable(states, referenceTime, currentPage)
 
 	// Separator before status line
 	fmt.Print(color.CyanString("╠"))
@@ -1134,7 +1139,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 
 	// Status line (inside box) - use same fixed column widths as header
 	col1Status := padRightANSI(color.CyanString("▶")+" Next scan in: "+color.CyanString(formatDuration(nextScanIn)), col1Width)
-	col2Status := padRight("ESC: exit, c: copy", col2Width)
+	col2Status := padRight("n/p: page, c: copy", col2Width)
 	col3Status := padRight("[G]=GW [!]=Offline", col3Width)  // Gekürzt: GW statt Gateway für 80-Spalten-Limit
 	statusLine := fmt.Sprintf("%s  │  %s  │  %s", col1Status, col2Status, col3Status)
 	printBoxLine(statusLine, width)
@@ -1179,7 +1184,7 @@ func calculateMaxVisibleHosts(termHeight int) int {
 	return availableLines
 }
 
-func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
+func redrawTable(states map[string]*DeviceState, referenceTime time.Time, currentPage *int32) {
 	// Hide cursor during redraw to prevent visible cursor jumping
 	fmt.Print("\033[?25l")
 	defer fmt.Print("\033[?25h") // Show cursor when done
@@ -1200,16 +1205,16 @@ func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 
 	// Choose layout based on terminal width
 	if termSize.IsNarrow() {
-		redrawNarrowTable(states, referenceTime, termSize)
+		redrawNarrowTable(states, referenceTime, termSize, currentPage)
 	} else if termSize.IsMedium() {
-		redrawMediumTable(states, referenceTime, termSize)
+		redrawMediumTable(states, referenceTime, termSize, currentPage)
 	} else {
-		redrawWideTable(states, referenceTime, termSize)
+		redrawWideTable(states, referenceTime, termSize, currentPage)
 	}
 }
 
 // redrawNarrowTable - Kompakte Ansicht für schmale Terminals (< 100 cols)
-func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize) {
+func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32) {
 	width := termSize.GetDisplayWidth()
 
 	// Table header - use padRight für UTF-8-aware padding
@@ -1219,7 +1224,7 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		padRight("Uptime", 6)
 	printTableRow(color.CyanString(headerContent), width)
 
-	// Sort IPs
+	// Sort IPs (stable order for consistent paging)
 	ips := make([]string, 0, len(states))
 	for ip := range states {
 		ips = append(ips, ip)
@@ -1228,13 +1233,35 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		return compareIPs(ips[i], ips[j])
 	})
 
-	// Limit hosts to what fits on screen
+	// Calculate paging
 	totalHosts := len(ips)
 	maxVisible := calculateMaxVisibleHosts(termSize.Height)
-	visibleIPs := ips
-	if len(ips) > maxVisible {
-		visibleIPs = ips[:maxVisible]
+
+	// Calculate total pages
+	totalPages := (totalHosts + maxVisible - 1) / maxVisible
+	if totalPages < 1 {
+		totalPages = 1
 	}
+
+	// Ensure currentPage is within bounds
+	page := atomic.LoadInt32(currentPage)
+	if page < 1 {
+		atomic.StoreInt32(currentPage, 1)
+		page = 1
+	}
+	if int(page) > totalPages {
+		atomic.StoreInt32(currentPage, int32(totalPages))
+		page = int32(totalPages)
+	}
+
+	// Calculate slice range for current page
+	startIdx := int(page-1) * maxVisible
+	endIdx := startIdx + maxVisible
+	if endIdx > len(ips) {
+		endIdx = len(ips)
+	}
+
+	visibleIPs := ips[startIdx:endIdx]
 
 	// Print each device
 	for _, ipStr := range visibleIPs {
@@ -1297,15 +1324,15 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		printTableRow(rowContent, width)
 	}
 
-	// Show indicator if not all hosts are visible
-	if totalHosts > maxVisible {
-		indicator := fmt.Sprintf("  Showing %d of %d hosts - resize window for more", maxVisible, totalHosts)
-		printTableRow(color.YellowString(indicator), width)
+	// Show paging indicator if multiple pages exist
+	if totalPages > 1 {
+		indicator := fmt.Sprintf("  Page %d/%d (%d hosts total) - Press 'n' for next, 'p' for previous", page, totalPages, totalHosts)
+		printTableRow(color.CyanString(indicator), width)
 	}
 }
 
 // redrawMediumTable - Standard-Ansicht für mittlere Terminals (100-139 cols)
-func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize output.TerminalSize) {
+func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize output.TerminalSize, currentPage *int32) {
 	width := termSize.GetDisplayWidth()
 
 	// Table header - use padRight für UTF-8-aware padding
@@ -1318,7 +1345,7 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 		padRight("Flaps", 5)
 	printTableRow(color.CyanString(headerContent), width)
 
-	// Sort IPs
+	// Sort IPs (stable order for consistent paging)
 	ips := make([]string, 0, len(states))
 	for ip := range states {
 		ips = append(ips, ip)
@@ -1327,13 +1354,35 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 		return compareIPs(ips[i], ips[j])
 	})
 
-	// Limit hosts to what fits on screen
+	// Calculate paging
 	totalHosts := len(ips)
 	maxVisible := calculateMaxVisibleHosts(termSize.Height)
-	visibleIPs := ips
-	if len(ips) > maxVisible {
-		visibleIPs = ips[:maxVisible]
+
+	// Calculate total pages
+	totalPages := (totalHosts + maxVisible - 1) / maxVisible
+	if totalPages < 1 {
+		totalPages = 1
 	}
+
+	// Ensure currentPage is within bounds
+	page := atomic.LoadInt32(currentPage)
+	if page < 1 {
+		atomic.StoreInt32(currentPage, 1)
+		page = 1
+	}
+	if int(page) > totalPages {
+		atomic.StoreInt32(currentPage, int32(totalPages))
+		page = int32(totalPages)
+	}
+
+	// Calculate slice range for current page
+	startIdx := int(page-1) * maxVisible
+	endIdx := startIdx + maxVisible
+	if endIdx > len(ips) {
+		endIdx = len(ips)
+	}
+
+	visibleIPs := ips[startIdx:endIdx]
 
 	// Print each device
 	for _, ipStr := range visibleIPs {
@@ -1423,15 +1472,15 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 		printTableRow(rowContent, width)
 	}
 
-	// Show indicator if not all hosts are visible
-	if totalHosts > maxVisible {
-		indicator := fmt.Sprintf("  Showing %d of %d hosts - resize window for more", maxVisible, totalHosts)
-		printTableRow(color.YellowString(indicator), width)
+	// Show paging indicator if multiple pages exist
+	if totalPages > 1 {
+		indicator := fmt.Sprintf("  Page %d/%d (%d hosts total) - Press 'n' for next, 'p' for previous", page, totalPages, totalHosts)
+		printTableRow(color.CyanString(indicator), width)
 	}
 }
 
 // redrawWideTable - Volle Ansicht für breite Terminals (>= 140 cols)
-func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize) {
+func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32) {
 	// Calculate dynamic column widths based on terminal size
 	termWidth := termSize.GetDisplayWidth()
 
@@ -1460,7 +1509,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 
 	printTableRow(color.CyanString(headerContent), termWidth)
 
-	// Sort IPs
+	// Sort IPs (stable order for consistent paging)
 	ips := make([]string, 0, len(states))
 	for ip := range states {
 		ips = append(ips, ip)
@@ -1469,13 +1518,35 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		return compareIPs(ips[i], ips[j])
 	})
 
-	// Limit hosts to what fits on screen
+	// Calculate paging
 	totalHosts := len(ips)
 	maxVisible := calculateMaxVisibleHosts(termSize.Height)
-	visibleIPs := ips
-	if len(ips) > maxVisible {
-		visibleIPs = ips[:maxVisible]
+
+	// Calculate total pages
+	totalPages := (totalHosts + maxVisible - 1) / maxVisible
+	if totalPages < 1 {
+		totalPages = 1
 	}
+
+	// Ensure currentPage is within bounds
+	page := atomic.LoadInt32(currentPage)
+	if page < 1 {
+		atomic.StoreInt32(currentPage, 1)
+		page = 1
+	}
+	if int(page) > totalPages {
+		atomic.StoreInt32(currentPage, int32(totalPages))
+		page = int32(totalPages)
+	}
+
+	// Calculate slice range for current page
+	startIdx := int(page-1) * maxVisible
+	endIdx := startIdx + maxVisible
+	if endIdx > len(ips) {
+		endIdx = len(ips)
+	}
+
+	visibleIPs := ips[startIdx:endIdx]
 
 	// Print each device
 	for _, ipStr := range visibleIPs {
@@ -1578,10 +1649,10 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		printTableRow(rowContent, termWidth)
 	}
 
-	// Show indicator if not all hosts are visible
-	if totalHosts > maxVisible {
-		indicator := fmt.Sprintf("  Showing %d of %d hosts - resize window for more", maxVisible, totalHosts)
-		printTableRow(color.YellowString(indicator), termWidth)
+	// Show paging indicator if multiple pages exist
+	if totalPages > 1 {
+		indicator := fmt.Sprintf("  Page %d/%d (%d hosts total) - Press 'n' for next, 'p' for previous", page, totalPages, totalHosts)
+		printTableRow(color.CyanString(indicator), termWidth)
 	}
 }
 
@@ -1607,7 +1678,7 @@ func updateHeaderLineOnly(scanCount int, activeThreads *int32) {
 	printBoxLine(titleLine, width)
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32, threadConfig ThreadConfig) {
+func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32, currentPage *int32, threadConfig ThreadConfig) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -1619,7 +1690,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 		// Move to home and redraw (no clear = less flicker)
 		fmt.Print("\033[H")
 		// Draw btop-inspired layout (includes status line inside box)
-		drawBtopLayout(states, refTime, network, watchInterval, watchMode, scanCount, currentScanDuration, remaining, activeThreads)
+		drawBtopLayout(states, refTime, network, watchInterval, watchMode, scanCount, currentScanDuration, remaining, activeThreads, currentPage)
 		// Clear any leftover content
 		fmt.Print("\033[J")
 	}
@@ -1628,20 +1699,32 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 		select {
 		case <-ctx.Done():
 			return
-		case <-keyChan:
-			// Benutzer hat 'c' gedrückt - Kopiere Screen in Zwischenablage
-			if err := copyScreenToClipboard(); err != nil {
-				// Zeige Fehler kurz an (ohne Layout zu zerstören)
-				fmt.Print("\r")
-				fmt.Printf("%s %s ", color.RedString("✗"), err.Error())
-				time.Sleep(2 * time.Second)
-			} else {
-				// Zeige Erfolg kurz an
-				fmt.Print("\r")
-				fmt.Printf("%s Screen in Zwischenablage kopiert! ", color.GreenString("✓"))
-				time.Sleep(2 * time.Second)
+		case key := <-keyChan:
+			// Handle keyboard input
+			if key == 'c' || key == 'C' {
+				// Benutzer hat 'c' gedrückt - Kopiere Screen in Zwischenablage
+				if err := copyScreenToClipboard(); err != nil {
+					// Zeige Fehler kurz an (ohne Layout zu zerstören)
+					fmt.Print("\r")
+					fmt.Printf("%s %s ", color.RedString("✗"), err.Error())
+					time.Sleep(2 * time.Second)
+				} else {
+					// Zeige Erfolg kurz an
+					fmt.Print("\r")
+					fmt.Printf("%s Screen in Zwischenablage kopiert! ", color.GreenString("✓"))
+					time.Sleep(2 * time.Second)
+				}
+			} else if key == 'n' || key == 'N' {
+				// Next page
+				atomic.AddInt32(currentPage, 1)
+			} else if key == 'p' || key == 'P' {
+				// Previous page
+				page := atomic.LoadInt32(currentPage)
+				if page > 1 {
+					atomic.AddInt32(currentPage, -1)
+				}
 			}
-			// Redraw screen nach Nachricht
+			// Redraw screen nach Nachricht/Aktion
 			redrawMutex.Lock()
 			elapsed := time.Since(startTime)
 			currentRefTime := scanStart.Add(elapsed)
