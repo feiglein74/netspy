@@ -1359,6 +1359,31 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	}
 }
 
+// updateHeaderLineOnly updates only the header line with thread count (fast, no flicker)
+func updateHeaderLineOnly(scanCount int, activeThreads *int32) {
+	termSize := output.GetTerminalSize()
+	width := termSize.GetDisplayWidth()
+	gitVersion := getGitVersion()
+	title := color.HiWhiteString(fmt.Sprintf("NetSpy - Network Monitor %s", gitVersion))
+
+	// Load active thread count atomically
+	threadCount := atomic.LoadInt32(activeThreads)
+	scanInfo := color.HiYellowString(fmt.Sprintf("[Threads #%d / Scan #%d]", threadCount, scanCount))
+
+	titleStripped := stripANSI(title)
+	scanInfoStripped := stripANSI(scanInfo)
+	spacesNeeded := width - runeLen(titleStripped) - runeLen(scanInfoStripped) - 4
+	if spacesNeeded < 0 {
+		spacesNeeded = 0
+	}
+	titleLine := title + strings.Repeat(" ", spacesNeeded) + scanInfo
+
+	// Move cursor to line 2, column 1 (header line is 2nd line after top border)
+	fmt.Print("\033[2;1H")
+	// Print the updated header line
+	printBoxLine(titleLine, width)
+}
+
 func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -1463,6 +1488,12 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 					redrawFullScreen(currentRefTime, scanDuration, remaining)
 					redrawMutex.Unlock()
 				}
+			} else {
+				// NOT a 5-second mark: Update only the header line with thread count (fast!)
+				// This gives live thread count updates every second without full redraw flicker
+				redrawMutex.Lock()
+				updateHeaderLineOnly(scanCount, activeThreads)
+				redrawMutex.Unlock()
 			}
 		}
 	}
