@@ -349,29 +349,9 @@ func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.
 		}
 	}
 
-	// SSDP/UPnP Discovery für zusätzliche Device-Infos (nur wenn Hosts gefunden)
-	ssdpDevices := make(map[string]discovery.SSDPDevice)
-	if len(finalHosts) > 0 {
-		devices, err := discovery.DiscoverSSDPDevices(2 * time.Second)
-		if err == nil {
-			for _, device := range devices {
-				ssdpDevices[device.IP] = device
-			}
-		}
-
-		// Enriche Hosts mit SSDP-Daten falls kein Hostname vorhanden
-		for i := range finalHosts {
-			if finalHosts[i].Hostname == "" {
-				if ssdpDevice, found := ssdpDevices[finalHosts[i].IP.String()]; found {
-					deviceName := discovery.GetSSDPDeviceName(ssdpDevice)
-					if deviceName != "" {
-						finalHosts[i].Hostname = deviceName
-						finalHosts[i].HostnameSource = "SSDP"
-					}
-				}
-			}
-		}
-	}
+	// SSDP/UPnP Discovery wird NICHT im ersten Scan gesetzt!
+	// Grund: HTTP title detection (z.B. "Hue") hat höhere Priorität
+	// SSDP wird später im Background-DNS-Lookup als letzter Fallback verwendet
 
 	// Fallback zu TCP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
 	if len(finalHosts) == 0 {
@@ -597,6 +577,10 @@ func performNormalScan(network string, mode string) ([]scanner.Host, error) {
 
 func getHostname(host scanner.Host) string {
 	if host.Hostname != "" {
+		// DEBUG: Farbige Kennzeichnung für SSDP-gelernte Namen
+		if host.HostnameSource == "SSDP" {
+			return color.MagentaString(host.Hostname)
+		}
 		return host.Hostname
 	}
 	return "-"

@@ -80,8 +80,9 @@ func grabBannerFromPort(ip string, port int, protocol string, timeout time.Durat
 		},
 	}
 
-	// Create HEAD request (faster than GET)
-	req, err := http.NewRequest("HEAD", url, nil)
+	// CHANGED: Use GET directly to always get title for hostname detection
+	// HEAD optimization was preventing title extraction for devices like Philips Hue
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil
 	}
@@ -92,13 +93,7 @@ func grabBannerFromPort(ip string, port int, protocol string, timeout time.Durat
 	// Send request
 	resp, err := client.Do(req)
 	if err != nil {
-		// Try GET if HEAD fails (some servers don't support HEAD)
-		req, _ = http.NewRequest("GET", url, nil)
-		req.Header.Set("User-Agent", "NetSpy/1.0")
-		resp, err = client.Do(req)
-		if err != nil {
-			return nil
-		}
+		return nil
 	}
 	defer func() { _ = resp.Body.Close() }() // Ignore close error
 
