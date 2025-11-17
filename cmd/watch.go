@@ -34,13 +34,14 @@ var (
 
 // DeviceState verfolgt den Zustand eines entdeckten Geräts über die Zeit
 type DeviceState struct {
-	Host             scanner.Host
-	FirstSeen        time.Time
-	LastSeen         time.Time
-	Status           string        // "online" or "offline"
-	StatusSince      time.Time     // When current status started
-	FlapCount        int           // Number of times status has changed (flapping counter)
-	TotalOfflineTime time.Duration // Accumulated time spent offline (for continuous uptime calculation)
+	Host                scanner.Host
+	FirstSeen           time.Time
+	LastSeen            time.Time
+	Status              string        // "online" or "offline"
+	StatusSince         time.Time     // When current status started
+	FlapCount           int           // Number of times status has changed (flapping counter)
+	TotalOfflineTime    time.Duration // Accumulated time spent offline (for continuous uptime calculation)
+	LastHostnameLookup  time.Time     // When we last tried to resolve hostname (for retry mechanism)
 }
 
 // watchCmd repräsentiert den watch-Befehl
@@ -1435,13 +1436,25 @@ func performQuickReachabilityCheck(deviceStates map[string]*DeviceState) {
 
 func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState) {
 	// Perform comprehensive hostname lookups for all online hosts in the background
-	// Uses: DNS, mDNS/Bonjour, NetBIOS, and LLMNR
+	// Uses: HTTP, DNS, mDNS/Bonjour, NetBIOS, and LLMNR
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 10) // Limit concurrent lookups
 
+	retryInterval := 5 * time.Minute // Retry every 5 minutes if no hostname found
+
 	for ipStr, state := range deviceStates {
-		// Only lookup for online hosts that don't have a hostname yet AND haven't been resolved before
-		if state.Status != "online" || state.Host.Hostname != "" || state.Host.HostnameSource != "" {
+		// Skip offline hosts
+		if state.Status != "online" {
+			continue
+		}
+
+		// Skip if we have a hostname AND last lookup was recent (< 5 min ago)
+		if state.Host.Hostname != "" && time.Since(state.LastHostnameLookup) < retryInterval {
+			continue
+		}
+
+		// Skip if no hostname but we tried recently (< 5 min ago)
+		if state.Host.Hostname == "" && !state.LastHostnameLookup.IsZero() && time.Since(state.LastHostnameLookup) < retryInterval {
 			continue
 		}
 
@@ -1457,10 +1470,13 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 				defer func() { <-semaphore }()
 			}
 
-			// Use the new comprehensive hostname resolution
+			// Mark that we're attempting a lookup now
+			s.LastHostnameLookup = time.Now()
+
+			// Use the new comprehensive hostname resolution (now includes HTTP!)
 			parsedIP := net.ParseIP(ip)
 			if parsedIP != nil {
-				result := discovery.ResolveBackground(parsedIP, 1*time.Second)
+				result := discovery.ResolveBackground(parsedIP, 3*time.Second) // Increased timeout
 				if result.Hostname != "" {
 					s.Host.Hostname = result.Hostname
 					s.Host.HostnameSource = result.Source
