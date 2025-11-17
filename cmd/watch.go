@@ -312,15 +312,14 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 			if err != nil || n == 0 {
 				continue
 			}
-			if buf[0] == 'c' || buf[0] == 'C' {
-				keyChan <- rune(buf[0])
-			} else if buf[0] == 'n' || buf[0] == 'N' {
-				keyChan <- 'n' // Next page
-			} else if buf[0] == 'p' || buf[0] == 'P' {
-				keyChan <- 'p' // Previous page
-			} else if buf[0] == 27 { // ESC key
-				cancel() // Beende das Programm
+			// ESC key - exit
+			if buf[0] == 27 {
+				cancel()
 				return
+			}
+			// Pass all alphabetic keys to channel (handlers decide what to do)
+			if (buf[0] >= 'a' && buf[0] <= 'z') || (buf[0] >= 'A' && buf[0] <= 'Z') {
+				keyChan <- rune(buf[0])
 			}
 		}
 	}()
