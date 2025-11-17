@@ -208,11 +208,30 @@ func runHybridScan(network string) error {
 		return output.PrintResults(results, format)
 	}
 
+	// Step 1.5: SSDP/UPnP Discovery für zusätzliche Device-Infos
+	ssdpDevices := make(map[string]discovery.SSDPDevice)
+	if !quiet {
+		color.Cyan("Step 1.5: SSDP/UPnP discovery (timeout 3s)...\n")
+	}
+	devices, err := discovery.DiscoverSSDPDevices(3 * time.Second)
+	if err != nil {
+		if !quiet {
+			color.Yellow("[WARN] SSDP discovery failed: %v\n", err)
+		}
+	} else {
+		for _, device := range devices {
+			ssdpDevices[device.IP] = device
+		}
+		if !quiet {
+			color.Green("[OK] SSDP found %d UPnP devices\n\n", len(ssdpDevices))
+		}
+	}
+
 	// Step 2: Ping + Port details for ARP-discovered hosts
 	if !quiet {
 		color.Cyan("Step 2: Getting ping/port details for discovered hosts...\n")
 	}
-	enhancedHosts := enhanceHostsWithDetails(arpHosts)
+	enhancedHosts := enhanceHostsWithDetails(arpHosts, ssdpDevices)
 
 	if !quiet {
 		color.Green("[OK] Enhanced %d hosts with ping/port details\n\n", len(enhancedHosts))
@@ -326,7 +345,7 @@ func runARPScan(network string) error {
 	return output.PrintResults(finalHosts, format)
 }
 
-func enhanceHostsWithDetails(arpHosts []scanner.Host) []scanner.Host {
+func enhanceHostsWithDetails(arpHosts []scanner.Host, ssdpDevices map[string]discovery.SSDPDevice) []scanner.Host {
 	var enhancedHosts []scanner.Host
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
@@ -343,7 +362,7 @@ func enhanceHostsWithDetails(arpHosts []scanner.Host) []scanner.Host {
 			defer func() { <-semaphore }()
 
 			// Enhance this host with ping/port details
-			enhanced := enhanceHost(h)
+			enhanced := enhanceHost(h, ssdpDevices)
 
 			mutex.Lock()
 			enhancedHosts = append(enhancedHosts, enhanced)
@@ -355,7 +374,7 @@ func enhanceHostsWithDetails(arpHosts []scanner.Host) []scanner.Host {
 	return enhancedHosts
 }
 
-func enhanceHost(host scanner.Host) scanner.Host {
+func enhanceHost(host scanner.Host, ssdpDevices map[string]discovery.SSDPDevice) scanner.Host {
 	// Start with ARP data (IP, MAC, Vendor)
 	enhanced := host
 
@@ -387,6 +406,17 @@ func enhanceHost(host scanner.Host) scanner.Host {
 		if result.Hostname != "" {
 			enhanced.Hostname = result.Hostname
 			enhanced.HostnameSource = result.Source
+		}
+	}
+
+	// Fallback to SSDP device name if still no hostname
+	if enhanced.Hostname == "" {
+		if ssdpDevice, found := ssdpDevices[host.IP.String()]; found {
+			deviceName := discovery.GetSSDPDeviceName(ssdpDevice)
+			if deviceName != "" {
+				enhanced.Hostname = deviceName
+				enhanced.HostnameSource = "SSDP"
+			}
 		}
 	}
 
