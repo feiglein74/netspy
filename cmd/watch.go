@@ -992,10 +992,11 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 	for _, ipStr := range ips {
 		state := states[ipStr]
 
-		statusIcon := "+"
+		// Status icon and color - only show icon for offline
+		statusText := ""
 		statusColor := color.GreenString
 		if state.Status == "offline" {
-			statusIcon = "-"
+			statusText = "[-] "
 			statusColor = color.RedString
 		}
 
@@ -1026,12 +1027,12 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 			statusDuration = referenceTime.Sub(state.StatusSince)
 		}
 
-		// Format colored status with padding
-		coloredStatus := statusColor(padRight("", 3))
+		// Format colored status - pad to 4 chars (for "[-] " or "    ")
+		coloredStatus := statusColor(padRight(statusText, 4))
 
 		// Assemble row with UTF-8-aware padding
 		rowContent := padRight(displayIP, 16) + " " +
-			statusIcon + coloredStatus + " " +
+			coloredStatus + " " +
 			padRight(hostname, 18) + " " +
 			padRight(formatDurationShort(statusDuration), 8)
 
@@ -1066,11 +1067,11 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 	for _, ipStr := range ips {
 		state := states[ipStr]
 
-		statusIcon := "[+]"
+		statusIcon := "    "
 		statusColor := color.GreenString
 		statusText := "online"
 		if state.Status == "offline" {
-			statusIcon = "[-]"
+			statusIcon = "[-] "
 			statusColor = color.RedString
 			statusText = "offline"
 		}
@@ -1132,7 +1133,7 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 
 		// Assemble row with UTF-8-aware padding
 		rowContent := padRight(displayIP, 18) + " " +
-			statusIcon + " " +
+			statusIcon +
 			coloredStatus + " " +
 			padRight(hostname, 20) + " " +
 			macPadded + " " +
@@ -1186,11 +1187,11 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	for _, ipStr := range ips {
 		state := states[ipStr]
 
-		statusIcon := "[+]"
+		statusIcon := "    "
 		statusColor := color.GreenString
 		statusText := "online"
 		if state.Status == "offline" {
-			statusIcon = "[-]"
+			statusIcon = "[-] "
 			statusColor = color.RedString
 			statusText = "offline"
 		}
@@ -1264,7 +1265,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 
 		// Manuelles Zusammenbauen der Row mit UTF-8-aware padding
 		rowContent := padRight(displayIP, 20) + " " +
-			statusIcon + " " +
+			statusIcon +
 			coloredStatus + " " +
 			padRight(hostname, hostnameWidth) + " " +
 			macPadded + " " +
