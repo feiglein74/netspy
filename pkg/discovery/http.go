@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ type HTTPBanner struct {
 	Port       int    // Port where banner was found
 	Protocol   string // "http" or "https"
 	Title      string // Page title (optional)
+	Hostname   string // Hostname extracted from Location or other headers
 }
 
 // String returns a formatted string representation of the banner
@@ -117,11 +119,34 @@ func grabBannerFromPort(ip string, port int, protocol string, timeout time.Durat
 		banner.PoweredBy = cleanBanner(poweredBy)
 	}
 
+	// Extract hostname from Location header (redirects often contain hostname)
+	if location := resp.Header.Get("Location"); location != "" {
+		if hostname := extractHostnameFromURL(location); hostname != "" {
+			banner.Hostname = hostname
+		}
+	}
+
+	// Try X-Forwarded-Host and X-Original-Host headers (proxy configs)
+	if banner.Hostname == "" {
+		if host := resp.Header.Get("X-Forwarded-Host"); host != "" {
+			banner.Hostname = cleanHostname(host)
+		} else if host := resp.Header.Get("X-Original-Host"); host != "" {
+			banner.Hostname = cleanHostname(host)
+		}
+	}
+
 	// Extract title from HTML (only for GET requests)
 	if req.Method == "GET" {
 		body, err := io.ReadAll(io.LimitReader(resp.Body, 8192)) // Read max 8KB
 		if err == nil {
-			banner.Title = extractTitle(string(body))
+			title := extractTitle(string(body))
+			banner.Title = title
+
+			// Try to extract hostname from title if we don't have one yet
+			// Many devices have titles like "UniFi Dream Machine" or "iPhone (John)"
+			if banner.Hostname == "" && title != "" {
+				banner.Hostname = extractHostnameFromTitle(title)
+			}
 		}
 	}
 
@@ -166,6 +191,92 @@ func extractTitle(html string) string {
 	}
 
 	return title
+}
+
+// extractHostnameFromURL extracts hostname from a URL string
+func extractHostnameFromURL(urlStr string) string {
+	// Handle relative URLs
+	if !strings.HasPrefix(urlStr, "http://") && !strings.HasPrefix(urlStr, "https://") {
+		return ""
+	}
+
+	// Find hostname part (between // and first /)
+	start := strings.Index(urlStr, "//")
+	if start == -1 {
+		return ""
+	}
+	start += 2
+
+	end := strings.Index(urlStr[start:], "/")
+	if end == -1 {
+		end = len(urlStr[start:])
+	}
+
+	hostname := urlStr[start : start+end]
+
+	// Remove port if present
+	if colonPos := strings.Index(hostname, ":"); colonPos != -1 {
+		hostname = hostname[:colonPos]
+	}
+
+	// Don't return IP addresses, only real hostnames
+	if net.ParseIP(hostname) != nil {
+		return ""
+	}
+
+	return cleanHostname(hostname)
+}
+
+// extractHostnameFromTitle tries to extract a meaningful hostname from page title
+func extractHostnameFromTitle(title string) string {
+	// Remove common prefixes/suffixes
+	title = strings.TrimSpace(title)
+
+	// Skip if title is too generic or empty
+	if title == "" || len(title) < 3 {
+		return ""
+	}
+
+	// Common generic titles to skip
+	genericTitles := []string{
+		"home", "index", "login", "admin", "dashboard",
+		"welcome", "404", "error", "forbidden", "unauthorized",
+	}
+	lowerTitle := strings.ToLower(title)
+	for _, generic := range genericTitles {
+		if lowerTitle == generic {
+			return ""
+		}
+	}
+
+	// If title looks like a model/device name (e.g., "UniFi Dream Machine"), use it
+	// But limit length and clean it up
+	if len(title) > 40 {
+		title = title[:37] + "..."
+	}
+
+	return title
+}
+
+// QueryHTTPHostname attempts to get hostname from HTTP headers/title
+// This is a new resolution method specifically for IoT/web devices
+func QueryHTTPHostname(ip string, timeout time.Duration) (string, error) {
+	banner := GrabHTTPBanner(ip, timeout)
+	if banner == nil {
+		return "", fmt.Errorf("no HTTP response")
+	}
+
+	// Prefer actual hostname over title
+	if banner.Hostname != "" {
+		return banner.Hostname, nil
+	}
+
+	// Fallback to title if it looks like a device name
+	if banner.Title != "" {
+		return banner.Title, nil
+	}
+
+	return "", fmt.Errorf("no hostname in HTTP response")
 }
 
 // GrabHTTPBannerFromPorts attempts to get HTTP banner from specific open ports

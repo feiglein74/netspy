@@ -9,7 +9,7 @@ import (
 // HostnameResult enthält den aufgelösten Hostnamen und seine Quelle
 type HostnameResult struct {
 	Hostname string
-	Source   string // "dns", "mdns", "netbios", "llmnr"
+	Source   string // "dns", "mdns", "netbios", "llmnr", "http"
 }
 
 // ResolveHostname versucht mehrere Methoden um einen Hostnamen aufzulösen
@@ -93,7 +93,15 @@ func ResolveFast(ip net.IP, timeout time.Duration) HostnameResult {
 // ResolveBackground performs slow resolution methods in background
 // Use this for watch mode where we want thorough resolution
 func ResolveBackground(ip net.IP, timeout time.Duration) HostnameResult {
-	// Try NetBIOS first (good for Windows)
+	// Try HTTP first (very successful for IoT devices with web interfaces)
+	if name, err := QueryHTTPHostname(ip.String(), timeout); err == nil && name != "" {
+		return HostnameResult{
+			Hostname: name,
+			Source:   "http",
+		}
+	}
+
+	// Try NetBIOS (good for Windows)
 	if name, err := QueryNetBIOSName(ip, timeout/2); err == nil && name != "" {
 		return HostnameResult{
 			Hostname: cleanHostname(name),
@@ -109,7 +117,7 @@ func ResolveBackground(ip net.IP, timeout time.Duration) HostnameResult {
 		}
 	}
 
-	// Try mDNS as last resort
+	// Try mDNS
 	if name, err := QueryMDNSName(ip, timeout/2); err == nil && name != "" {
 		return HostnameResult{
 			Hostname: cleanHostname(name),
@@ -163,6 +171,8 @@ func GetSourceEmoji(source string) string {
 		return "💻" // Computer - NetBIOS (Windows)
 	case "llmnr":
 		return "🔗" // Link - LLMNR
+	case "http":
+		return "🌍" // Globe with meridians - HTTP headers/title
 	case "vendor":
 		return "[tag]" // Label - from vendor database
 	default:
