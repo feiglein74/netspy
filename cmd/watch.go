@@ -359,19 +359,42 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 		cancel()
 	}()
 
-	// Keyboard-Listener für 'c' zum Kopieren, 'n'/'p' für Paging und ESC zum Beenden
+	// Keyboard-Listener für 'c' zum Kopieren, 'n'/'p' für Paging, F1 für Help und ESC zum Beenden
 	go func() {
-		buf := make([]byte, 1)
+		buf := make([]byte, 6) // Größerer Buffer für Escape-Sequenzen
 		for {
 			n, err := os.Stdin.Read(buf)
 			if err != nil || n == 0 {
 				continue
 			}
-			// ESC key - exit
+
+			// ESC-Sequenzen (F1, Arrow keys, etc.)
+			if buf[0] == 27 && n > 1 {
+				// F1: ESC[11~ oder ESCOP
+				if n >= 4 && buf[1] == '[' && buf[2] == '1' && buf[3] == '1' {
+					keyChan <- rune(0xFFFF) // Special F1 marker
+					continue
+				}
+				if n >= 3 && buf[1] == 'O' && buf[2] == 'P' {
+					keyChan <- rune(0xFFFF) // Special F1 marker
+					continue
+				}
+				// Andere ESC-Sequenzen ignorieren
+				continue
+			}
+
+			// Single ESC key - exit
 			if buf[0] == 27 {
 				cancel()
 				return
 			}
+
+			// Space key
+			if buf[0] == ' ' {
+				keyChan <- ' '
+				continue
+			}
+
 			// Pass all alphabetic keys to channel (handlers decide what to do)
 			if (buf[0] >= 'a' && buf[0] <= 'z') || (buf[0] >= 'A' && buf[0] <= 'Z') {
 				keyChan <- rune(buf[0])
@@ -892,6 +915,54 @@ func clearLine() {
 	fmt.Print("\033[2K\r") // Clear entire line and move to start
 }
 
+// showHelpOverlay displays a help screen overlay with colored symbols
+// Returns when any key is pressed
+func showHelpOverlay(width int) {
+	// Save cursor position
+	fmt.Print("\033[s")
+
+	// Clear screen and move to top
+	fmt.Print("\033[2J\033[H")
+
+	// Build help content with colors
+	line1 := "SORTIERUNG: Unterstrichene Buchstaben in Spalten-Headern drücken"
+	line2 := "  i=IP  h=Hostname  m=MAC  v=Vendor  d=Gerät  r=RTT  f=Flaps  u=Uptime  t=Zeit"
+	line3 := "  Leertaste = Sortierreihenfolge umkehren"
+	line4 := "NAVIGATION: n=Nächste Seite  p=Vorherige Seite  |  c=Kopieren  q=Beenden"
+
+	// Symbols with colors: [G] and [+] green, [!] red
+	symbolsText := "SYMBOLE: " +
+		color.GreenString("[G]") + "=Gateway  " +
+		color.RedString("[!]") + "=Offline  " +
+		color.GreenString("[+]") + "=Neu (erste 2 Scans)"
+
+	// Colors with actual colors
+	colorsText := "FARBEN: " +
+		color.MagentaString("Magenta") + "=Neuer Hostname  " +
+		color.YellowString("Gelb") + "=Lokal-administrierte MAC"
+
+	line7 := "Beliebige Taste zum Schließen..."
+
+	// Print box
+	fmt.Println(strings.Repeat("═", width))
+	printBoxLine(color.CyanString("Hilfe (F1)"), width)
+	fmt.Println(strings.Repeat("═", width))
+	printBoxLine(line1, width)
+	printBoxLine(line2, width)
+	printBoxLine(line3, width)
+	printBoxLine(line4, width)
+	printBoxLine(symbolsText, width)
+	printBoxLine(colorsText, width)
+	printBoxLine(line7, width)
+	fmt.Println(strings.Repeat("═", width))
+
+	// Wait for any key
+	buf := make([]byte, 1)
+	os.Stdin.Read(buf)
+
+	// No need to restore cursor - main loop will redraw everything
+}
+
 // printBoxLine prints a line within the box with proper padding
 func printBoxLine(content string, width int) {
 	// Calculate visible length (without ANSI codes, UTF-8 aware)
@@ -1131,7 +1202,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 	screenBuffer.WriteString("╠" + safeRepeat("═", width-2) + "╣\n")
 
 	// Status line
-	statusLine := fmt.Sprintf("▶ Next scan in: %s │ Press Ctrl+C to exit or 'c' to copy",
+	statusLine := fmt.Sprintf("▶ Next scan in: %s │ F1 = Help",
 		formatDuration(nextScanIn))
 	writeLine(statusLine)
 
@@ -1309,12 +1380,10 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
 	fmt.Print(color.CyanString("╣\n"))
 
-	// Status line (inside box) - use same fixed column widths as header
-	col1Status := padRightANSI(color.CyanString("▶")+" Next scan in: "+color.CyanString(formatDuration(nextScanIn)), col1Width)
-	col2Status := padRight("n/p: page, c: copy", col2Width)
-	col3Status := padRight("[G]=GW [!]=Offline", col3Width)  // Gekürzt: GW statt Gateway für 80-Spalten-Limit
-	statusLine := fmt.Sprintf("%s  │  %s  │  %s", col1Status, col2Status, col3Status)
-	printBoxLine(statusLine, width)
+	// Status line (inside box) - simplified with F1 help
+	statusText := color.CyanString("▶") + " Next scan in: " + color.CyanString(formatDuration(nextScanIn)) +
+		"       │  " + color.CyanString("F1") + " = Help"
+	printBoxLine(statusText, width)
 
 	// Bottom border
 	fmt.Print(color.CyanString("╚"))
@@ -1520,7 +1589,7 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 
 	// Show paging indicator if multiple pages exist
 	if totalPages > 1 {
-		indicator := fmt.Sprintf("  Page %d/%d (%d hosts total) - Press 'n' for next, 'p' for previous", page, totalPages, totalHosts)
+		indicator := fmt.Sprintf("  Page %d/%d (%d hosts total)", page, totalPages, totalHosts)
 		printTableRow(color.CyanString(indicator), width)
 	}
 }
@@ -1697,7 +1766,7 @@ func redrawMediumTable(states map[string]*DeviceState, referenceTime time.Time, 
 
 	// Show paging indicator if multiple pages exist
 	if totalPages > 1 {
-		indicator := fmt.Sprintf("  Page %d/%d (%d hosts total) - Press 'n' for next, 'p' for previous", page, totalPages, totalHosts)
+		indicator := fmt.Sprintf("  Page %d/%d (%d hosts total)", page, totalPages, totalHosts)
 		printTableRow(color.CyanString(indicator), width)
 	}
 }
@@ -1905,7 +1974,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 
 	// Show paging indicator if multiple pages exist
 	if totalPages > 1 {
-		indicator := fmt.Sprintf("  Page %d/%d (%d hosts total) - Press 'n' for next, 'p' for previous", page, totalPages, totalHosts)
+		indicator := fmt.Sprintf("  Page %d/%d (%d hosts total)", page, totalPages, totalHosts)
 		printTableRow(color.CyanString(indicator), termWidth)
 	}
 }
@@ -2021,6 +2090,10 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				// Sort by Flaps
 				sortState.Toggle(SortByFlaps)
 				atomic.StoreInt32(currentPage, 1)
+			} else if key == 0xFFFF {
+				// F1 - Show help overlay
+				termSize := output.GetTerminalSize()
+				showHelpOverlay(termSize.GetDisplayWidth())
 			}
 			// Redraw screen nach Nachricht/Aktion
 			redrawMutex.Lock()
