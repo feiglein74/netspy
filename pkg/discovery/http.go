@@ -234,10 +234,15 @@ func extractHostnameFromTitle(title string) string {
 
 	lowerTitle := strings.ToLower(title)
 
-	// Skip HTTP status codes (e.g., "401 Unauthorized", "403 Forbidden", "404 Not Found")
+	// Skip HTTP status codes (e.g., "301 Moved", "302 Found", "401 Unauthorized", "404 Not Found")
 	httpStatusPrefixes := []string{
+		// 3xx Redirects
+		"300 ", "301 ", "302 ", "303 ", "304 ", "307 ", "308 ",
+		// 4xx Client Errors
 		"400 ", "401 ", "402 ", "403 ", "404 ", "405 ", "406 ", "407 ", "408 ", "409 ",
-		"410 ", "500 ", "501 ", "502 ", "503 ", "504 ",
+		"410 ", "411 ", "412 ", "413 ", "414 ", "415 ", "416 ", "417 ", "418 ",
+		// 5xx Server Errors
+		"500 ", "501 ", "502 ", "503 ", "504 ", "505 ",
 	}
 	for _, prefix := range httpStatusPrefixes {
 		if strings.HasPrefix(lowerTitle, prefix) {
