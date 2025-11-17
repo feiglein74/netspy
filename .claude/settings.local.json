@@ -98,7 +98,14 @@
       "Bash(cmd //c \"taskkill /F /IM netspy.exe\")",
       "Bash(git stash:*)",
       "Bash(./netspy.exe watch:* &:*)",
-      "Bash(NETSPY_PID=$!:*)"
+      "Bash(NETSPY_PID=$!:*)",
+      "Bash(taskkill //F //IM netspy.exe:*)",
+      "Bash(taskkill //F //IM go.exe:*)",
+      "Bash(taskkill /F /IM netspy.exe:*)",
+      "Bash(taskkill /F /IM go.exe:*)",
+      "Bash(timeout 10 ./netspy.exe watch:*)",
+      "Bash(timeout 12 ./netspy.exe watch:*)",
+      "Bash(timeout 15 ./netspy.exe watch:*)"
     ],
     "deny": [],
     "ask": []
