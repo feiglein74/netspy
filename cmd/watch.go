@@ -822,6 +822,12 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 	termSize := output.GetTerminalSize()
 	width := termSize.GetDisplayWidth()
 
+	// Safety check: skip if terminal is too small
+	if width < 20 {
+		screenBuffer.WriteString("Terminal too small for capture\n")
+		return
+	}
+
 	// Count stats
 	onlineCount := 0
 	offlineCount := 0
@@ -953,6 +959,14 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 
 // drawTerminalTooSmallWarning zeigt Warnung wenn Terminal zu klein ist
 func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCount int, activeThreads *int32) {
+	// Absolute minimum check - if window is EXTREMELY small, just print simple message
+	if width < 20 {
+		fmt.Println("Terminal too small!")
+		fmt.Printf("Min: 60x15, Current: %dx%d\n", termSize.Width, termSize.Height)
+		fmt.Println("Please resize window.")
+		return
+	}
+
 	// Top border
 	fmt.Print(color.CyanString("╔"))
 	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
