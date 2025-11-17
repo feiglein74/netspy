@@ -1283,8 +1283,8 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		if state.Status == "offline" {
 			displayIP += " [!]"
 		}
-		// Mark as new if detected in last 2 scans
-		isNew := (scanCount - state.FirstSeenScan) < 2
+		// Mark as new if detected in last 2 scans (but not first scan)
+		isNew := state.FirstSeenScan > 1 && (scanCount - state.FirstSeenScan) < 2
 		if isNew {
 			displayIP += " [+]"
 		}
@@ -1423,8 +1423,8 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 		if state.Status == "offline" {
 			displayIP += " [!]"
 		}
-		// Mark as new if detected in last 2 scans
-		isNew := (scanCount - state.FirstSeenScan) < 2
+		// Mark as new if detected in last 2 scans (but not first scan)
+		isNew := state.FirstSeenScan > 1 && (scanCount - state.FirstSeenScan) < 2
 		if isNew {
 			displayIP += " [+]"
 		}
@@ -1506,7 +1506,10 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 		if i%2 == 1 && state.Status != "offline" && !isNew {
 			// Zebra striping for odd rows (only if not offline/new - they have priority colors)
 			hostnamePadded = color.New(color.FgHiBlack).Sprint(hostnamePadded)
-			// macPadded already colored - skip
+			// MAC only if not yellow (locally-administered)
+			if !isLocallyAdministered(mac) {
+				macPadded = color.New(color.FgHiBlack).Sprint(macPadded)
+			}
 			vendorPadded = color.New(color.FgHiBlack).Sprint(vendorPadded)
 			deviceTypePadded = color.New(color.FgHiBlack).Sprint(deviceTypePadded)
 			rttPadded = color.New(color.FgHiBlack).Sprint(rttPadded)
@@ -1612,8 +1615,8 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		if state.Status == "offline" {
 			displayIP += " [!]"
 		}
-		// Mark as new if detected in last 2 scans
-		isNew := (scanCount - state.FirstSeenScan) < 2
+		// Mark as new if detected in last 2 scans (but not first scan)
+		isNew := state.FirstSeenScan > 1 && (scanCount - state.FirstSeenScan) < 2
 		if isNew {
 			displayIP += " [+]"
 		}
@@ -1706,6 +1709,10 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		// Apply zebra striping to non-colored columns (odd rows get darker)
 		if i%2 == 1 && state.Status != "offline" && !isNew {
 			hostnamePadded = color.New(color.FgHiBlack).Sprint(hostnamePadded)
+			// MAC only if not yellow (locally-administered)
+			if !isLocallyAdministered(mac) {
+				macPadded = color.New(color.FgHiBlack).Sprint(macPadded)
+			}
 			vendorPadded = color.New(color.FgHiBlack).Sprint(vendorPadded)
 			deviceTypePadded = color.New(color.FgHiBlack).Sprint(deviceTypePadded)
 			rttPadded = color.New(color.FgHiBlack).Sprint(rttPadded)
