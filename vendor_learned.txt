@@ -1,0 +1,6 @@
+# NetSpy Learned MAC Vendors
+# Automatisch erweitert durch API-Lookups (api.macvendors.com)
+# Format: OUI = Vendor Name
+# Sie können diese Datei manuell bearbeiten
+
+F0:B6:1E = Intel Corporate

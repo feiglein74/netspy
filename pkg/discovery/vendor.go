@@ -10,11 +10,14 @@ func GetMACVendor(mac string) string {
 		return ""
 	}
 
-	oui := strings.ToUpper(mac[:8]) // First 3 octets: "AA:BB:CC"
-
-	if vendor, exists := ouiDatabase[oui]; exists {
+	// Try learned vendors first (priority), then builtin
+	vendor := GetLearnedVendor(mac)
+	if vendor != "" {
 		return vendor
 	}
+
+	// If unknown, trigger async lookup to learn for next time
+	LookupAndLearnVendor(mac)
 
 	return ""
 }
@@ -979,6 +982,7 @@ var ouiDatabase = map[string]string{
 
 	// Hewlett Packard Enterprise
 	"20:67:7C": "HP Enterprise",
+	"70:10:6F": "HP Enterprise",
 
 	// Hewlett Packard
 	"3C:A8:2A": "HP",

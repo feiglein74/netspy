@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -154,6 +155,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 
 	scanCount := 0
 	var redrawMutex sync.Mutex // Prevent concurrent redraws
+	var activeThreads int32    // Tracks active background DNS lookup threads (atomic counter)
 
 	for {
 		// Check if context is cancelled before starting new scan
@@ -263,7 +265,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 		fmt.Print("\033[H") // Move to home (0,0) without clearing
 
 		// Draw layout (will overwrite old content)
-		drawBtopLayout(deviceStates, scanStart, network, watchInterval, watchMode, scanCount, scanDuration, nextScan)
+		drawBtopLayout(deviceStates, scanStart, network, watchInterval, watchMode, scanCount, scanDuration, nextScan, &activeThreads)
 
 		// Clear any remaining lines from previous draw (if screen shrunk)
 		fmt.Print("\033[J") // Clear from cursor to end of screen
@@ -275,10 +277,10 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 
 		// Phase 2: Start slow background lookups (mDNS/NetBIOS/LLMNR/HTTP) while countdown is running
 		if nextScan > 0 {
-			go performBackgroundDNSLookups(ctx, deviceStates)
+			go performBackgroundDNSLookups(ctx, deviceStates, &activeThreads)
 
 			// Show countdown with periodic table updates (pass scanStart for consistent uptime)
-			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, keyChan, &redrawMutex, network, watchInterval, watchMode)
+			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, keyChan, &redrawMutex, network, watchInterval, watchMode, &activeThreads)
 		}
 	}
 }
@@ -867,7 +869,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 }
 
 // drawBtopLayout renders a btop-inspired fullscreen layout
-func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration) {
+func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration, activeThreads *int32) {
 	termSize := output.GetTerminalSize()
 	width := termSize.GetDisplayWidth()
 
@@ -906,7 +908,9 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	// Get git version info
 	gitVersion := getGitVersion()
 	title := color.HiWhiteString(fmt.Sprintf("NetSpy - Network Monitor %s", gitVersion))
-	scanInfo := color.HiYellowString(fmt.Sprintf("[Scan #%d]", scanCount))
+	// Load active thread count atomically
+	threadCount := atomic.LoadInt32(activeThreads)
+	scanInfo := color.HiYellowString(fmt.Sprintf("[Threads #%d / Scan #%d]", threadCount, scanCount))
 	titleStripped := stripANSI(title)
 	scanInfoStripped := stripANSI(scanInfo)
 	spacesNeeded := width - runeLen(titleStripped) - runeLen(scanInfoStripped) - 4
@@ -928,24 +932,29 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	col2Width := availableWidth / 3
 	col3Width := availableWidth - col1Width - col2Width // Remainder goes to col3
 
+	// Dezimaltabulator: Labels rechtsbündig (Doppelpunkt aligned), Werte rechtsbündig
+	labelWidth1 := 8  // "Network:" / "Devices:"
+	labelWidth2 := 8  // "Mode:" / "Flaps:" (mit leading spaces)
+	labelWidth3 := 9  // "Interval:" / "Scan:" (mit leading spaces)
+	valueWidth := 15  // Reserve für Werte
+
 	// Info line 1 (static - doesn't change)
-	col1_line1 := padRight(fmt.Sprintf("Network: %s", network), col1Width)
-	col2_line1 := padRight(fmt.Sprintf("Mode: %s", mode), col2Width)
-	// Right-align interval value (Dezimaltabulator)
+	col1_line1 := padLeft("Network:", labelWidth1) + " " + padLeft(network, valueWidth) + strings.Repeat(" ", col1Width-labelWidth1-valueWidth-1)
+	col2_line1 := padLeft("Mode:", labelWidth2) + " " + padLeft(mode, valueWidth) + strings.Repeat(" ", col2Width-labelWidth2-valueWidth-1)
 	intervalValue := fmt.Sprintf("%v", interval)
-	col3_line1 := "Interval: " + padLeft(intervalValue, col3Width-10) // 10 = len("Interval: ")
+	col3_line1 := padLeft("Interval:", labelWidth3) + " " + padLeft(intervalValue, valueWidth) + strings.Repeat(" ", col3Width-labelWidth3-valueWidth-1)
 	line1 := fmt.Sprintf("%s  │  %s  │  %s", col1_line1, col2_line1, col3_line1)
 	printBoxLine(line1, width)
 
 	// Info line 2 (dynamic - changes with each scan, but stays aligned)
-	col1_line2 := padRight(fmt.Sprintf("Devices: %d (%s%d %s%d)",
-		len(states),
+	devicesValue := fmt.Sprintf("%d (%s%d %s%d)", len(states),
 		color.GreenString("↑"), onlineCount,
-		color.RedString("↓"), offlineCount), col1Width)
-	col2_line2 := padRight(fmt.Sprintf("Flaps: %d", totalFlaps), col2Width)
-	// Right-align scan value (Dezimaltabulator)
+		color.RedString("↓"), offlineCount)
+	col1_line2 := padLeft("Devices:", labelWidth1) + " " + padLeft(devicesValue, valueWidth) + strings.Repeat(" ", col1Width-labelWidth1-valueWidth-1)
+	flapsValue := fmt.Sprintf("%d", totalFlaps)
+	col2_line2 := padLeft("Flaps:", labelWidth2) + " " + padLeft(flapsValue, valueWidth) + strings.Repeat(" ", col2Width-labelWidth2-valueWidth-1)
 	scanValue := formatDuration(scanDuration)
-	col3_line2 := "Scan: " + padLeft(scanValue, col3Width-6) // 6 = len("Scan: ")
+	col3_line2 := padLeft("Scan:", labelWidth3) + " " + padLeft(scanValue, valueWidth) + strings.Repeat(" ", col3Width-labelWidth3-valueWidth-1)
 	line2 := fmt.Sprintf("%s  │  %s  │  %s", col1_line2, col2_line2, col3_line2)
 	printBoxLine(line2, width)
 
@@ -1084,7 +1093,8 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 	headerContent := padRight("IP Address", 18) + " " +
 		padRight("Hostname", 20) + " " +
 		padRight("MAC Address", 18) + " " +
-		padRight("Device Type", 14) + " " +
+		padRight("Vendor", 15) + " " +
+		padRight("Type", 12) + " " +
 		padRight("RTT", 8) + " " +
 		padRight("Flaps", 5)
 	printTableRow(color.CyanString(headerContent), width)
@@ -1134,15 +1144,26 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 			macPadded = color.YellowString(macPadded)
 		}
 
-		// Show device type if available, otherwise show vendor
-		deviceInfo := state.Host.DeviceType
-		if deviceInfo == "" || deviceInfo == "Unknown" {
-			deviceInfo = getVendor(state.Host)
+		// Vendor from MAC lookup
+		vendor := getVendor(state.Host)
+		if vendor == "" || vendor == "-" {
+			vendor = "-"
 		}
 		// UTF-8-aware truncation
-		deviceInfoRunes := []rune(deviceInfo)
-		if len(deviceInfoRunes) > 14 {
-			deviceInfo = string(deviceInfoRunes[:13]) + "…"
+		vendorRunes := []rune(vendor)
+		if len(vendorRunes) > 15 {
+			vendor = string(vendorRunes[:14]) + "…"
+		}
+
+		// Device type classification
+		deviceType := state.Host.DeviceType
+		if deviceType == "" || deviceType == "Unknown" {
+			deviceType = "-"
+		}
+		// UTF-8-aware truncation
+		deviceTypeRunes := []rune(deviceType)
+		if len(deviceTypeRunes) > 12 {
+			deviceType = string(deviceTypeRunes[:11]) + "…"
 		}
 
 		// Format RTT
@@ -1167,7 +1188,8 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 		rowContent := displayIPPadded + " " +
 			padRight(hostname, 20) + " " +
 			macPadded + " " +
-			padRight(deviceInfo, 14) + " " +
+			padRight(vendor, 15) + " " +
+			padRight(deviceType, 12) + " " +
 			padLeft(rttText, 8) + " " + // Right-align (Dezimaltabulator)
 			flapNum
 
@@ -1180,25 +1202,27 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	// Calculate dynamic column widths based on terminal size
 	termWidth := termSize.GetDisplayWidth()
 
-	// Fixed columns: IP(20) + MAC(18) + RTT(8) + FirstSeen(13) + Uptime(16) + Flaps(5) = 80
-	// Spaces between columns: 7 spaces = 7
+	// Fixed columns: IP(17) + MAC(18) + RTT(8) + FirstSeen(13) + Uptime(12) + Flaps(5) = 73
+	// Spaces between columns: 8 spaces = 8
 	// Borders: "║ " + " ║" = 4
-	// Total fixed: 80 + 7 + 4 = 91
-	// Remaining for Hostname + DeviceType
-	remainingWidth := termWidth - 91
+	// Total fixed: 73 + 8 + 4 = 85
+	// Remaining for Hostname + Vendor + Type
+	remainingWidth := termWidth - 85
 
-	// Distribute remaining width: 60% hostname, 40% deviceType (with minimums)
-	hostnameWidth := max(25, min(50, int(float64(remainingWidth)*0.6)))
-	deviceTypeWidth := max(17, remainingWidth-hostnameWidth)
+	// Distribute remaining width: 50% hostname, 25% vendor, 25% type (with minimums)
+	hostnameWidth := max(20, min(40, int(float64(remainingWidth)*0.5)))
+	vendorWidth := max(15, int(float64(remainingWidth)*0.25))
+	typeWidth := max(12, remainingWidth-hostnameWidth-vendorWidth)
 
 	// Table header with box drawing - use padRight for UTF-8 safety
-	headerContent := padRight("IP Address", 20) + " " +
+	headerContent := padRight("IP Address", 17) + " " +
 		padRight("Hostname", hostnameWidth) + " " +
 		padRight("MAC Address", 18) + " " +
-		padRight("Device Type", deviceTypeWidth) + " " +
+		padRight("Vendor", vendorWidth) + " " +
+		padRight("Type", typeWidth) + " " +
 		padRight("RTT", 8) + " " +
 		padRight("First Seen", 13) + " " +
-		padRight("Uptime", 16) + " " +
+		padRight("Uptime", 12) + " " +
 		padRight("Flaps", 5)
 
 	printTableRow(color.CyanString(headerContent), termWidth)
@@ -1226,7 +1250,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		}
 
 		// Color IP red if offline
-		displayIPPadded := padRight(displayIP, 20)
+		displayIPPadded := padRight(displayIP, 17)
 		if state.Status == "offline" {
 			displayIPPadded = color.RedString(displayIPPadded)
 		}
@@ -1248,14 +1272,24 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			macPadded = color.YellowString(macPadded)
 		}
 
-		// Show device type if available, otherwise show vendor - use dynamic width
-		deviceInfo := state.Host.DeviceType
-		if deviceInfo == "" || deviceInfo == "Unknown" {
-			deviceInfo = getVendor(state.Host)
+		// Vendor from MAC lookup - use dynamic width
+		vendor := getVendor(state.Host)
+		if vendor == "" || vendor == "-" {
+			vendor = "-"
 		}
-		deviceInfoRunes := []rune(deviceInfo)
-		if len(deviceInfoRunes) > deviceTypeWidth {
-			deviceInfo = string(deviceInfoRunes[:deviceTypeWidth-1]) + "…"
+		vendorRunes := []rune(vendor)
+		if len(vendorRunes) > vendorWidth {
+			vendor = string(vendorRunes[:vendorWidth-1]) + "…"
+		}
+
+		// Device type classification - use dynamic width
+		deviceType := state.Host.DeviceType
+		if deviceType == "" || deviceType == "Unknown" {
+			deviceType = "-"
+		}
+		deviceTypeRunes := []rune(deviceType)
+		if len(deviceTypeRunes) > typeWidth {
+			deviceType = string(deviceTypeRunes[:typeWidth-1]) + "…"
 		}
 
 		firstSeen := state.FirstSeen.Format("15:04:05")
@@ -1293,17 +1327,18 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		rowContent := displayIPPadded + " " +
 			padRight(hostname, hostnameWidth) + " " +
 			macPadded + " " +
-			padRight(deviceInfo, deviceTypeWidth) + " " +
+			padRight(vendor, vendorWidth) + " " +
+			padRight(deviceType, typeWidth) + " " +
 			padLeft(rttText, 8) + " " + // Right-align (Dezimaltabulator)
 			padRight(firstSeen, 13) + " " +
-			padLeft(formatDuration(statusDuration), 16) + " " + // Right-align (Dezimaltabulator)
+			padLeft(formatDuration(statusDuration), 12) + " " + // Right-align (Dezimaltabulator)
 			flapNum
 
 		printTableRow(rowContent, termWidth)
 	}
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string) {
+func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -1315,7 +1350,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 		// Move to home and redraw (no clear = less flicker)
 		fmt.Print("\033[H")
 		// Draw btop-inspired layout (includes status line inside box)
-		drawBtopLayout(states, refTime, network, watchInterval, watchMode, scanCount, currentScanDuration, remaining)
+		drawBtopLayout(states, refTime, network, watchInterval, watchMode, scanCount, currentScanDuration, remaining, activeThreads)
 		// Clear any leftover content
 		fmt.Print("\033[J")
 	}
@@ -1466,7 +1501,7 @@ func performQuickReachabilityCheck(deviceStates map[string]*DeviceState) {
 	wg.Wait()
 }
 
-func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState) {
+func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState, activeThreads *int32) {
 	// Phase 2: Slow background lookups for hosts without DNS names
 	// DNS was already tried in Phase 1 (performInitialDNSLookups)
 	// This focuses on alternative methods: mDNS/Bonjour, NetBIOS, LLMNR, and HTTP
@@ -1501,7 +1536,13 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 			case <-ctx.Done():
 				return
 			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
+				// Increment active thread counter
+				atomic.AddInt32(activeThreads, 1)
+				defer func() {
+					// Decrement counter when done
+					atomic.AddInt32(activeThreads, -1)
+					<-semaphore
+				}()
 			}
 
 			// Mark that we're attempting a lookup now
