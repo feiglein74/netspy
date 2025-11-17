@@ -23,7 +23,7 @@ Modernes Netzwerk-Discovery-Tool in Go zur Überwachung von Netzwerkinfrastruktu
 ### Voraussetzungen
 
 - Go 1.21 oder höher
-- Terminal-Fenster: Mindestens 81 Spalten x 15 Zeilen für Watch-Modus
+- Terminal-Fenster: Mindestens 80 Spalten x 15 Zeilen für Watch-Modus (VT100 Standard)
 
 ### Build
 
