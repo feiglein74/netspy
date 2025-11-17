@@ -4,13 +4,10 @@ Modernes Netzwerk-Discovery-Tool in Go zur Überwachung von Netzwerkinfrastruktu
 
 ## Features
 
-- **Moderne Bubbletea UI** - Terminal User Interface mit Charmbracelet Framework
-  - Scrollbares Device-Liste für große Netzwerke (↑/↓, PgUp/PgDn, Home/End)
-  - Live-Suche mit `/` zum Filtern nach IP, Hostname, MAC oder Vendor
-  - Responsive Layouts für verschiedene Terminal-Breiten (narrow/medium/wide)
-  - Live Countdown-Timer mit sekündlichen Updates
-  - Alt-Screen-Buffer für sauberes Exit
 - **Echtzeit-Netzwerk-Überwachung** - Kontinuierliches Monitoring mit Live-Updates
+- **Zwei UI-Modi** - Legacy ANSI (Standard) und moderne Bubbletea UI (optional)
+  - **Legacy UI**: Statische Tabelle mit ANSI-Cursor-Steuerung, In-Place-Updates
+  - **Bubbletea UI**: Scrollbares Device-Liste, Live-Suche, Responsive Layouts
 - **Mehrere Discovery-Methoden** - ICMP, ARP, Hybrid-Scanning
 - **Intelligente Geräte-Erkennung** - Automatische Identifikation von Gerätetypen (Router, Smartphone, IoT, etc.)
 - **Hostname-Auflösung** - DNS, mDNS/Bonjour, NetBIOS, LLMNR Support
@@ -74,7 +71,7 @@ netspy scan 192.168.1.0/24 -f csv
 Kontinuierliche Netzwerk-Überwachung mit Live-Updates:
 
 ```bash
-# Standard Watch mit 60s Intervall (Bubbletea UI)
+# Standard Watch mit 60s Intervall (Legacy UI)
 netspy watch 192.168.1.0/24
 
 # Kürzeres Intervall (30 Sekunden)
@@ -83,23 +80,24 @@ netspy watch 192.168.1.0/24 --interval 30s
 # Mit spezifischem Scan-Modus
 netspy watch 192.168.1.0/24 --mode hybrid --interval 30s
 
-# Legacy ANSI-UI verwenden
-netspy watch 192.168.1.0/24 --ui legacy
+# Moderne Bubbletea UI verwenden (optional)
+netspy watch 192.168.1.0/24 --ui bubbletea
 
 # Auto-Detection des Netzwerks (interaktive Auswahl)
 netspy watch
 ```
 
 **Watch-Modus Features:**
-- **Bubbletea UI (Standard)**:
+- **Legacy UI (Standard)**:
+  - Statische Tabelle mit ANSI-Cursor-Steuerung
+  - In-Place-Updates ohne Scrollen
+  - Stabil und erprobt
+- **Bubbletea UI (`--ui bubbletea`)** - Optional, experimentell:
   - Scrollbares Device-Liste mit Tastatur-Navigation (↑/↓, PgUp/PgDn, Home/End)
   - Live-Suche mit `/` (IP, Hostname, MAC, Vendor)
   - Responsive Layouts (narrow/medium/wide basierend auf Terminal-Breite)
   - Visual Scrollbar für große Netzwerke
   - Flicker-freies Rendering
-- **Legacy UI (`--ui legacy`)**:
-  - Statische Tabelle mit ANSI-Cursor-Steuerung
-  - In-Place-Updates ohne Scrollen
 - Live-Updates für Uptime/Downtime-Zähler
 - Automatische DNS-Lookups im Hintergrund
 - Reachability-Checks während Countdown
@@ -124,7 +122,7 @@ netspy watch
 **Watch-Flags:**
 - `--interval <duration>` - Scan-Intervall (Standard: 60s)
 - `--mode <mode>` - Scan-Modus (Standard: hybrid)
-- `--ui <ui>` - UI-Modus (bubbletea oder legacy, Standard: bubbletea)
+- `--ui <ui>` - UI-Modus (legacy oder bubbletea, Standard: legacy)
 
 ## Scan-Modi
 

@@ -8,14 +8,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Added
-- **Bubbletea UI für watch-Modus** - Moderne Terminal-UI mit Charmbracelet Bubbletea Framework
+- **Bubbletea UI für watch-Modus** - Moderne Terminal-UI mit Charmbracelet Bubbletea Framework (optional)
   - Scrollbares Device-Liste (↑/↓, PgUp/PgDn, Home/End) für große Netzwerke (>20 Devices)
   - Live-Suche mit `/` zum Filtern nach IP, Hostname, MAC oder Vendor
   - Responsive Layout mit automatischem Resize
   - Live Countdown-Timer mit sekündlichen Updates
-  - Mouse-Support (optional)
   - Alt-Screen-Buffer für sauberes Exit ohne Terminal-Scrollen
-- `--ui` Flag für `watch` Command: `bubbletea` (default) oder `legacy`
+- `--ui` Flag für `watch` Command: `legacy` (default) oder `bubbletea`
 - Cross-Platform Keyboard-Handling durch Bubbletea (Windows, macOS, Linux)
 - **Responsive Layouts für alle Terminal-Breiten** (narrow/medium/wide)
   - Dynamische Spaltenbreiten basierend auf Terminal-Größe
@@ -23,9 +22,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Optimierte Darstellung für verschiedene Breakpoints
 
 ### Changed
-- Bubbletea ist jetzt der Standard-UI-Modus für `watch`
-- Legacy ANSI-UI verfügbar via `--ui legacy`
-- **Legacy-UI als Default zurückgesetzt** - Mouse-Support deaktiviert aufgrund von Stabilitätsproblemen
+- **Legacy-UI ist Standard** - Stabile, erprobte ANSI-Tabellen-Ansicht als Default
+- Bubbletea UI optional verfügbar via `--ui bubbletea` (experimentell)
+- Mouse-Support in Bubbletea deaktiviert aufgrund von Stabilitätsproblemen
 
 ### Fixed
 - Windows Terminal Compatibility verbessert durch Bubbletea Framework
