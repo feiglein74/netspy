@@ -1030,8 +1030,7 @@ func runWatchBubbletea(network, mode string, interval time.Duration) error {
 	// Bubbletea Program erstellen
 	p := tea.NewProgram(
 		m,
-		tea.WithAltScreen(),       // Alt Screen Buffer verwenden
-		tea.WithMouseCellMotion(), // Mouse Support (optional)
+		tea.WithAltScreen(), // Alt Screen Buffer verwenden
 	)
 
 	// Program starten (blockiert bis Quit)
