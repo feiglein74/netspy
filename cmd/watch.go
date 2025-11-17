@@ -38,6 +38,7 @@ var (
 type DeviceState struct {
 	Host                scanner.Host
 	FirstSeen           time.Time
+	FirstSeenScan       int           // Scan number when first detected (for "new" indicator)
 	LastSeen            time.Time
 	Status              string        // "online" or "offline"
 	StatusSince         time.Time     // When current status started
@@ -287,11 +288,12 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 			} else {
 				// New device - use scanStart so all devices in this scan have same FirstSeen
 				deviceStates[ipStr] = &DeviceState{
-					Host:        host,
-					FirstSeen:   scanStart,
-					LastSeen:    scanStart,
-					Status:      "online",
-					StatusSince: scanStart,
+					Host:          host,
+					FirstSeen:     scanStart,
+					FirstSeenScan: scanCount,
+					LastSeen:      scanStart,
+					Status:        "online",
+					StatusSince:   scanStart,
 				}
 			}
 		}
@@ -968,7 +970,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 	writeLine(statusLine)
 
 	// Bottom border
-	screenBuffer.WriteString("╚" + safeRepeat("═", width-2) + "╝")
+	screenBuffer.WriteString("╚" + safeRepeat("═", width-2) + "╝\n")
 }
 
 // drawTerminalTooSmallWarning zeigt Warnung wenn Terminal zu klein ist
@@ -1032,7 +1034,7 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 	// Bottom border
 	fmt.Print(color.CyanString("╚"))
 	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
-	fmt.Print(color.CyanString("╝"))
+	fmt.Print(color.CyanString("╝\n"))
 }
 
 // drawBtopLayout renders a btop-inspired fullscreen layout
@@ -1134,7 +1136,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString("╣\n"))
 
 	// Delegate to existing responsive table rendering
-	redrawTable(states, referenceTime, currentPage)
+	redrawTable(states, referenceTime, currentPage, scanCount)
 
 	// Separator before status line
 	fmt.Print(color.CyanString("╠"))
@@ -1151,7 +1153,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	// Bottom border
 	fmt.Print(color.CyanString("╚"))
 	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
-	fmt.Print(color.CyanString("╝"))
+	fmt.Print(color.CyanString("╝\n"))
 
 	// Capture screen content für späteres Kopieren - VEREINFACHT
 	// Verwende die gleiche Logik wie oben, nur ohne Farben
@@ -1175,10 +1177,11 @@ func calculateMaxVisibleHosts(termHeight int) int {
 	// - Separator: 1
 	// - Status Line: 1
 	// - Bottom Border: 1
-	// = 4 Zeilen Footer
+	// - Cursor Line (space after ╝): 1
+	// = 5 Zeilen Footer
 	//
-	// Total: 11 Zeilen Overhead
-	overhead := 11
+	// Total: 12 Zeilen Overhead
+	overhead := 12
 	availableLines := termHeight - overhead
 
 	// Mindestens 1 Host anzeigen (auch wenn Terminal sehr klein)
@@ -1189,7 +1192,7 @@ func calculateMaxVisibleHosts(termHeight int) int {
 	return availableLines
 }
 
-func redrawTable(states map[string]*DeviceState, referenceTime time.Time, currentPage *int32) {
+func redrawTable(states map[string]*DeviceState, referenceTime time.Time, currentPage *int32, scanCount int) {
 	// Hide cursor during redraw to prevent visible cursor jumping
 	fmt.Print("\033[?25l")
 	defer fmt.Print("\033[?25h") // Show cursor when done
@@ -1210,16 +1213,16 @@ func redrawTable(states map[string]*DeviceState, referenceTime time.Time, curren
 
 	// Choose layout based on terminal width
 	if termSize.IsNarrow() {
-		redrawNarrowTable(states, referenceTime, termSize, currentPage)
+		redrawNarrowTable(states, referenceTime, termSize, currentPage, scanCount)
 	} else if termSize.IsMedium() {
-		redrawMediumTable(states, referenceTime, termSize, currentPage)
+		redrawMediumTable(states, referenceTime, termSize, currentPage, scanCount)
 	} else {
-		redrawWideTable(states, referenceTime, termSize, currentPage)
+		redrawWideTable(states, referenceTime, termSize, currentPage, scanCount)
 	}
 }
 
 // redrawNarrowTable - Kompakte Ansicht für schmale Terminals (< 100 cols)
-func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32) {
+func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32, scanCount int) {
 	width := termSize.GetDisplayWidth()
 
 	// Table header - use padRight für UTF-8-aware padding
@@ -1269,16 +1272,21 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 	visibleIPs := ips[startIdx:endIdx]
 
 	// Print each device
-	for _, ipStr := range visibleIPs {
+	for i, ipStr := range visibleIPs {
 		state := states[ipStr]
 
-		// Build IP with markers (Gateway and/or Offline)
+		// Build IP with markers (Gateway, Offline, New)
 		displayIP := ipStr
 		if state.Host.IsGateway {
 			displayIP += " [G]"
 		}
 		if state.Status == "offline" {
 			displayIP += " [!]"
+		}
+		// Mark as new if detected in last 2 scans
+		isNew := (scanCount - state.FirstSeenScan) < 2
+		if isNew {
+			displayIP += " [+]"
 		}
 
 		// UTF-8-aware truncation
@@ -1287,10 +1295,15 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 			displayIP = string(displayIPRunes[:16])
 		}
 
-		// Color IP red if offline
+		// Color IP: red if offline, green if new, otherwise use zebra striping
 		displayIPPadded := padRight(displayIP, 16)
 		if state.Status == "offline" {
 			displayIPPadded = color.RedString(displayIPPadded)
+		} else if isNew {
+			displayIPPadded = color.GreenString(displayIPPadded)
+		} else if i%2 == 1 {
+			// Zebra striping: odd rows darker
+			displayIPPadded = color.New(color.FgHiBlack).Sprint(displayIPPadded)
 		}
 
 		hostname := getHostname(state.Host)
@@ -1320,11 +1333,20 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 			statusDuration = referenceTime.Sub(state.StatusSince)
 		}
 
+		// Apply zebra striping to other columns (except IP which has its own color logic)
+		hostnamePadded := padRight(hostname, 22)
+		vendorPadded := padRight(vendor, 12)
+		uptimePadded := padLeft(formatDurationShort(statusDuration), 6)
+
+		if i%2 == 1 && state.Status != "offline" && !isNew {
+			// Zebra striping for odd rows (only if not offline/new - they have priority colors)
+			hostnamePadded = color.New(color.FgHiBlack).Sprint(hostnamePadded)
+			vendorPadded = color.New(color.FgHiBlack).Sprint(vendorPadded)
+			uptimePadded = color.New(color.FgHiBlack).Sprint(uptimePadded)
+		}
+
 		// Assemble row with UTF-8-aware padding
-		rowContent := displayIPPadded + " " +
-			padRight(hostname, 22) + " " +
-			padRight(vendor, 12) + " " +
-			padLeft(formatDurationShort(statusDuration), 6) // Right-align (Dezimaltabulator)
+		rowContent := displayIPPadded + " " + hostnamePadded + " " + vendorPadded + " " + uptimePadded
 
 		printTableRow(rowContent, width)
 	}
@@ -1337,7 +1359,7 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 }
 
 // redrawMediumTable - Standard-Ansicht für mittlere Terminals (100-139 cols)
-func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize output.TerminalSize, currentPage *int32) {
+func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize output.TerminalSize, currentPage *int32, scanCount int) {
 	width := termSize.GetDisplayWidth()
 
 	// Table header - use padRight für UTF-8-aware padding
@@ -1390,10 +1412,10 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 	visibleIPs := ips[startIdx:endIdx]
 
 	// Print each device
-	for _, ipStr := range visibleIPs {
+	for i, ipStr := range visibleIPs {
 		state := states[ipStr]
 
-		// Build IP with markers (Gateway and/or Offline)
+		// Build IP with markers (Gateway, Offline, New)
 		displayIP := ipStr
 		if state.Host.IsGateway {
 			displayIP += " [G]"
@@ -1401,11 +1423,21 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 		if state.Status == "offline" {
 			displayIP += " [!]"
 		}
+		// Mark as new if detected in last 2 scans
+		isNew := (scanCount - state.FirstSeenScan) < 2
+		if isNew {
+			displayIP += " [+]"
+		}
 
-		// Color IP red if offline
+		// Color IP: red if offline, green if new, otherwise use zebra striping
 		displayIPPadded := padRight(displayIP, 18)
 		if state.Status == "offline" {
 			displayIPPadded = color.RedString(displayIPPadded)
+		} else if isNew {
+			displayIPPadded = color.GreenString(displayIPPadded)
+		} else if i%2 == 1 {
+			// Zebra striping: odd rows darker
+			displayIPPadded = color.New(color.FgHiBlack).Sprint(displayIPPadded)
 		}
 
 		hostname := getHostname(state.Host)
@@ -1465,13 +1497,28 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 			flapNum = color.YellowString(flapNum)
 		}
 
+		// Apply zebra striping to columns (except IP and Flaps which have their own color logic)
+		hostnamePadded := padRight(hostname, 20)
+		vendorPadded := padRight(vendor, 15)
+		deviceTypePadded := padRight(deviceType, 12)
+		rttPadded := padLeft(rttText, 8)
+
+		if i%2 == 1 && state.Status != "offline" && !isNew {
+			// Zebra striping for odd rows (only if not offline/new - they have priority colors)
+			hostnamePadded = color.New(color.FgHiBlack).Sprint(hostnamePadded)
+			// macPadded already colored - skip
+			vendorPadded = color.New(color.FgHiBlack).Sprint(vendorPadded)
+			deviceTypePadded = color.New(color.FgHiBlack).Sprint(deviceTypePadded)
+			rttPadded = color.New(color.FgHiBlack).Sprint(rttPadded)
+		}
+
 		// Assemble row with UTF-8-aware padding
 		rowContent := displayIPPadded + " " +
-			padRight(hostname, 20) + " " +
+			hostnamePadded + " " +
 			macPadded + " " +
-			padRight(vendor, 15) + " " +
-			padRight(deviceType, 12) + " " +
-			padLeft(rttText, 8) + " " + // Right-align (Dezimaltabulator)
+			vendorPadded + " " +
+			deviceTypePadded + " " +
+			rttPadded + " " +
 			flapNum
 
 		printTableRow(rowContent, width)
@@ -1485,7 +1532,7 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 }
 
 // redrawWideTable - Volle Ansicht für breite Terminals (>= 140 cols)
-func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32) {
+func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32, scanCount int) {
 	// Calculate dynamic column widths based on terminal size
 	termWidth := termSize.GetDisplayWidth()
 
@@ -1554,10 +1601,10 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	visibleIPs := ips[startIdx:endIdx]
 
 	// Print each device
-	for _, ipStr := range visibleIPs {
+	for i, ipStr := range visibleIPs {
 		state := states[ipStr]
 
-		// Build IP with markers (Gateway and/or Offline)
+		// Build IP with markers (Gateway, Offline, New)
 		displayIP := ipStr
 		if state.Host.IsGateway {
 			displayIP += " [G]"
@@ -1565,11 +1612,21 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		if state.Status == "offline" {
 			displayIP += " [!]"
 		}
+		// Mark as new if detected in last 2 scans
+		isNew := (scanCount - state.FirstSeenScan) < 2
+		if isNew {
+			displayIP += " [+]"
+		}
 
-		// Color IP red if offline
+		// Color IP: red if offline, green if new, otherwise use zebra striping
 		displayIPPadded := padRight(displayIP, 17)
 		if state.Status == "offline" {
 			displayIPPadded = color.RedString(displayIPPadded)
+		} else if isNew {
+			displayIPPadded = color.GreenString(displayIPPadded)
+		} else if i%2 == 1 {
+			// Zebra striping: odd rows darker
+			displayIPPadded = color.New(color.FgHiBlack).Sprint(displayIPPadded)
 		}
 
 		// Hostname - use dynamic width with UTF-8 awareness
@@ -1578,6 +1635,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		if len(hostnameRunes) > hostnameWidth {
 			hostname = string(hostnameRunes[:hostnameWidth-1]) + "…"
 		}
+		hostnamePadded := padRight(hostname, hostnameWidth)
 
 		// Format MAC address - handle color after padding
 		mac := state.Host.MAC
@@ -1598,6 +1656,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		if len(vendorRunes) > vendorWidth {
 			vendor = string(vendorRunes[:vendorWidth-1]) + "…"
 		}
+		vendorPadded := padRight(vendor, vendorWidth)
 
 		// Device type classification - use dynamic width
 		deviceType := state.Host.DeviceType
@@ -1608,8 +1667,10 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		if len(deviceTypeRunes) > typeWidth {
 			deviceType = string(deviceTypeRunes[:typeWidth-1]) + "…"
 		}
+		deviceTypePadded := padRight(deviceType, typeWidth)
 
 		firstSeen := state.FirstSeen.Format("15:04:05")
+		firstSeenPadded := padRight(firstSeen, 13)
 
 		// Calculate uptime/downtime based on status
 		var statusDuration time.Duration
@@ -1619,6 +1680,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		} else {
 			statusDuration = referenceTime.Sub(state.StatusSince)
 		}
+		uptimePadded := padLeft(formatDuration(statusDuration), 12)
 
 		// Format RTT
 		rttText := "-"
@@ -1632,6 +1694,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 				rttText = fmt.Sprintf("%.2fs", rtt.Seconds())
 			}
 		}
+		rttPadded := padLeft(rttText, 8)
 
 		// Format flap count - UTF-8 aware padding
 		flapStr := fmt.Sprintf("%d", state.FlapCount)
@@ -1640,15 +1703,25 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			flapNum = color.YellowString(flapNum)
 		}
 
+		// Apply zebra striping to non-colored columns (odd rows get darker)
+		if i%2 == 1 && state.Status != "offline" && !isNew {
+			hostnamePadded = color.New(color.FgHiBlack).Sprint(hostnamePadded)
+			vendorPadded = color.New(color.FgHiBlack).Sprint(vendorPadded)
+			deviceTypePadded = color.New(color.FgHiBlack).Sprint(deviceTypePadded)
+			rttPadded = color.New(color.FgHiBlack).Sprint(rttPadded)
+			firstSeenPadded = color.New(color.FgHiBlack).Sprint(firstSeenPadded)
+			uptimePadded = color.New(color.FgHiBlack).Sprint(uptimePadded)
+		}
+
 		// Manuelles Zusammenbauen der Row mit UTF-8-aware padding
 		rowContent := displayIPPadded + " " +
-			padRight(hostname, hostnameWidth) + " " +
+			hostnamePadded + " " +
 			macPadded + " " +
-			padRight(vendor, vendorWidth) + " " +
-			padRight(deviceType, typeWidth) + " " +
-			padLeft(rttText, 8) + " " + // Right-align (Dezimaltabulator)
-			padRight(firstSeen, 13) + " " +
-			padLeft(formatDuration(statusDuration), 12) + " " + // Right-align (Dezimaltabulator)
+			vendorPadded + " " +
+			deviceTypePadded + " " +
+			rttPadded + " " + // Right-align (Dezimaltabulator)
+			firstSeenPadded + " " +
+			uptimePadded + " " + // Right-align (Dezimaltabulator)
 			flapNum
 
 		printTableRow(rowContent, termWidth)
@@ -1810,10 +1883,9 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			} else {
 				// NOT a 5-second mark: Update only the header line with thread count (fast!)
 				// This gives live thread count updates every second without full redraw flicker
-				// DEAKTIVIERT: Test ob dies das Überschreibe-Problem verursacht
-				// redrawMutex.Lock()
-				// updateHeaderLineOnly(scanCount, activeThreads)
-				// redrawMutex.Unlock()
+				redrawMutex.Lock()
+				updateHeaderLineOnly(scanCount, activeThreads)
+				redrawMutex.Unlock()
 			}
 		}
 	}
