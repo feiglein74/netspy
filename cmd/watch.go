@@ -108,23 +108,53 @@ func sortIPs(ips []string, states map[string]*DeviceState, sortState *SortState,
 		case SortByHostname:
 			hostI := getHostname(stateI.Host)
 			hostJ := getHostname(stateJ.Host)
-			less = hostI < hostJ
+			if hostI == hostJ {
+				// Secondary sort by IP for stable ordering
+				less = compareIPs(ips[i], ips[j])
+			} else {
+				less = hostI < hostJ
+			}
 		case SortByMAC:
 			macI := stateI.Host.MAC
 			macJ := stateJ.Host.MAC
-			less = macI < macJ
+			if macI == macJ {
+				// Secondary sort by IP for stable ordering
+				less = compareIPs(ips[i], ips[j])
+			} else {
+				less = macI < macJ
+			}
 		case SortByVendor:
 			vendorI := getVendor(stateI.Host)
 			vendorJ := getVendor(stateJ.Host)
-			less = vendorI < vendorJ
+			if vendorI == vendorJ {
+				// Secondary sort by IP for stable ordering
+				less = compareIPs(ips[i], ips[j])
+			} else {
+				less = vendorI < vendorJ
+			}
 		case SortByDeviceType:
 			typeI := stateI.Host.DeviceType
 			typeJ := stateJ.Host.DeviceType
-			less = typeI < typeJ
+			if typeI == typeJ {
+				// Secondary sort by IP for stable ordering
+				less = compareIPs(ips[i], ips[j])
+			} else {
+				less = typeI < typeJ
+			}
 		case SortByRTT:
-			less = stateI.Host.RTT < stateJ.Host.RTT
+			if stateI.Host.RTT == stateJ.Host.RTT {
+				// Secondary sort by IP for stable ordering
+				less = compareIPs(ips[i], ips[j])
+			} else {
+				less = stateI.Host.RTT < stateJ.Host.RTT
+			}
 		case SortByFirstSeen:
-			less = stateI.FirstSeen.Before(stateJ.FirstSeen)
+			if stateI.FirstSeen.Equal(stateJ.FirstSeen) {
+				// Secondary sort by IP for stable ordering
+				less = compareIPs(ips[i], ips[j])
+			} else {
+				less = stateI.FirstSeen.Before(stateJ.FirstSeen)
+			}
 		case SortByUptime:
 			// Calculate uptime for comparison
 			var uptimeI, uptimeJ time.Duration
@@ -140,9 +170,19 @@ func sortIPs(ips []string, states map[string]*DeviceState, sortState *SortState,
 			} else {
 				uptimeJ = referenceTime.Sub(stateJ.StatusSince)
 			}
-			less = uptimeI < uptimeJ
+			if uptimeI == uptimeJ {
+				// Secondary sort by IP for stable ordering
+				less = compareIPs(ips[i], ips[j])
+			} else {
+				less = uptimeI < uptimeJ
+			}
 		case SortByFlaps:
-			less = stateI.FlapCount < stateJ.FlapCount
+			if stateI.FlapCount == stateJ.FlapCount {
+				// Secondary sort by IP for stable ordering
+				less = compareIPs(ips[i], ips[j])
+			} else {
+				less = stateI.FlapCount < stateJ.FlapCount
+			}
 		default:
 			less = compareIPs(ips[i], ips[j])
 		}
