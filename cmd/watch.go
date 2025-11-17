@@ -71,7 +71,7 @@ func init() {
 	watchCmd.Flags().DurationVar(&watchInterval, "interval", 60*time.Second, "Scan interval")
 	watchCmd.Flags().StringVar(&watchMode, "mode", "hybrid", "Scan mode (hybrid, arp, fast, thorough, conservative)")
 	watchCmd.Flags().IntSliceVarP(&ports, "ports", "p", []int{}, "Specific ports to scan")
-	watchCmd.Flags().StringVar(&watchUI, "ui", "bubbletea", "UI mode (bubbletea, legacy)")
+	watchCmd.Flags().StringVar(&watchUI, "ui", "legacy", "UI mode (legacy, bubbletea)")
 }
 
 func runWatch(cmd *cobra.Command, args []string) error {
