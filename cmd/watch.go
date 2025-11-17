@@ -266,7 +266,10 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 
 		redrawMutex.Unlock()
 
-		// Start background DNS lookups while countdown is running
+		// Phase 1: Quick DNS lookups immediately after scan (blocks briefly for fast results)
+		performInitialDNSLookups(ctx, deviceStates)
+
+		// Phase 2: Start slow background lookups (mDNS/NetBIOS/LLMNR/HTTP) while countdown is running
 		if nextScan > 0 {
 			go performBackgroundDNSLookups(ctx, deviceStates)
 
@@ -1460,8 +1463,10 @@ func performQuickReachabilityCheck(deviceStates map[string]*DeviceState) {
 }
 
 func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState) {
-	// Perform comprehensive hostname lookups for all online hosts in the background
-	// Uses: HTTP, DNS, mDNS/Bonjour, NetBIOS, and LLMNR
+	// Phase 2: Slow background lookups for hosts without DNS names
+	// DNS was already tried in Phase 1 (performInitialDNSLookups)
+	// This focuses on alternative methods: mDNS/Bonjour, NetBIOS, LLMNR, and HTTP
+	// Only processes hosts without hostnames or retries after 5 minutes
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 10) // Limit concurrent lookups
 
@@ -1516,6 +1521,64 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 					s.Host.Vendor,
 					s.Host.Ports,
 				)
+			}
+		}(ipStr, state)
+	}
+
+	wg.Wait()
+}
+
+// performInitialDNSLookups performs fast DNS lookups immediately after scan
+// Only uses DNS (no mDNS/NetBIOS/etc) for quick wins
+func performInitialDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState) {
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 50) // High concurrency for fast DNS
+
+	for ipStr, state := range deviceStates {
+		// Skip offline hosts
+		if state.Status != "online" {
+			continue
+		}
+
+		// Skip if we already have a hostname
+		if state.Host.Hostname != "" {
+			continue
+		}
+
+		wg.Add(1)
+		go func(ip string, s *DeviceState) {
+			defer wg.Done()
+
+			select {
+			case <-ctx.Done():
+				return
+			case semaphore <- struct{}{}:
+				defer func() { <-semaphore }()
+			}
+
+			// Only DNS - super fast!
+			parsedIP := net.ParseIP(ip)
+			if parsedIP != nil {
+				if names, err := net.LookupAddr(parsedIP.String()); err == nil && len(names) > 0 {
+					hostname := names[0]
+					// Clean hostname
+					hostname = strings.TrimSuffix(hostname, ".")
+					hostname = strings.TrimSpace(hostname)
+
+					if hostname != "" {
+						s.Host.Hostname = hostname
+						s.Host.HostnameSource = "dns"
+						s.LastHostnameLookup = time.Now()
+
+						// Update device type
+						s.Host.DeviceType = discovery.DetectDeviceType(
+							s.Host.Hostname,
+							s.Host.MAC,
+							s.Host.Vendor,
+							s.Host.Ports,
+						)
+					}
+				}
 			}
 		}(ipStr, state)
 	}
