@@ -4,13 +4,18 @@ Modernes Netzwerk-Discovery-Tool in Go zur Überwachung von Netzwerkinfrastruktu
 
 ## Features
 
+- **Moderne Bubbletea UI** - Terminal User Interface mit Charmbracelet Framework
+  - Scrollbares Device-Liste für große Netzwerke (↑/↓, PgUp/PgDn, Home/End)
+  - Live-Suche mit `/` zum Filtern nach IP, Hostname, MAC oder Vendor
+  - Responsive Layouts für verschiedene Terminal-Breiten (narrow/medium/wide)
+  - Live Countdown-Timer mit sekündlichen Updates
+  - Alt-Screen-Buffer für sauberes Exit
 - **Echtzeit-Netzwerk-Überwachung** - Kontinuierliches Monitoring mit Live-Updates
 - **Mehrere Discovery-Methoden** - ICMP, ARP, Hybrid-Scanning
 - **Intelligente Geräte-Erkennung** - Automatische Identifikation von Gerätetypen (Router, Smartphone, IoT, etc.)
 - **Hostname-Auflösung** - DNS, mDNS/Bonjour, NetBIOS, LLMNR Support
 - **MAC-Vendor-Datenbank** - 976+ OUI-Einträge für Hersteller-Identifikation
 - **Gateway-Erkennung** - Automatische Markierung des Default-Gateways
-- **Statische Tabellen-Ansicht** - In-Place-Updates ohne Scrollen (Watch-Modus)
 - **Uptime/Downtime-Tracking** - Verfolgung von Geräteverfügbarkeit über Zeit
 - **Flapping-Detection** - Erkennung instabiler Netzwerkverbindungen
 - **RTT-Messung** - Response-Time-Tracking für Performance-Monitoring
@@ -69,7 +74,7 @@ netspy scan 192.168.1.0/24 -f csv
 Kontinuierliche Netzwerk-Überwachung mit Live-Updates:
 
 ```bash
-# Standard Watch mit 60s Intervall
+# Standard Watch mit 60s Intervall (Bubbletea UI)
 netspy watch 192.168.1.0/24
 
 # Kürzeres Intervall (30 Sekunden)
@@ -78,12 +83,23 @@ netspy watch 192.168.1.0/24 --interval 30s
 # Mit spezifischem Scan-Modus
 netspy watch 192.168.1.0/24 --mode hybrid --interval 30s
 
+# Legacy ANSI-UI verwenden
+netspy watch 192.168.1.0/24 --ui legacy
+
 # Auto-Detection des Netzwerks (interaktive Auswahl)
 netspy watch
 ```
 
 **Watch-Modus Features:**
-- Statische Tabelle mit ANSI-Cursor-Steuerung (kein Scrollen)
+- **Bubbletea UI (Standard)**:
+  - Scrollbares Device-Liste mit Tastatur-Navigation (↑/↓, PgUp/PgDn, Home/End)
+  - Live-Suche mit `/` (IP, Hostname, MAC, Vendor)
+  - Responsive Layouts (narrow/medium/wide basierend auf Terminal-Breite)
+  - Visual Scrollbar für große Netzwerke
+  - Flicker-freies Rendering
+- **Legacy UI (`--ui legacy`)**:
+  - Statische Tabelle mit ANSI-Cursor-Steuerung
+  - In-Place-Updates ohne Scrollen
 - Live-Updates für Uptime/Downtime-Zähler
 - Automatische DNS-Lookups im Hintergrund
 - Reachability-Checks während Countdown
@@ -108,6 +124,7 @@ netspy watch
 **Watch-Flags:**
 - `--interval <duration>` - Scan-Intervall (Standard: 60s)
 - `--mode <mode>` - Scan-Modus (Standard: hybrid)
+- `--ui <ui>` - UI-Modus (bubbletea oder legacy, Standard: bubbletea)
 
 ## Scan-Modi
 
@@ -177,7 +194,7 @@ ginkgo -r -v
 ```
 
 **Test-Framework:** Ginkgo (BDD) + Gomega (Matcher)
-**Test-Coverage:** 42 Specs in 11 Test-Dateien
+**Test-Coverage:** 50 Specs in 11 Test-Dateien (46 passing, 2 failing, 2 skipped)
 **Plattformspezifische Tests:** Build-Tags für Windows, macOS, Linux
 
 ### Code-Style
@@ -232,7 +249,7 @@ watch:
 - Einige IoT-Geräte antworten nicht auf mDNS/LLMNR
 - ICMP-Ping erfordert Admin-Rechte (aktuell nur TCP)
 - IPv6-Support noch nicht implementiert
-- 16 von 42 Tests schlagen aktuell fehl (siehe [TODO.md](TODO.md))
+- 2 von 50 Tests schlagen aktuell fehl (siehe [TODO.md](TODO.md))
 
 ## Roadmap
 

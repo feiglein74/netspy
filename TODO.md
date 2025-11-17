@@ -6,13 +6,11 @@
 ## High Priority
 
 ### 🎨 UI/UX Improvements
-- [ ] **Responsive Tabellen für Watch-Mode implementieren**
-  - Aktuell: Nur scan-Modus hat responsive Tabellen (3 Layouts: narrow/medium/wide)
-  - Watch-Mode verwendet feste Tabellen-Breite
-  - Herausforderung: ANSI-Escape-Codes für Live-Updates, dynamisches Zeilen-Tracking
-  - Komplexität: Cursor-Positioning muss für jedes Layout neu berechnet werden
-  - Terminal-Größen: < 100 cols (narrow), 100-139 (medium), >= 140 (wide)
-  - Siehe: `pkg/output/table_responsive.go` für scan-Implementierung
+- [x] **Responsive Tabellen für Watch-Mode implementiert** ✅
+  - Bubbletea UI unterstützt jetzt responsive Layouts
+  - Dynamische Spaltenbreiten für alle drei Breakpoints
+  - Wide-Layout enthält DeviceType und RTT Spalten
+  - Thread-Safe Message-Pattern eliminiert DNS-Hostname-Flickering
 
 ### 🔴 Cross-Platform Critical Issues (v0.2.0)
 - [ ] **Spinner-Fix auf Windows testen** (nach macOS-Fix)
@@ -25,12 +23,14 @@
   - [ ] go vet in Build-Prozess integrieren
   - [ ] go fmt Pre-Commit Hook
   - [ ] Code Coverage Reporting (Ziel: >80%)
-- [ ] **Fix failing tests** (16 von 48 Tests schlagen fehl)
-  - [ ] `GenerateIPsFromCIDR` - IP-Range-Logik (erwartet alle IPs inkl. Netz/Broadcast)
-  - [ ] `DetectDeviceType` - Gibt leere Strings zurück statt Gerätetypen
-  - [ ] `GetMACVendor` - MAC-Format-Handling (Dashes, ohne Separator)
-  - [ ] `ScanARPTable` - Gibt nil statt leeres Array zurück
-  - [ ] `Scanner.Scan` - Localhost-Detection schlägt fehl
+- [ ] **Fix failing tests** (2 von 50 Tests schlagen fehl - deutlich verbessert! ✅)
+  - [x] `GenerateIPsFromCIDR` - Behoben ✅
+  - [x] `DetectDeviceType` - Behoben ✅
+  - [x] `GetMACVendor` - Behoben ✅
+  - [x] `ScanARPTable` - Behoben ✅
+  - [x] `Scanner.Scan` - Behoben ✅
+  - [ ] `IsLikelyGateway` - Gateway-Heuristik für /8 Netzwerke (.0.0.254)
+  - [ ] `IsLikelyGateway` - Edge Case (IP außerhalb Netzwerk)
 - [ ] **Tests für pkg/output/ hinzufügen** (aktuell keine Tests)
 - [ ] **CI/CD Pipeline**
   - [ ] GitHub Actions Workflow für Tests

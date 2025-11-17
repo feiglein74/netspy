@@ -17,17 +17,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Alt-Screen-Buffer für sauberes Exit ohne Terminal-Scrollen
 - `--ui` Flag für `watch` Command: `bubbletea` (default) oder `legacy`
 - Cross-Platform Keyboard-Handling durch Bubbletea (Windows, macOS, Linux)
+- **Responsive Layouts für alle Terminal-Breiten** (narrow/medium/wide)
+  - Dynamische Spaltenbreiten basierend auf Terminal-Größe
+  - DeviceType und RTT Spalten im Wide-Layout
+  - Optimierte Darstellung für verschiedene Breakpoints
 
 ### Changed
 - Bubbletea ist jetzt der Standard-UI-Modus für `watch`
 - Legacy ANSI-UI verfügbar via `--ui legacy`
+- **Legacy-UI als Default zurückgesetzt** - Mouse-Support deaktiviert aufgrund von Stabilitätsproblemen
 
 ### Fixed
 - Windows Terminal Compatibility verbessert durch Bubbletea Framework
 - Flickering Issues auf Windows durch Bubbletea v1.3.10 Fixes
 - Scrolling funktioniert jetzt auch bei großen Netzwerken (254+ Devices)
+- **DNS-Hostname-Flickering eliminiert** - Thread-Safe Message-Pattern implementiert
+- **Responsive Layout-Rendering** - Vollständige Unterstützung für alle drei Breakpoints
 
-- Ginkgo/Gomega BDD Testing Framework (42 Specs in 11 Test-Dateien)
+- Ginkgo/Gomega BDD Testing Framework (50 Specs in 11 Test-Dateien)
 - Plattformspezifische Tests (Windows, macOS, Linux) mit Build-Tags
 - Netzwerk-Auto-Detection für Watch-Command
 - Unified Scan Mode Flags (--mode statt separate Flags)
@@ -108,12 +115,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Bekannte Probleme
 
-- 16 von 42 Tests schlagen aktuell fehl (siehe TODO.md):
-  - `GenerateIPsFromCIDR` - IP-Range-Logik
-  - `DetectDeviceType` - Leere String-Rückgaben
-  - `GetMACVendor` - MAC-Format-Handling
-  - `ScanARPTable` - Nil statt leeres Array
-  - `Scanner.Scan` - Localhost-Detection
+- 2 von 50 Tests schlagen aktuell fehl (siehe TODO.md):
+  - `IsLikelyGateway` - Gateway-Heuristik für /8 Netzwerke (.0.0.254)
+  - `IsLikelyGateway` - Edge Case (IP außerhalb Netzwerk)
 - Tabellen-Redraw bei wachsender Tabelle (Flaps-Spalte)
 - Einige IoT-Geräte antworten nicht auf mDNS/LLMNR
 - Kein IPv6-Support
