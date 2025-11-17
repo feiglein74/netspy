@@ -1,0 +1,54 @@
+
+Fehler: Nicht erkannte oder unvollstÑndige Befehlszeile.
+
+VERWENDUNG:
+    ipconfig [/allcompartments] [/? | /all |
+                                 /renew [adapter] | /release [adapter] |
+                                 /renew6 [adapter] | /release6 [adapter] |
+                                 /flushdns | /displaydns | /registerdns |
+                                 /showclassid adapter |
+                                 /setclassid adapter [classid] |
+                                 /showclassid6 adapter |
+                                 /setclassid6 adapter [classid] ]
+
+wobei:
+    adapter             Verbindungsname
+                       (Die Platzhalter * und ? sind zulÑssig, siehe Beispiele)
+
+    Optionen:
+       /?               Zeigt diese Hilfenachricht an.
+       /all             Zeigt alle Konfigurationsinformationen an.
+       /release         Gibt die IPv4-Adresse fÅr den angegebenen Adapter frei.
+       /release6        Gibt die IPv6-Adresse fÅr den angegebenen Adapter frei.
+       /renew           Erneuert die IPv4-Adresse fÅr den angegebenen Adapter.
+       /renew6          Erneuert die IPv6-Adresse fÅr den angegebenen Adapter.
+       /flushdns        Leert den DNS-Konfliktlîsercache.
+       /registerdns     Aktualisiert alle DHCP-Leases und registriert die DNS-Namen erneut.
+       /displaydns      Zeigt den Inhalt des DNS-Konfliktlîsercaches an.
+       /showclassid     Zeigt alle fÅr den Adapter zugelassenen DHCP-Klassen-IDs an.
+       /setclassid      éndert die DHCP-Klassen-ID.
+       /showclassid6    Zeigt alle fÅr den Adapter zugelassenen IPv6-DHCP-Klassen-IDs an.
+       /setclassid6     éndert die IPv6-DHCP-Klassen-ID.
+
+
+StandardmÑ·ig werden nur die IP-Adresse, die Subnetzmaske und das
+Standardgateway fÅr die einzelnen an TCP/IP gebundenen Adapter angezeigt.
+
+Wenn bei ,Release" und ,Renew" kein Adaptername angegeben wird, werden die IP-Adressen
+-Leases fÅr alle an TCP/IP gebundenen Adapter freigegeben oder erneuert.
+
+Wenn bei ,Setclassid" und ,Setclassid6" keine Klassen-ID angegeben wird, dann wird die Klassen-ID entfernt.
+
+Beispiele:
+    > ipconfig                       ... Zeigt Informationen an
+    > ipconfig /all                  ... Zeigt detaillierte Informationen an
+    > ipconfig /renew                ... erneuert alle Adapter
+    > ipconfig /renew EL*            ... erneuert alle Verbindungen, dessen
+                                         Name mit ,EL" beginnt
+    > ipconfig /release *Con*        ... gibt alle Åbereinstimmenden Verbindungen frei,
+                                         z.B. ,Wired Ethernet Connection 1" oder
+                                             ,Wired Ethernet Connection 2"
+    > ipconfig /allcompartments      ... Zeigt Informationen Åber alle
+                                         Datendepots an
+    > ipconfig /allcompartments /all ... Zeigt detaillierte Informationen Åber alle
+                                         Datendepots an
