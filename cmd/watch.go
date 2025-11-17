@@ -617,6 +617,16 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dd %dh", days, hours)
 }
 
+// padLeft pads string on the left (right-aligns) to specified width
+// Used for numeric/duration alignment (like decimal tabs in DTP)
+func padLeft(s string, width int) string {
+	currentLen := runeLen(s)
+	if currentLen >= width {
+		return s
+	}
+	return strings.Repeat(" ", width-currentLen) + s
+}
+
 func moveCursorUp(lines int) {
 	for i := 0; i < lines; i++ {
 		fmt.Print("\033[A") // Move up one line
@@ -831,7 +841,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 		// Manuelles Padding mit UTF-8-awareness
 		paddedIP := padRight(displayIP, 17)      // 17 Zeichen für IP
 		paddedHostname := padRight(hostname, 18) // 18 Zeichen für Hostname
-		paddedUptime := padRight(formatDurationShort(statusDuration), 8)
+		paddedUptime := padLeft(formatDurationShort(statusDuration), 8) // Right-align (Dezimaltabulator)
 
 		row := paddedIP + statusIcon + "    " + paddedHostname + paddedUptime
 		writeLine(row)
@@ -914,7 +924,9 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	// Info line 1 (static - doesn't change)
 	col1_line1 := padRight(fmt.Sprintf("Network: %s", network), col1Width)
 	col2_line1 := padRight(fmt.Sprintf("Mode: %s", mode), col2Width)
-	col3_line1 := padRight(fmt.Sprintf("Interval: %v", interval), col3Width)
+	// Right-align interval value (Dezimaltabulator)
+	intervalValue := fmt.Sprintf("%v", interval)
+	col3_line1 := "Interval: " + padLeft(intervalValue, col3Width-10) // 10 = len("Interval: ")
 	line1 := fmt.Sprintf("%s  │  %s  │  %s", col1_line1, col2_line1, col3_line1)
 	printBoxLine(line1, width)
 
@@ -924,7 +936,9 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 		color.GreenString("↑"), onlineCount,
 		color.RedString("↓"), offlineCount), col1Width)
 	col2_line2 := padRight(fmt.Sprintf("Flaps: %d", totalFlaps), col2Width)
-	col3_line2 := padRight(fmt.Sprintf("Scan: %s", formatDuration(scanDuration)), col3Width)
+	// Right-align scan value (Dezimaltabulator)
+	scanValue := formatDuration(scanDuration)
+	col3_line2 := "Scan: " + padLeft(scanValue, col3Width-6) // 6 = len("Scan: ")
 	line2 := fmt.Sprintf("%s  │  %s  │  %s", col1_line2, col2_line2, col3_line2)
 	printBoxLine(line2, width)
 
@@ -1049,7 +1063,7 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		// Assemble row with UTF-8-aware padding
 		rowContent := displayIPPadded + " " +
 			padRight(hostname, 18) + " " +
-			padRight(formatDurationShort(statusDuration), 8)
+			padLeft(formatDurationShort(statusDuration), 8) // Right-align (Dezimaltabulator)
 
 		printTableRow(rowContent, width)
 	}
@@ -1147,7 +1161,7 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 			padRight(hostname, 20) + " " +
 			macPadded + " " +
 			padRight(deviceInfo, 14) + " " +
-			padRight(rttText, 8) + " " +
+			padLeft(rttText, 8) + " " + // Right-align (Dezimaltabulator)
 			flapNum
 
 		printTableRow(rowContent, width)
@@ -1177,7 +1191,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		padRight("Device Type", deviceTypeWidth) + " " +
 		padRight("RTT", 8) + " " +
 		padRight("First Seen", 13) + " " +
-		padRight("Uptime/Down", 16) + " " +
+		padRight("Uptime", 16) + " " +
 		padRight("Flaps", 5)
 
 	printTableRow(color.CyanString(headerContent), termWidth)
@@ -1273,9 +1287,9 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			padRight(hostname, hostnameWidth) + " " +
 			macPadded + " " +
 			padRight(deviceInfo, deviceTypeWidth) + " " +
-			padRight(rttText, 8) + " " +
+			padLeft(rttText, 8) + " " + // Right-align (Dezimaltabulator)
 			padRight(firstSeen, 13) + " " +
-			padRight(formatDuration(statusDuration), 16) + " " +
+			padLeft(formatDuration(statusDuration), 16) + " " + // Right-align (Dezimaltabulator)
 			flapNum
 
 		printTableRow(rowContent, termWidth)
