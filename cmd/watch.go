@@ -974,7 +974,6 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 
 	// Table header - use padRight für UTF-8-aware padding
 	headerContent := padRight("IP", 16) + " " +
-		padRight("Stat", 4) + " " +
 		padRight("Hostname", 18) + " " +
 		padRight("Uptime", 8)
 	printTableRow(color.CyanString(headerContent), width)
@@ -992,23 +991,25 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 	for _, ipStr := range ips {
 		state := states[ipStr]
 
-		// Status icon and color - only show icon for offline
-		statusText := ""
-		statusColor := color.GreenString
-		if state.Status == "offline" {
-			statusText = "[-] "
-			statusColor = color.RedString
-		}
-
-		// Check if this is the gateway and add marker to IP
+		// Build IP with markers (Gateway and/or Offline)
 		displayIP := ipStr
 		if state.Host.IsGateway {
-			displayIP = ipStr + " G"
+			displayIP += " [G]"
 		}
+		if state.Status == "offline" {
+			displayIP += " [!]"
+		}
+
 		// UTF-8-aware truncation
 		displayIPRunes := []rune(displayIP)
 		if len(displayIPRunes) > 16 {
 			displayIP = string(displayIPRunes[:16])
+		}
+
+		// Color IP red if offline
+		displayIPPadded := padRight(displayIP, 16)
+		if state.Status == "offline" {
+			displayIPPadded = color.RedString(displayIPPadded)
 		}
 
 		hostname := getHostname(state.Host)
@@ -1027,12 +1028,8 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 			statusDuration = referenceTime.Sub(state.StatusSince)
 		}
 
-		// Format colored status - pad to 4 chars (for "[-] " or "    ")
-		coloredStatus := statusColor(padRight(statusText, 4))
-
 		// Assemble row with UTF-8-aware padding
-		rowContent := padRight(displayIP, 16) + " " +
-			coloredStatus + " " +
+		rowContent := displayIPPadded + " " +
 			padRight(hostname, 18) + " " +
 			padRight(formatDurationShort(statusDuration), 8)
 
@@ -1046,7 +1043,6 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 
 	// Table header - use padRight für UTF-8-aware padding
 	headerContent := padRight("IP Address", 18) + " " +
-		padRight("Status", 11) + " " +
 		padRight("Hostname", 20) + " " +
 		padRight("MAC Address", 18) + " " +
 		padRight("Device Type", 14) + " " +
@@ -1067,19 +1063,19 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 	for _, ipStr := range ips {
 		state := states[ipStr]
 
-		statusIcon := "    "
-		statusColor := color.GreenString
-		statusText := "online"
-		if state.Status == "offline" {
-			statusIcon = "[-] "
-			statusColor = color.RedString
-			statusText = "offline"
-		}
-
-		// Check if this is the gateway and add marker to IP
+		// Build IP with markers (Gateway and/or Offline)
 		displayIP := ipStr
 		if state.Host.IsGateway {
-			displayIP = ipStr + " [G]"
+			displayIP += " [G]"
+		}
+		if state.Status == "offline" {
+			displayIP += " [!]"
+		}
+
+		// Color IP red if offline
+		displayIPPadded := padRight(displayIP, 18)
+		if state.Status == "offline" {
+			displayIPPadded = color.RedString(displayIPPadded)
 		}
 
 		hostname := getHostname(state.Host)
@@ -1128,13 +1124,8 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 			flapNum = color.YellowString(flapNum)
 		}
 
-		// Pad status text before coloring
-		coloredStatus := statusColor(padRight(statusText, 7))
-
 		// Assemble row with UTF-8-aware padding
-		rowContent := padRight(displayIP, 18) + " " +
-			statusIcon +
-			coloredStatus + " " +
+		rowContent := displayIPPadded + " " +
 			padRight(hostname, 20) + " " +
 			macPadded + " " +
 			padRight(deviceInfo, 14) + " " +
@@ -1150,12 +1141,12 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	// Calculate dynamic column widths based on terminal size
 	termWidth := termSize.GetDisplayWidth()
 
-	// Fixed columns: IP(20) + Status(11) + MAC(18) + RTT(8) + FirstSeen(13) + Uptime(16) + Flaps(5) = 91
-	// Spaces between columns: 8 spaces = 8
+	// Fixed columns: IP(20) + MAC(18) + RTT(8) + FirstSeen(13) + Uptime(16) + Flaps(5) = 80
+	// Spaces between columns: 7 spaces = 7
 	// Borders: "║ " + " ║" = 4
-	// Total fixed: 91 + 8 + 4 = 103
+	// Total fixed: 80 + 7 + 4 = 91
 	// Remaining for Hostname + DeviceType
-	remainingWidth := termWidth - 103
+	remainingWidth := termWidth - 91
 
 	// Distribute remaining width: 60% hostname, 40% deviceType (with minimums)
 	hostnameWidth := max(25, min(50, int(float64(remainingWidth)*0.6)))
@@ -1163,7 +1154,6 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 
 	// Table header with box drawing - use padRight for UTF-8 safety
 	headerContent := padRight("IP Address", 20) + " " +
-		padRight("Status", 11) + " " +
 		padRight("Hostname", hostnameWidth) + " " +
 		padRight("MAC Address", 18) + " " +
 		padRight("Device Type", deviceTypeWidth) + " " +
@@ -1187,19 +1177,19 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	for _, ipStr := range ips {
 		state := states[ipStr]
 
-		statusIcon := "    "
-		statusColor := color.GreenString
-		statusText := "online"
-		if state.Status == "offline" {
-			statusIcon = "[-] "
-			statusColor = color.RedString
-			statusText = "offline"
-		}
-
-		// Check if this is the gateway and add marker to IP
+		// Build IP with markers (Gateway and/or Offline)
 		displayIP := ipStr
 		if state.Host.IsGateway {
-			displayIP = ipStr + " [G]"
+			displayIP += " [G]"
+		}
+		if state.Status == "offline" {
+			displayIP += " [!]"
+		}
+
+		// Color IP red if offline
+		displayIPPadded := padRight(displayIP, 20)
+		if state.Status == "offline" {
+			displayIPPadded = color.RedString(displayIPPadded)
 		}
 
 		// Hostname - use dynamic width with UTF-8 awareness
@@ -1260,13 +1250,8 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			flapNum = color.YellowString(flapNum)
 		}
 
-		// Pad status text before coloring
-		coloredStatus := statusColor(padRight(statusText, 7))
-
 		// Manuelles Zusammenbauen der Row mit UTF-8-aware padding
-		rowContent := padRight(displayIP, 20) + " " +
-			statusIcon +
-			coloredStatus + " " +
+		rowContent := displayIPPadded + " " +
 			padRight(hostname, hostnameWidth) + " " +
 			macPadded + " " +
 			padRight(deviceInfo, deviceTypeWidth) + " " +
