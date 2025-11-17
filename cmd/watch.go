@@ -331,6 +331,9 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 		threadConfig.Scan, threadConfig.Reachability, threadConfig.DNS,
 		netCIDR.String(), hostCount)
 
+	// Check if target subnet is local or remote (for UI indicators)
+	isLocal, _ := discovery.IsLocalSubnet(netCIDR)
+
 	// Clear screen and move cursor to home for clean UI start
 	fmt.Print("\033[2J\033[H")
 
@@ -518,7 +521,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 		fmt.Print("\033[H") // Move to home (0,0) without clearing
 
 		// Draw layout (will overwrite old content)
-		drawBtopLayout(deviceStates, scanStart, network, watchInterval, watchMode, scanCount, scanDuration, nextScan, &activeThreads, &currentPage, sortState)
+		drawBtopLayout(deviceStates, scanStart, network, watchInterval, watchMode, scanCount, scanDuration, nextScan, &activeThreads, &currentPage, sortState, isLocal)
 
 		// Clear any remaining lines from previous draw (if screen shrunk)
 		fmt.Print("\033[J") // Clear from cursor to end of screen
@@ -533,7 +536,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 			go performBackgroundDNSLookups(ctx, deviceStates, &activeThreads, threadConfig)
 
 			// Show countdown with periodic table updates (pass scanStart for consistent uptime)
-			showCountdownWithTableUpdates(ctx, cancel, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, keyChan, &redrawMutex, network, watchInterval, watchMode, &activeThreads, &currentPage, sortState, threadConfig)
+			showCountdownWithTableUpdates(ctx, cancel, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, keyChan, &redrawMutex, network, watchInterval, watchMode, &activeThreads, &currentPage, sortState, threadConfig, isLocal)
 		}
 	}
 }
@@ -843,19 +846,17 @@ func getVendor(host scanner.Host) string {
 	return "-"
 }
 
-// formatIPWithBoldHost formats an IP address with the host part in bold
-// based on the current CIDR mask. For example:
-// - 10.0.0.1 with /24 → "10.0.0." + BOLD("1")
-// - 192.168.1.10 with /16 → "192.168." + BOLD("1.10")
-func formatIPWithBoldHost(ip string) string {
+// splitIPNetworkHost splits an IP into network and host parts based on CIDR
+// Returns (networkPart, hostPart, ok). If splitting fails, ok is false.
+func splitIPNetworkHost(ip string) (string, string, bool) {
 	if currentCIDR == nil {
-		return ip // Fallback: no CIDR info available
+		return "", "", false
 	}
 
 	// Parse the IP address
 	parsedIP := net.ParseIP(ip)
 	if parsedIP == nil {
-		return ip // Fallback: invalid IP
+		return "", "", false
 	}
 
 	// Get CIDR mask size (e.g., 24 for /24)
@@ -864,7 +865,7 @@ func formatIPWithBoldHost(ip string) string {
 	// Split IP into octets
 	octets := strings.Split(ip, ".")
 	if len(octets) != 4 {
-		return ip // Fallback: not IPv4
+		return "", "", false
 	}
 
 	// Determine split point based on mask
@@ -881,16 +882,21 @@ func formatIPWithBoldHost(ip string) string {
 		networkOctets = 3
 	} else {
 		// /32 or other edge cases - no host part
-		return ip
+		return "", "", false
 	}
 
-	// Build network part + bold host part
+	// Build network part + host part
 	networkPart := strings.Join(octets[:networkOctets], ".") + "."
 	hostPart := strings.Join(octets[networkOctets:], ".")
 
-	// Return with bold host part
-	return networkPart + "\033[1m" + hostPart + "\033[22m"
+	return networkPart, hostPart, true
 }
+
+// formatIPWithBoldHost formats an IP address with the host part in bold
+// based on the current CIDR mask. For example:
+// - 10.0.0.1 with /24 → "10.0.0." + BOLD("1")
+// - 192.168.1.10 with /16 → "192.168." + BOLD("1.10")
+// Platform-specific implementation (see watch_windows.go, watch_darwin.go, watch_linux.go)
 
 // isLocallyAdministered checks if a MAC address is locally administered
 // The second hex digit being 2, 6, A, or E indicates a locally administered address
@@ -1384,7 +1390,7 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 }
 
 // drawBtopLayout renders a btop-inspired fullscreen layout
-func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration, activeThreads *int32, currentPage *int32, sortState *SortState) {
+func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration, activeThreads *int32, currentPage *int32, sortState *SortState, isLocal bool) {
 	termSize := output.GetTerminalSize()
 	width := termSize.GetDisplayWidth()
 
@@ -1457,7 +1463,11 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	// Spalte 3: "Interval" (8) und "Scan" (4) → max 8 → Doppelpunkt an Position 9
 
 	// Info line 1 (static - doesn't change)
-	col1_line1 := padRight("Network: "+network, col1Width)
+	networkDisplay := network
+	if !isLocal {
+		networkDisplay += " (remote)"
+	}
+	col1_line1 := padRight("Network: "+networkDisplay, col1Width)
 	col2_line1 := padRight(padRight("Mode", 5)+": "+mode, col2Width)
 	intervalValue := fmt.Sprintf("%v", interval)
 	col3_line1 := padRight(padRight("Interval", 8)+": "+intervalValue, col3Width)
@@ -1652,7 +1662,7 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 			displayIPPadded = color.GreenString(displayIPPadded)
 		} else if i%2 == 1 {
 			// Zebra striping: odd rows darker
-			displayIPPadded = color.New(color.FgHiBlack).Sprint(displayIPPadded)
+			displayIPPadded = getZebraColor().Sprint(displayIPPadded)
 		}
 
 		hostname := getHostname(state.Host)
@@ -1742,17 +1752,17 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		// Apply zebra striping to other columns (except IP which has its own color logic)
 		if i%2 == 1 && state.Status != "offline" && !isNew {
 			// Zebra striping for odd rows (only if not offline/new - they have priority colors)
-			hostnamePadded = color.New(color.FgHiBlack).Sprint(hostnamePadded)
+			hostnamePadded = getZebraColor().Sprint(hostnamePadded)
 			if !isLocallyAdministered(mac) {
-				macPadded = color.New(color.FgHiBlack).Sprint(macPadded)
+				macPadded = getZebraColor().Sprint(macPadded)
 			}
-			vendorPadded = color.New(color.FgHiBlack).Sprint(vendorPadded)
-			deviceTypePadded = color.New(color.FgHiBlack).Sprint(deviceTypePadded)
-			rttPadded = color.New(color.FgHiBlack).Sprint(rttPadded)
+			vendorPadded = getZebraColor().Sprint(vendorPadded)
+			deviceTypePadded = getZebraColor().Sprint(deviceTypePadded)
+			rttPadded = getZebraColor().Sprint(rttPadded)
 			if state.FlapCount == 0 {
-				flapPadded = color.New(color.FgHiBlack).Sprint(flapPadded)
+				flapPadded = getZebraColor().Sprint(flapPadded)
 			}
-			uptimePadded = color.New(color.FgHiBlack).Sprint(uptimePadded)
+			uptimePadded = getZebraColor().Sprint(uptimePadded)
 		}
 
 		// Assemble row with UTF-8-aware padding
@@ -1848,7 +1858,7 @@ func redrawMediumTable(states map[string]*DeviceState, referenceTime time.Time, 
 			displayIPPadded = color.GreenString(displayIPPadded)
 		} else if i%2 == 1 {
 			// Zebra striping: odd rows darker
-			displayIPPadded = color.New(color.FgHiBlack).Sprint(displayIPPadded)
+			displayIPPadded = getZebraColor().Sprint(displayIPPadded)
 		}
 
 		hostname := getHostname(state.Host)
@@ -1916,14 +1926,14 @@ func redrawMediumTable(states map[string]*DeviceState, referenceTime time.Time, 
 
 		if i%2 == 1 && state.Status != "offline" && !isNew {
 			// Zebra striping for odd rows (only if not offline/new - they have priority colors)
-			hostnamePadded = color.New(color.FgHiBlack).Sprint(hostnamePadded)
+			hostnamePadded = getZebraColor().Sprint(hostnamePadded)
 			// MAC only if not yellow (locally-administered)
 			if !isLocallyAdministered(mac) {
-				macPadded = color.New(color.FgHiBlack).Sprint(macPadded)
+				macPadded = getZebraColor().Sprint(macPadded)
 			}
-			vendorPadded = color.New(color.FgHiBlack).Sprint(vendorPadded)
-			deviceTypePadded = color.New(color.FgHiBlack).Sprint(deviceTypePadded)
-			rttPadded = color.New(color.FgHiBlack).Sprint(rttPadded)
+			vendorPadded = getZebraColor().Sprint(vendorPadded)
+			deviceTypePadded = getZebraColor().Sprint(deviceTypePadded)
+			rttPadded = getZebraColor().Sprint(rttPadded)
 		}
 
 		// Assemble row with UTF-8-aware padding
@@ -2041,7 +2051,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			displayIPPadded = color.GreenString(displayIPPadded)
 		} else if i%2 == 1 {
 			// Zebra striping: odd rows darker
-			displayIPPadded = color.New(color.FgHiBlack).Sprint(displayIPPadded)
+			displayIPPadded = getZebraColor().Sprint(displayIPPadded)
 		}
 
 		// Hostname - use dynamic width with UTF-8 awareness
@@ -2120,16 +2130,16 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 
 		// Apply zebra striping to non-colored columns (odd rows get darker)
 		if i%2 == 1 && state.Status != "offline" && !isNew {
-			hostnamePadded = color.New(color.FgHiBlack).Sprint(hostnamePadded)
+			hostnamePadded = getZebraColor().Sprint(hostnamePadded)
 			// MAC only if not yellow (locally-administered)
 			if !isLocallyAdministered(mac) {
-				macPadded = color.New(color.FgHiBlack).Sprint(macPadded)
+				macPadded = getZebraColor().Sprint(macPadded)
 			}
-			vendorPadded = color.New(color.FgHiBlack).Sprint(vendorPadded)
-			deviceTypePadded = color.New(color.FgHiBlack).Sprint(deviceTypePadded)
-			rttPadded = color.New(color.FgHiBlack).Sprint(rttPadded)
-			firstSeenPadded = color.New(color.FgHiBlack).Sprint(firstSeenPadded)
-			uptimePadded = color.New(color.FgHiBlack).Sprint(uptimePadded)
+			vendorPadded = getZebraColor().Sprint(vendorPadded)
+			deviceTypePadded = getZebraColor().Sprint(deviceTypePadded)
+			rttPadded = getZebraColor().Sprint(rttPadded)
+			firstSeenPadded = getZebraColor().Sprint(firstSeenPadded)
+			uptimePadded = getZebraColor().Sprint(uptimePadded)
 		}
 
 		// Manuelles Zusammenbauen der Row mit UTF-8-aware padding
@@ -2175,7 +2185,7 @@ func updateHeaderLineOnly(scanCount int, activeThreads *int32) {
 	printBoxLine(titleLine, width)
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, cancel context.CancelFunc, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32, currentPage *int32, sortState *SortState, threadConfig ThreadConfig) {
+func showCountdownWithTableUpdates(ctx context.Context, cancel context.CancelFunc, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32, currentPage *int32, sortState *SortState, threadConfig ThreadConfig, isLocal bool) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -2187,7 +2197,7 @@ func showCountdownWithTableUpdates(ctx context.Context, cancel context.CancelFun
 		// Move to home and redraw (no clear = less flicker)
 		fmt.Print("\033[H")
 		// Draw btop-inspired layout (includes status line inside box)
-		drawBtopLayout(states, refTime, network, watchInterval, watchMode, scanCount, currentScanDuration, remaining, activeThreads, currentPage, sortState)
+		drawBtopLayout(states, refTime, network, watchInterval, watchMode, scanCount, currentScanDuration, remaining, activeThreads, currentPage, sortState, isLocal)
 		// Clear any leftover content
 		fmt.Print("\033[J")
 	}
