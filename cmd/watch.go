@@ -32,6 +32,7 @@ var (
 	maxThreads      int             // Maximum concurrent threads (0 = auto-calculate based on network size)
 	screenBuffer    bytes.Buffer    // Buffer für aktuellen Screen-Inhalt (legacy mode)
 	screenBufferMux sync.Mutex      // Mutex für Thread-Safe Zugriff (legacy mode)
+	currentCIDR     *net.IPNet      // Current network CIDR for IP formatting
 )
 
 // DeviceState verfolgt den Zustand eines entdeckten Geräts über die Zeit
@@ -315,6 +316,9 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 // runWatchLegacy ist die alte ANSI-basierte Implementierung
 func runWatchLegacy(network string, netCIDR *net.IPNet) error {
+	// Store CIDR for IP formatting (bold host part)
+	currentCIDR = netCIDR
+
 	// Terminal in raw mode versetzen für ANSI/VT-Codes und direkte Tasteneingaben (platform-specific)
 	// WICHTIG: Muss VOR allen ANSI-Ausgaben erfolgen!
 	_ = setupTerminal()
@@ -842,6 +846,55 @@ func getVendor(host scanner.Host) string {
 	return "-"
 }
 
+// formatIPWithBoldHost formats an IP address with the host part in bold
+// based on the current CIDR mask. For example:
+// - 10.0.0.1 with /24 → "10.0.0." + BOLD("1")
+// - 192.168.1.10 with /16 → "192.168." + BOLD("1.10")
+func formatIPWithBoldHost(ip string) string {
+	if currentCIDR == nil {
+		return ip // Fallback: no CIDR info available
+	}
+
+	// Parse the IP address
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return ip // Fallback: invalid IP
+	}
+
+	// Get CIDR mask size (e.g., 24 for /24)
+	maskBits, _ := currentCIDR.Mask.Size()
+
+	// Split IP into octets
+	octets := strings.Split(ip, ".")
+	if len(octets) != 4 {
+		return ip // Fallback: not IPv4
+	}
+
+	// Determine split point based on mask
+	// /8 → 1 octet network, 3 octets host
+	// /16 → 2 octets network, 2 octets host
+	// /24 → 3 octets network, 1 octet host
+	// /32 → all network, no host (special case)
+	var networkOctets int
+	if maskBits <= 8 {
+		networkOctets = 1
+	} else if maskBits <= 16 {
+		networkOctets = 2
+	} else if maskBits <= 24 {
+		networkOctets = 3
+	} else {
+		// /32 or other edge cases - no host part
+		return ip
+	}
+
+	// Build network part + bold host part
+	networkPart := strings.Join(octets[:networkOctets], ".") + "."
+	hostPart := strings.Join(octets[networkOctets:], ".")
+
+	// Return with bold host part
+	return networkPart + "\033[1m" + hostPart + "\033[22m"
+}
+
 // isLocallyAdministered checks if a MAC address is locally administered
 // The second hex digit being 2, 6, A, or E indicates a locally administered address
 func isLocallyAdministered(mac string) bool {
@@ -1154,9 +1207,9 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 			statusIcon = "-"
 		}
 
-		displayIP := ipStr
+		displayIP := formatIPWithBoldHost(ipStr)
 		if state.Host.IsGateway {
-			displayIP = ipStr + " G"
+			displayIP = formatIPWithBoldHost(ipStr) + " G"
 		}
 		if len(displayIP) > 16 {
 			displayIP = displayIP[:16]
@@ -1511,8 +1564,8 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 	for i, ipStr := range visibleIPs {
 		state := states[ipStr]
 
-		// Build IP with markers (Gateway, Offline, New)
-		displayIP := ipStr
+		// Build IP with markers (Gateway, Offline, New) - with bold host part
+		displayIP := formatIPWithBoldHost(ipStr)
 		if state.Host.IsGateway {
 			displayIP += " [G]"
 		}
@@ -1652,8 +1705,8 @@ func redrawMediumTable(states map[string]*DeviceState, referenceTime time.Time, 
 	for i, ipStr := range visibleIPs {
 		state := states[ipStr]
 
-		// Build IP with markers (Gateway, Offline, New)
-		displayIP := ipStr
+		// Build IP with markers (Gateway, Offline, New) - with bold host part
+		displayIP := formatIPWithBoldHost(ipStr)
 		if state.Host.IsGateway {
 			displayIP += " [G]"
 		}
@@ -1845,8 +1898,8 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	for i, ipStr := range visibleIPs {
 		state := states[ipStr]
 
-		// Build IP with markers (Gateway, Offline, New)
-		displayIP := ipStr
+		// Build IP with markers (Gateway, Offline, New) - with bold host part
+		displayIP := formatIPWithBoldHost(ipStr)
 		if state.Host.IsGateway {
 			displayIP += " [G]"
 		}
