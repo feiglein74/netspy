@@ -1149,12 +1149,12 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	// Calculate dynamic column widths based on terminal size
 	termWidth := termSize.GetDisplayWidth()
 
-	// Fixed columns: IP(20) + Status(10) + MAC(18) + RTT(8) + FirstSeen(13) + Uptime(16) + Flaps(5) = 90
+	// Fixed columns: IP(20) + Status(11) + MAC(18) + RTT(8) + FirstSeen(13) + Uptime(16) + Flaps(5) = 91
 	// Spaces between columns: 8 spaces = 8
 	// Borders: "║ " + " ║" = 4
-	// Total fixed: 90 + 8 + 4 = 102
+	// Total fixed: 91 + 8 + 4 = 103
 	// Remaining for Hostname + DeviceType
-	remainingWidth := termWidth - 102
+	remainingWidth := termWidth - 103
 
 	// Distribute remaining width: 60% hostname, 40% deviceType (with minimums)
 	hostnameWidth := max(25, min(50, int(float64(remainingWidth)*0.6)))
@@ -1162,7 +1162,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 
 	// Table header with box drawing - use padRight for UTF-8 safety
 	headerContent := padRight("IP Address", 20) + " " +
-		padRight("Status", 10) + " " +
+		padRight("Status", 11) + " " +
 		padRight("Hostname", hostnameWidth) + " " +
 		padRight("MAC Address", 18) + " " +
 		padRight("Device Type", deviceTypeWidth) + " " +
@@ -1260,7 +1260,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		}
 
 		// Pad status text before coloring
-		coloredStatus := statusColor(padRight(statusText, 6))
+		coloredStatus := statusColor(padRight(statusText, 7))
 
 		// Manuelles Zusammenbauen der Row mit UTF-8-aware padding
 		rowContent := padRight(displayIP, 20) + " " +
