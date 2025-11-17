@@ -65,7 +65,8 @@ func New(config Config) *Scanner {
 }
 
 // ScanHosts scannt mit modus-angepasster Strategie
-func (s *Scanner) ScanHosts(ips []net.IP) ([]Host, error) {
+// activeThreads ist optional - wenn nicht nil, werden aktive Scan-Threads gezählt
+func (s *Scanner) ScanHosts(ips []net.IP, activeThreads *int32) ([]Host, error) {
 	var (
 		results   []Host
 		mutex     sync.Mutex
@@ -92,6 +93,12 @@ func (s *Scanner) ScanHosts(ips []net.IP) ([]Host, error) {
 
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
+
+			// Thread counting (optional - nur wenn activeThreads nicht nil)
+			if activeThreads != nil {
+				atomic.AddInt32(activeThreads, 1)
+				defer atomic.AddInt32(activeThreads, -1)
+			}
 
 			host := s.scanHost(targetIP)
 

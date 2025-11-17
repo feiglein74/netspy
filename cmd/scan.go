@@ -110,7 +110,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	// Scan durchführen
-	results, err := s.ScanHosts(hosts)
+	results, err := s.ScanHosts(hosts, nil)
 	if err != nil {
 		return fmt.Errorf("scan failed: %v", err)
 	}
@@ -199,7 +199,7 @@ func runHybridScan(network string) error {
 		}
 
 		// Scan durchführen
-		results, err := s.ScanHosts(hosts)
+		results, err := s.ScanHosts(hosts, nil)
 		if err != nil {
 			return fmt.Errorf("scan failed: %v", err)
 		}
@@ -330,7 +330,7 @@ func runARPScan(network string) error {
 		}
 
 		// Scan durchführen
-		results, err := s.ScanHosts(hosts)
+		results, err := s.ScanHosts(hosts, nil)
 		if err != nil {
 			return fmt.Errorf("scan failed: %v", err)
 		}
