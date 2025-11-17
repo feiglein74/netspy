@@ -246,6 +246,10 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 		// Calculate scan duration
 		scanDuration := time.Since(scanStart)
 
+		// Phase 0: Pre-populate from DNS cache (instant, < 100ms!)
+		// Must happen BEFORE first table draw for instant hostname display
+		populateFromDNSCache(deviceStates)
+
 		// Lock to prevent concurrent redraws (scan vs SIGWINCH)
 		redrawMutex.Lock()
 
@@ -265,9 +269,6 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 		fmt.Print("\033[J") // Clear from cursor to end of screen
 
 		redrawMutex.Unlock()
-
-		// Phase 0: Pre-populate from DNS cache (instant, < 100ms!)
-		populateFromDNSCache(deviceStates)
 
 		// Phase 1: Quick DNS lookups immediately after scan (blocks briefly for fast results)
 		performInitialDNSLookups(ctx, deviceStates)
