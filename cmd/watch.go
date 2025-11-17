@@ -194,9 +194,10 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 				// Update existing device
 				state.LastSeen = scanStart
 
-				// Preserve hostname and source if already resolved
+				// Preserve hostname, source, and RTT if already resolved/measured
 				oldHostname := state.Host.Hostname
 				oldSource := state.Host.HostnameSource
+				oldRTT := state.Host.RTT
 
 				state.Host = host // Update host info (MAC, RTT, etc.)
 
@@ -204,6 +205,11 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 				if oldSource != "" {
 					state.Host.Hostname = oldHostname
 					state.Host.HostnameSource = oldSource
+				}
+
+				// Preserve old RTT if new scan didn't measure it
+				if state.Host.RTT == 0 && oldRTT > 0 {
+					state.Host.RTT = oldRTT
 				}
 
 				if state.Status == "offline" {
