@@ -106,6 +106,30 @@ ls test_*.go 2>/dev/null && echo "⚠️ Test-Files noch vorhanden!"
 - Alle häufig verwendeten Befehle sind in `.claude/settings.local.json` vorab genehmigt
 - Beinhaltet: go build, go run, go test, git commands, ipconfig, arp, etc.
 
+### Debugging-Workflow
+**KRITISCH**: Diese Regeln IMMER befolgen, um Fehlinterpretationen und unnötige Code-Änderungen zu vermeiden.
+
+1. **Problem IMMER zusammenfassen und bestätigen lassen** bevor Code geschrieben wird
+   - Formulierung: "Verstehe ich richtig: [Problem-Zusammenfassung]?"
+   - **Warte auf explizite Bestätigung** ("Ja, genau" / "Nein, das meine ich nicht")
+   - **NIE** aufgrund von Annahmen coden
+
+2. **Bei visuellen Bugs explizit nachfragen:**
+   - "Welche Zeile/welches Element fehlt genau?"
+   - "Was sollte an Position X,Y stehen?"
+   - "Was steht TATSÄCHLICH an Position X,Y?"
+   - Screenshots/Ausgaben gemeinsam analysieren
+
+3. **NIE coden ohne explizite Bestätigung**
+   - Warte auf "Ja, genau das" oder "Los, fix das"
+   - Bei Unsicherheit: **Nachfragen statt raten**
+   - Lieber eine Frage zu viel als eine falsche Änderung
+
+4. **Rückgängig-Regel**
+   - Wenn User sagt "nicht coden" oder "warte": **SOFORT** stoppen
+   - Änderungen auf Anfrage rückgängig machen
+   - Erst diskutieren, dann coden
+
 ## Projekt-Übersicht
 
 NetSpy ist ein modernes Netzwerk-Discovery-Tool in Go, das bei der Überwachung von Netzwerkinfrastruktur hilft. Es bietet Echtzeit-Subnet-Scanning mit mehreren Discovery-Methoden (ICMP, ARP, hybrid) und schöner CLI-Ausgabe.
@@ -255,3 +279,4 @@ Scan-Modi schließen sich gegenseitig aus und werden validiert.
 
 ### Design-Prinzip
 **KEINE neuen Zeilen nach initialem Tabellen-Draw** - Alles aktualisiert sich in-place für ein sauberes, Dashboard-artiges Erlebnis
+- to memorize

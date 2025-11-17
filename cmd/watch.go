@@ -148,6 +148,10 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 // runWatchLegacy ist die alte ANSI-basierte Implementierung
 func runWatchLegacy(network string, netCIDR *net.IPNet) error {
+	// Terminal in raw mode versetzen für ANSI/VT-Codes und direkte Tasteneingaben (platform-specific)
+	// WICHTIG: Muss VOR allen ANSI-Ausgaben erfolgen!
+	_ = setupTerminal()
+
 	// Calculate optimal thread counts based on network size
 	threadConfig := calculateThreads(netCIDR, maxThreads)
 	ones, bits := netCIDR.Mask.Size()
@@ -155,6 +159,9 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 	fmt.Printf("🔧 Thread Config: Scan=%d, Reachability=%d, DNS=%d (Network: %s, %d potential hosts)\n",
 		threadConfig.Scan, threadConfig.Reachability, threadConfig.DNS,
 		netCIDR.String(), hostCount)
+
+	// Clear screen and move cursor to home for clean UI start
+	fmt.Print("\033[2J\033[H")
 
 	// Geräte-Status-Map - Schlüssel ist IP-Adresse als String
 	deviceStates := make(map[string]*DeviceState)
@@ -172,10 +179,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 	// Keyboard input channel für 'c' zum Kopieren
 	keyChan := make(chan rune, 10)
 
-	// Terminal in raw mode versetzen für direkte Tasteneingaben (platform-specific)
-	_ = setupTerminal()
-
-	// Stelle sicher, dass wir beim Exit wieder zurücksetzen
+	// Stelle sicher, dass wir beim Exit das Terminal wieder zurücksetzen
 	defer func() {
 		_ = resetTerminal()
 	}()
@@ -964,7 +968,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 	writeLine(statusLine)
 
 	// Bottom border
-	screenBuffer.WriteString("╚" + safeRepeat("═", width-2) + "╝\n")
+	screenBuffer.WriteString("╚" + safeRepeat("═", width-2) + "╝")
 }
 
 // drawTerminalTooSmallWarning zeigt Warnung wenn Terminal zu klein ist
@@ -1028,7 +1032,7 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 	// Bottom border
 	fmt.Print(color.CyanString("╚"))
 	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
-	fmt.Print(color.CyanString("╝\n"))
+	fmt.Print(color.CyanString("╝"))
 }
 
 // drawBtopLayout renders a btop-inspired fullscreen layout
@@ -1147,7 +1151,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	// Bottom border
 	fmt.Print(color.CyanString("╚"))
 	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
-	fmt.Print(color.CyanString("╝\n"))
+	fmt.Print(color.CyanString("╝"))
 
 	// Capture screen content für späteres Kopieren - VEREINFACHT
 	// Verwende die gleiche Logik wie oben, nur ohne Farben
@@ -1167,13 +1171,14 @@ func calculateMaxVisibleHosts(termHeight int) int {
 	// - Table Header: 1
 	// = 7 Zeilen Header
 	//
+	// - Paging Info: 1
 	// - Separator: 1
 	// - Status Line: 1
 	// - Bottom Border: 1
-	// = 3 Zeilen Footer
+	// = 4 Zeilen Footer
 	//
-	// Total: 10 Zeilen Overhead
-	overhead := 10
+	// Total: 11 Zeilen Overhead
+	overhead := 11
 	availableLines := termHeight - overhead
 
 	// Mindestens 1 Host anzeigen (auch wenn Terminal sehr klein)
@@ -1717,11 +1722,19 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			} else if key == 'n' || key == 'N' {
 				// Next page
 				atomic.AddInt32(currentPage, 1)
+				// Kurzes visuelles Feedback
+				fmt.Print("\r")
+				fmt.Printf("%s Next page... ", color.CyanString("→"))
+				time.Sleep(300 * time.Millisecond)
 			} else if key == 'p' || key == 'P' {
 				// Previous page
 				page := atomic.LoadInt32(currentPage)
 				if page > 1 {
 					atomic.AddInt32(currentPage, -1)
+					// Kurzes visuelles Feedback
+					fmt.Print("\r")
+					fmt.Printf("%s Previous page... ", color.CyanString("←"))
+					time.Sleep(300 * time.Millisecond)
 				}
 			}
 			// Redraw screen nach Nachricht/Aktion
@@ -1797,9 +1810,10 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			} else {
 				// NOT a 5-second mark: Update only the header line with thread count (fast!)
 				// This gives live thread count updates every second without full redraw flicker
-				redrawMutex.Lock()
-				updateHeaderLineOnly(scanCount, activeThreads)
-				redrawMutex.Unlock()
+				// DEAKTIVIERT: Test ob dies das Überschreibe-Problem verursacht
+				// redrawMutex.Lock()
+				// updateHeaderLineOnly(scanCount, activeThreads)
+				// redrawMutex.Unlock()
 			}
 		}
 	}

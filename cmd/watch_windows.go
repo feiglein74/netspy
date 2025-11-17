@@ -16,42 +16,61 @@ var (
 	procGetStdHandle               = kernel32.NewProc("GetStdHandle")
 	procGetConsoleMode             = kernel32.NewProc("GetConsoleMode")
 	procSetConsoleMode             = kernel32.NewProc("SetConsoleMode")
-	stdOutputHandle        uintptr = 0xFFFFFFF5 // STD_OUTPUT_HANDLE
-	enableVirtualTerminal  uint32  = 0x0004     // ENABLE_VIRTUAL_TERMINAL_PROCESSING
+	stdOutputHandle        uintptr = 0xFFFFFFF5 // STD_OUTPUT_HANDLE (-11)
+	stdInputHandle         uintptr = 0xFFFFFFF6 // STD_INPUT_HANDLE (-10)
+	enableVirtualTerminal  uint32  = 0x0004     // ENABLE_VIRTUAL_TERMINAL_PROCESSING (stdout)
+	enableEchoInput        uint32  = 0x0004     // ENABLE_ECHO_INPUT (stdin)
+	enableLineInput        uint32  = 0x0002     // ENABLE_LINE_INPUT (stdin)
+	enableProcessedInput   uint32  = 0x0001     // ENABLE_PROCESSED_INPUT (stdin)
+
+	// Store original modes for restoration
+	originalStdinMode  uint32
+	originalStdoutMode uint32
 )
 
-// setupTerminal enables ANSI/VT100 escape code support on Windows
+// setupTerminal enables ANSI/VT100 escape code support and disables echo on Windows
 func setupTerminal() error {
-	// Try to enable VT processing for native Windows terminals (cmd.exe, PowerShell, Windows Terminal)
-	// This will silently fail in Git Bash/MSYS2 (which is fine - they have native ANSI support)
-
-	handle, _, _ := procGetStdHandle.Call(stdOutputHandle)
-	if handle == 0 || handle == uintptr(syscall.InvalidHandle) {
-		// Not a Windows console (e.g., Git Bash, MSYS2, pipe, file)
-		// These environments typically support ANSI natively, so just return
-		return nil
+	// 1. Setup stdout: Enable VT processing for ANSI escape codes
+	handleOut, _, _ := procGetStdHandle.Call(stdOutputHandle)
+	if handleOut != 0 && handleOut != uintptr(syscall.InvalidHandle) {
+		ret, _, _ := procGetConsoleMode.Call(handleOut, uintptr(unsafe.Pointer(&originalStdoutMode)))
+		if ret != 0 {
+			// Enable Virtual Terminal Processing
+			newMode := originalStdoutMode | enableVirtualTerminal
+			procSetConsoleMode.Call(handleOut, uintptr(newMode))
+		}
 	}
 
-	// Get current console mode
-	var mode uint32
-	ret, _, _ := procGetConsoleMode.Call(handle, uintptr(unsafe.Pointer(&mode)))
-	if ret == 0 {
-		// GetConsoleMode failed - probably not a console (Git Bash, redirected output)
-		// Return success - ANSI might work anyway
-		return nil
+	// 2. Setup stdin: Disable echo and line buffering for raw keyboard input
+	handleIn, _, _ := procGetStdHandle.Call(stdInputHandle)
+	if handleIn != 0 && handleIn != uintptr(syscall.InvalidHandle) {
+		ret, _, _ := procGetConsoleMode.Call(handleIn, uintptr(unsafe.Pointer(&originalStdinMode)))
+		if ret != 0 {
+			// Disable echo and line input for raw character-by-character input
+			newMode := originalStdinMode
+			newMode &^= enableEchoInput    // Disable echo (don't print typed characters)
+			newMode &^= enableLineInput    // Disable line buffering (read char-by-char)
+			procSetConsoleMode.Call(handleIn, uintptr(newMode))
+		}
 	}
-
-	// Enable Virtual Terminal Processing
-	mode |= enableVirtualTerminal
-	procSetConsoleMode.Call(handle, uintptr(mode))
-	// Don't check return value - even if it fails, we tried our best
 
 	return nil
 }
 
-// resetTerminal is a no-op on Windows
+// resetTerminal restores original terminal modes on Windows
 func resetTerminal() error {
-	// Nothing to reset
+	// Restore stdout mode
+	handleOut, _, _ := procGetStdHandle.Call(stdOutputHandle)
+	if handleOut != 0 && handleOut != uintptr(syscall.InvalidHandle) {
+		procSetConsoleMode.Call(handleOut, uintptr(originalStdoutMode))
+	}
+
+	// Restore stdin mode
+	handleIn, _, _ := procGetStdHandle.Call(stdInputHandle)
+	if handleIn != 0 && handleIn != uintptr(syscall.InvalidHandle) {
+		procSetConsoleMode.Call(handleIn, uintptr(originalStdinMode))
+	}
+
 	return nil
 }
 
