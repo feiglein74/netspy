@@ -372,10 +372,16 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 				continue
 			}
 
-			// ESC key - exit
+			// ESC key - send to channel (can be used to close help, or exit)
 			if buf[0] == 27 {
-				cancel()
-				return
+				keyChan <- 27 // ESC
+				continue
+			}
+
+			// Enter key - send to channel
+			if buf[0] == 10 || buf[0] == 13 {
+				keyChan <- 10 // Enter
+				continue
 			}
 
 			// Space key
@@ -527,7 +533,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 			go performBackgroundDNSLookups(ctx, deviceStates, &activeThreads, threadConfig)
 
 			// Show countdown with periodic table updates (pass scanStart for consistent uptime)
-			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, keyChan, &redrawMutex, network, watchInterval, watchMode, &activeThreads, &currentPage, sortState, threadConfig)
+			showCountdownWithTableUpdates(ctx, cancel, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, keyChan, &redrawMutex, network, watchInterval, watchMode, &activeThreads, &currentPage, sortState, threadConfig)
 		}
 	}
 }
@@ -961,50 +967,109 @@ func clearLine() {
 
 // showHelpOverlay displays a help screen overlay with colored symbols
 // Returns when any key is pressed
-func showHelpOverlay(width int) {
-	// Save cursor position
-	fmt.Print("\033[s")
+func showHelpOverlay(termWidth int, keyChan <-chan rune) {
+	// Save current screen state
+	fmt.Print("\033[?25l") // Hide cursor
 
-	// Clear screen and move to top
-	fmt.Print("\033[2J\033[H")
+	// Modal box dimensions (narrower than screen)
+	boxWidth := 64
+	if boxWidth > termWidth-4 {
+		boxWidth = termWidth - 4
+	}
 
-	// Build help content with colors
-	line1 := "SORTIERUNG: Unterstrichene Buchstaben in Spalten-Headern drücken"
-	line2 := "  i=IP  h=Hostname  m=MAC  v=Vendor  d=Device  r=RTT  f=Flp  u=Up"
-	line3 := "  Leertaste = Sortierreihenfolge umkehren"
-	line4 := "NAVIGATION: n=Nächste Seite  p=Vorherige Seite  |  c=Kopieren  q=Beenden"
+	// Calculate centering offset
+	leftMargin := (termWidth - boxWidth) / 2
+	if leftMargin < 0 {
+		leftMargin = 0
+	}
 
-	// Symbols with colors: [G] and [+] green, [!] red
-	symbolsText := "SYMBOLE: " +
-		color.GreenString("[G]") + "=Gateway  " +
-		color.RedString("[!]") + "=Offline  " +
-		color.GreenString("[+]") + "=Neu (erste 2 Scans)"
+	// Start at row 3 (leave room at top)
+	startRow := 3
 
-	// Colors with actual colors
-	colorsText := "FARBEN: " +
-		color.MagentaString("Magenta") + "=Neuer Hostname  " +
-		color.YellowString("Gelb") + "=Lokal-administrierte MAC"
+	// Build help content with colors and proper spacing
+	title := color.HiWhiteString("NetSpy Hilfe")
 
-	line7 := "Beliebige Taste zum Schließen..."
+	sortHeader := color.CyanString("SORTIERUNG:")
+	sortLine1 := "  Drücke Buchstaben im Header:"
+	sortLine2 := "  " + color.HiWhiteString("i")+"=IP  "+color.HiWhiteString("h")+"=Host  "+color.HiWhiteString("m")+"=MAC  "+color.HiWhiteString("v")+"=Vendor  "+color.HiWhiteString("d")+"=Device"
+	sortLine3 := "  " + color.HiWhiteString("r")+"=RTT  "+color.HiWhiteString("f")+"=Flaps  "+color.HiWhiteString("u")+"=Up"
+	sortLine4 := "  Nochmals drücken = Reihenfolge umkehren"
 
-	// Print box
-	fmt.Println(strings.Repeat("═", width))
-	printBoxLine(color.CyanString("Hilfe (?)"), width)
-	fmt.Println(strings.Repeat("═", width))
-	printBoxLine(line1, width)
-	printBoxLine(line2, width)
-	printBoxLine(line3, width)
-	printBoxLine(line4, width)
-	printBoxLine(symbolsText, width)
-	printBoxLine(colorsText, width)
-	printBoxLine(line7, width)
-	fmt.Println(strings.Repeat("═", width))
+	navHeader := color.CyanString("NAVIGATION:")
+	navLine := "  " + color.HiWhiteString("n")+"=Nächste  "+color.HiWhiteString("p")+"=Zurück  "+color.HiWhiteString("c")+"=Kopieren  "+color.HiWhiteString("q")+"=Beenden"
 
-	// Wait for any key
-	buf := make([]byte, 1)
-	os.Stdin.Read(buf)
+	symbolHeader := color.CyanString("SYMBOLE:")
+	symbolLine := "  [G]=Gateway  "+color.RedString("[!]")+"=Offline  "+color.GreenString("[+]")+"=Neu"
 
-	// No need to restore cursor - main loop will redraw everything
+	colorHeader := color.CyanString("FARBEN:")
+	colorLine := "  "+color.RedString("Rot")+"=Offline  "+color.GreenString("Grün")+"=Neu  "+color.YellowString("Gelb")+"=Lokal-MAC"
+
+	closeText := color.HiBlackString("Beliebige Taste zum Schließen...")
+
+	// Helper function to print a centered box line with shadow
+	currentRow := startRow
+	printCenteredLine := func(content string) {
+		// Move to position
+		fmt.Printf("\033[%d;%dH", currentRow, leftMargin+1)
+
+		// Print the line
+		if content == "TOP" {
+			fmt.Print(color.CyanString("╔"))
+			fmt.Print(color.CyanString(safeRepeat("═", boxWidth-2)))
+			fmt.Print(color.CyanString("╗"))
+		} else if content == "SEP" {
+			fmt.Print(color.CyanString("╠"))
+			fmt.Print(color.CyanString(safeRepeat("═", boxWidth-2)))
+			fmt.Print(color.CyanString("╣"))
+		} else if content == "BOTTOM" {
+			fmt.Print(color.CyanString("╚"))
+			fmt.Print(color.CyanString(safeRepeat("═", boxWidth-2)))
+			fmt.Print(color.CyanString("╝"))
+		} else {
+			// Regular content line
+			visibleContent := stripANSI(content)
+			visibleLen := runeLen(visibleContent)
+			padding := boxWidth - visibleLen - 4
+			if padding < 0 {
+				padding = 0
+			}
+			fmt.Print(color.CyanString("║"))
+			fmt.Print(" " + content)
+			fmt.Print(strings.Repeat(" ", padding))
+			fmt.Print(color.CyanString(" ║"))
+		}
+		currentRow++
+	}
+
+	// Draw the modal box
+	printCenteredLine("TOP")
+	printCenteredLine(title)
+	printCenteredLine("SEP")
+	printCenteredLine(sortHeader)
+	printCenteredLine(sortLine1)
+	printCenteredLine(sortLine2)
+	printCenteredLine(sortLine3)
+	printCenteredLine(sortLine4)
+	printCenteredLine("")
+	printCenteredLine(navHeader)
+	printCenteredLine(navLine)
+	printCenteredLine("")
+	printCenteredLine(symbolHeader)
+	printCenteredLine(symbolLine)
+	printCenteredLine("")
+	printCenteredLine(colorHeader)
+	printCenteredLine(colorLine)
+	printCenteredLine("SEP")
+	printCenteredLine(closeText)
+	printCenteredLine("BOTTOM")
+
+	// Wait for any key from keyChan (don't read directly from stdin to avoid race)
+	<-keyChan
+
+	// Show cursor again
+	fmt.Print("\033[?25h")
+
+	// Main loop will redraw everything
 }
 
 // printBoxLine prints a line within the box with proper padding
@@ -2110,7 +2175,7 @@ func updateHeaderLineOnly(scanCount int, activeThreads *int32) {
 	printBoxLine(titleLine, width)
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32, currentPage *int32, sortState *SortState, threadConfig ThreadConfig) {
+func showCountdownWithTableUpdates(ctx context.Context, cancel context.CancelFunc, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32, currentPage *int32, sortState *SortState, threadConfig ThreadConfig) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -2133,6 +2198,11 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			return
 		case key := <-keyChan:
 			// Handle keyboard input
+			// ESC key - exit program
+			if key == 27 {
+				cancel()
+				return
+			}
 			if key == 'c' || key == 'C' {
 				// Benutzer hat 'c' gedrückt - Kopiere Screen in Zwischenablage
 				if err := copyScreenToClipboard(); err != nil {
@@ -2202,7 +2272,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 			} else if key == '?' {
 				// ? - Show help overlay
 				termSize := output.GetTerminalSize()
-				showHelpOverlay(termSize.GetDisplayWidth())
+				showHelpOverlay(termSize.GetDisplayWidth(), keyChan)
 			}
 			// Redraw screen nach Nachricht/Aktion
 			redrawMutex.Lock()
