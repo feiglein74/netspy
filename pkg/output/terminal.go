@@ -78,9 +78,9 @@ func (ts TerminalSize) IsMedium() bool {
 }
 
 // IsTooSmall prüft ob Terminal zu klein für Ausgabe ist
-// Minimale Breite: 81 Zeichen für vollständige UI ohne Umbrüche
-// - Fixed Column Widths: col1(25) + sep(5) + col2(18) + sep(5) + col3(20) = 73
-// - Box Borders: "║ " (2) + content (73) + padding (4) + " ║" (2) = 81
+// Minimale Breite: 80 Zeichen für vollständige UI ohne Umbrüche (VT100 Standard)
+// - Fixed Column Widths: col1(24) + sep(5) + col2(18) + sep(5) + col3(20) = 72
+// - Box Borders: "║ " (2) + content (72) + padding (4) + " ║" (2) = 80
 func (ts TerminalSize) IsTooSmall() bool {
-	return ts.Width < 81 || ts.Height < 15
+	return ts.Width < 80 || ts.Height < 15
 }

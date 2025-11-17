@@ -967,7 +967,7 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 	// Absolute minimum check - if window is EXTREMELY small, just print simple message
 	if width < 20 {
 		fmt.Println("Terminal too small!")
-		fmt.Printf("Min: 81x15, Current: %dx%d\n", termSize.Width, termSize.Height)
+		fmt.Printf("Min: 80x15, Current: %dx%d\n", termSize.Width, termSize.Height)
 		fmt.Println("Please resize window.")
 		return
 	}
@@ -1009,7 +1009,7 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 	printBoxLine(warningMsg, width)
 	printBoxLine("", width) // Empty line
 
-	minMsg := "Minimum: 81 Spalten x 15 Zeilen"
+	minMsg := "Minimum: 80 Spalten x 15 Zeilen (VT100 Standard)"
 	printBoxLine(minMsg, width)
 
 	currentMsg := fmt.Sprintf("Aktuell: %d Spalten x %d Zeilen", termSize.Width, termSize.Height)
@@ -1088,7 +1088,9 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 
 	// Fixed column widths from left (not dynamically divided)
 	// Content-based sizing instead of equal thirds
-	col1Width := 25  // "Network: 10.0.0.0/24" + padding
+	// Total: col1(24) + sep(5) + col2(18) + sep(5) + col3(20) = 72 chars
+	// Box: "║ " (2) + content(72) + padding(4) + " ║" (2) = 80 chars (VT100 Standard)
+	col1Width := 24  // "Network: 10.0.0.0/24" + padding
 	col2Width := 18  // "Mode : hybrid" + padding
 	col3Width := 20  // "Interval: 30s" + padding
 
@@ -1133,7 +1135,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	// Status line (inside box) - use same fixed column widths as header
 	col1Status := padRightANSI(color.CyanString("▶")+" Next scan in: "+color.CyanString(formatDuration(nextScanIn)), col1Width)
 	col2Status := padRight("ESC: exit, c: copy", col2Width)
-	col3Status := padRight("[G]=Gateway, [!]=Offline", col3Width)
+	col3Status := padRight("[G]=GW [!]=Offline", col3Width)  // Gekürzt: GW statt Gateway für 80-Spalten-Limit
 	statusLine := fmt.Sprintf("%s  │  %s  │  %s", col1Status, col2Status, col3Status)
 	printBoxLine(statusLine, width)
 
