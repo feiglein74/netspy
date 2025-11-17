@@ -904,17 +904,28 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
 	fmt.Print(color.CyanString("╣\n"))
 
-	// Info line 1
-	line1 := fmt.Sprintf("Network: %s  │  Mode: %s  │  Interval: %v", network, mode, interval)
+	// Calculate fixed column widths for stable layout (prevent jumping when numbers change)
+	// Total width available: width - 4 (borders) - 6 (pipes and spaces) = width - 10
+	availableWidth := width - 10
+	col1Width := availableWidth / 3
+	col2Width := availableWidth / 3
+	col3Width := availableWidth - col1Width - col2Width // Remainder goes to col3
+
+	// Info line 1 (static - doesn't change)
+	col1_line1 := padRight(fmt.Sprintf("Network: %s", network), col1Width)
+	col2_line1 := padRight(fmt.Sprintf("Mode: %s", mode), col2Width)
+	col3_line1 := padRight(fmt.Sprintf("Interval: %v", interval), col3Width)
+	line1 := fmt.Sprintf("%s  │  %s  │  %s", col1_line1, col2_line1, col3_line1)
 	printBoxLine(line1, width)
 
-	// Info line 2
-	line2 := fmt.Sprintf("Devices: %d (%s%d %s%d)  │  Flaps: %d  │  Scan: %s",
+	// Info line 2 (dynamic - changes with each scan, but stays aligned)
+	col1_line2 := padRight(fmt.Sprintf("Devices: %d (%s%d %s%d)",
 		len(states),
 		color.GreenString("↑"), onlineCount,
-		color.RedString("↓"), offlineCount,
-		totalFlaps,
-		formatDuration(scanDuration))
+		color.RedString("↓"), offlineCount), col1Width)
+	col2_line2 := padRight(fmt.Sprintf("Flaps: %d", totalFlaps), col2Width)
+	col3_line2 := padRight(fmt.Sprintf("Scan: %s", formatDuration(scanDuration)), col3Width)
+	line2 := fmt.Sprintf("%s  │  %s  │  %s", col1_line2, col2_line2, col3_line2)
 	printBoxLine(line2, width)
 
 	// Separator before table (directly from info to table)
