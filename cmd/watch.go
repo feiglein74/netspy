@@ -967,7 +967,7 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 	// Absolute minimum check - if window is EXTREMELY small, just print simple message
 	if width < 20 {
 		fmt.Println("Terminal too small!")
-		fmt.Printf("Min: 60x15, Current: %dx%d\n", termSize.Width, termSize.Height)
+		fmt.Printf("Min: 81x15, Current: %dx%d\n", termSize.Width, termSize.Height)
 		fmt.Println("Please resize window.")
 		return
 	}
@@ -1009,7 +1009,7 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 	printBoxLine(warningMsg, width)
 	printBoxLine("", width) // Empty line
 
-	minMsg := "Minimum: 60 Spalten x 15 Zeilen"
+	minMsg := "Minimum: 81 Spalten x 15 Zeilen"
 	printBoxLine(minMsg, width)
 
 	currentMsg := fmt.Sprintf("Aktuell: %d Spalten x %d Zeilen", termSize.Width, termSize.Height)
