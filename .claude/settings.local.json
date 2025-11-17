@@ -81,7 +81,18 @@
       "Bash(timeout:*)",
       "WebFetch(domain:github.com)",
       "Bash(go doc:*)",
-      "Bash(printf:*)"
+      "Bash(printf:*)",
+      "Bash(cat:*)",
+      "Bash(awk:*)",
+      "Bash(curl:*)",
+      "Bash(taskkill:*)",
+      "Bash(taskkill /F /IM netspy.exe:*)",
+      "Bash(sleep:*)",
+      "Bash(wait:*)",
+      "Bash(strings:*)",
+      "Bash(grep:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)"
     ],
     "deny": [],
     "ask": []
