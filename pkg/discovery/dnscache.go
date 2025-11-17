@@ -45,7 +45,7 @@ func readWindowsDNSCache(cache map[string]string) {
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 
-		// Parse record name (hostname)
+		// Parse record name (hostname or reverse DNS name)
 		// English: "Record Name . . . . . . . . . : hostname"
 		// German:  "Eintragsname . . . . . : hostname"
 		if strings.Contains(line, "Record Name") || strings.Contains(line, "Eintragsname") {
@@ -58,7 +58,7 @@ func readWindowsDNSCache(cache map[string]string) {
 			continue
 		}
 
-		// Parse A record (IPv4 address)
+		// Parse A record (Forward DNS: hostname -> IP)
 		// English: "A (Host) Record  . . . : 10.0.0.1"
 		// German:  "(Host-)A-Eintrag  . . : 10.0.0.1"
 		if strings.Contains(line, "A (Host) Record") || strings.Contains(line, "(Host-)A-Eintrag") {
@@ -69,6 +69,36 @@ func readWindowsDNSCache(cache map[string]string) {
 					cache[ip.String()] = currentRecordName
 					currentRecordName = "" // Reset for next record
 				}
+			}
+			continue
+		}
+
+		// Parse PTR record (Reverse DNS: IP -> hostname)
+		// English: "PTR Record  . . . . . . : hostname"
+		// German:  "PTR-Eintrag . . . . . : hostname"
+		if strings.Contains(line, "PTR Record") || strings.Contains(line, "PTR-Eintrag") {
+			parts := strings.Split(line, ":")
+			if len(parts) >= 2 && currentRecordName != "" {
+				hostname := strings.TrimSpace(parts[1])
+
+				// Skip (null) entries
+				if hostname == "(null)" || hostname == "" {
+					continue
+				}
+
+				// Extract IP from reverse DNS name (e.g., "10.0.0.1.in-addr.arpa")
+				if strings.HasSuffix(currentRecordName, ".in-addr.arpa") {
+					// Remove .in-addr.arpa suffix
+					ipReversed := strings.TrimSuffix(currentRecordName, ".in-addr.arpa")
+					// Reverse the octets (10.0.0.1 is stored as 1.0.0.10)
+					octets := strings.Split(ipReversed, ".")
+					if len(octets) == 4 {
+						// Reverse array
+						ip := octets[3] + "." + octets[2] + "." + octets[1] + "." + octets[0]
+						cache[ip] = hostname
+					}
+				}
+				currentRecordName = "" // Reset for next record
 			}
 			continue
 		}
