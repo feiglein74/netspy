@@ -970,7 +970,7 @@ func showHelpOverlay(width int) {
 
 	// Build help content with colors
 	line1 := "SORTIERUNG: Unterstrichene Buchstaben in Spalten-Headern drücken"
-	line2 := "  i=IP  h=Hostname  m=MAC  v=Vendor  d=Gerät  r=RTT  f=Flaps  u=Uptime  t=Zeit"
+	line2 := "  i=IP  h=Hostname  m=MAC  v=Vendor  d=Device  r=RTT  f=Flp  u=Up"
 	line3 := "  Leertaste = Sortierreihenfolge umkehren"
 	line4 := "NAVIGATION: n=Nächste Seite  p=Vorherige Seite  |  c=Kopieren  q=Beenden"
 
@@ -1507,11 +1507,15 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 	// Get current sort state for indicators
 	sortCol, sortAsc := sortState.Get()
 
-	// Table header with sort indicators and underlined shortcut keys
-	headerContent := padRightANSI(underlineChar("IP", 'i')+getSortIndicator(sortCol, SortByIP, sortAsc), 16) + " " +
-		padRightANSI(underlineChar("Hostname", 'h')+getSortIndicator(sortCol, SortByHostname, sortAsc), 22) + " " +
-		padRightANSI(underlineChar("Vendor", 'v')+getSortIndicator(sortCol, SortByVendor, sortAsc), 12) + " " +
-		padRightANSI(underlineChar("Uptime", 'u')+getSortIndicator(sortCol, SortByUptime, sortAsc), 6)
+	// Table header with sort indicators and underlined shortcut keys (compact for 80-char terminals)
+	headerContent := padRightANSI(underlineChar("IP", 'i')+getSortIndicator(sortCol, SortByIP, sortAsc), 15) + " " +
+		padRightANSI(underlineChar("Hostname", 'h')+getSortIndicator(sortCol, SortByHostname, sortAsc), 12) + " " +
+		padRightANSI(underlineChar("MAC", 'm')+getSortIndicator(sortCol, SortByMAC, sortAsc), 17) + " " +
+		padRightANSI(underlineChar("Vendor", 'v')+getSortIndicator(sortCol, SortByVendor, sortAsc), 7) + " " +
+		padRightANSI(underlineChar("Device", 'd')+getSortIndicator(sortCol, SortByDeviceType, sortAsc), 6) + " " +
+		padRightANSI(underlineChar("RTT", 'r')+getSortIndicator(sortCol, SortByRTT, sortAsc), 4) + " " +
+		padRightANSI(underlineChar("Flp", 'f')+getSortIndicator(sortCol, SortByFlaps, sortAsc), 3) + " " +
+		padRightANSI(underlineChar("Up", 'u')+getSortIndicator(sortCol, SortByUptime, sortAsc), 5)
 	printTableRow(color.CyanString(headerContent), width)
 
 	// Create IPs slice and sort based on current sort state
@@ -1571,12 +1575,12 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 
 		// UTF-8-aware truncation
 		displayIPRunes := []rune(displayIP)
-		if len(displayIPRunes) > 16 {
-			displayIP = string(displayIPRunes[:16])
+		if len(displayIPRunes) > 15 {
+			displayIP = string(displayIPRunes[:15])
 		}
 
 		// Color IP: red if offline, green if new, otherwise use zebra striping
-		displayIPPadded := padRightANSI(displayIP, 16)
+		displayIPPadded := padRightANSI(displayIP, 15)
 		if state.Status == "offline" {
 			displayIPPadded = color.RedString(displayIPPadded)
 		} else if isNew {
@@ -1587,22 +1591,62 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		}
 
 		hostname := getHostname(state.Host)
-		// UTF-8-aware truncation
+		// UTF-8-aware truncation (compact: 12 chars)
 		hostnameRunes := []rune(hostname)
-		if len(hostnameRunes) > 22 {
-			hostname = string(hostnameRunes[:21]) + "…"
+		if len(hostnameRunes) > 12 {
+			hostname = string(hostnameRunes[:11]) + "…"
 		}
 
-		// Vendor from MAC lookup
+		// Format MAC address
+		mac := state.Host.MAC
+		if mac == "" {
+			mac = "-"
+		}
+
+		// Vendor from MAC lookup (compact: 7 chars)
 		vendor := getVendor(state.Host)
 		if vendor == "" || vendor == "-" {
 			vendor = "-"
 		}
 		// UTF-8-aware truncation
 		vendorRunes := []rune(vendor)
-		if len(vendorRunes) > 12 {
-			vendor = string(vendorRunes[:11]) + "…"
+		if len(vendorRunes) > 7 {
+			vendor = string(vendorRunes[:6]) + "…"
 		}
+
+		// Device type (compact: 6 chars)
+		deviceType := state.Host.DeviceType
+		if deviceType == "" || deviceType == "Unknown" {
+			deviceType = "-"
+		}
+		// UTF-8-aware truncation
+		deviceTypeRunes := []rune(deviceType)
+		if len(deviceTypeRunes) > 6 {
+			deviceType = string(deviceTypeRunes[:5]) + "…"
+		}
+
+		// Format RTT (compact: max 4 chars like "1ms" or "99ms")
+		rttText := "-"
+		if state.Host.RTT > 0 {
+			rtt := state.Host.RTT
+			if rtt < time.Millisecond {
+				// Microseconds without decimal
+				rttText = fmt.Sprintf("%.0fµ", float64(rtt.Microseconds()))
+			} else if rtt < time.Second {
+				// Milliseconds without "ms" if > 99
+				ms := float64(rtt.Microseconds()) / 1000.0
+				if ms < 100 {
+					rttText = fmt.Sprintf("%.0fm", ms)
+				} else {
+					rttText = fmt.Sprintf("%.0f", ms)
+				}
+			} else {
+				rttText = fmt.Sprintf("%.1fs", rtt.Seconds())
+			}
+		}
+
+		// Format flap count
+		flapStr := fmt.Sprintf("%d", state.FlapCount)
 
 		// Calculate status duration
 		var statusDuration time.Duration
@@ -1613,20 +1657,41 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 			statusDuration = referenceTime.Sub(state.StatusSince)
 		}
 
-		// Apply zebra striping to other columns (except IP which has its own color logic)
-		hostnamePadded := padRight(hostname, 22)
-		vendorPadded := padRight(vendor, 12)
-		uptimePadded := padLeft(formatDurationShort(statusDuration), 6)
+		// Apply padding (compact for 80-char terminals)
+		hostnamePadded := padRight(hostname, 12)
+		macPadded := padRight(mac, 17)
+		vendorPadded := padRight(vendor, 7)
+		deviceTypePadded := padRight(deviceType, 6)
+		rttPadded := padLeft(rttText, 4)
+		flapPadded := padLeft(flapStr, 3)
+		uptimePadded := padLeft(formatDurationShort(statusDuration), 5)
 
+		// Apply colors: locally-administered MAC in yellow, flaps in yellow if > 0
+		if isLocallyAdministered(mac) {
+			macPadded = color.YellowString(macPadded)
+		}
+		if state.FlapCount > 0 {
+			flapPadded = color.YellowString(flapPadded)
+		}
+
+		// Apply zebra striping to other columns (except IP which has its own color logic)
 		if i%2 == 1 && state.Status != "offline" && !isNew {
 			// Zebra striping for odd rows (only if not offline/new - they have priority colors)
 			hostnamePadded = color.New(color.FgHiBlack).Sprint(hostnamePadded)
+			if !isLocallyAdministered(mac) {
+				macPadded = color.New(color.FgHiBlack).Sprint(macPadded)
+			}
 			vendorPadded = color.New(color.FgHiBlack).Sprint(vendorPadded)
+			deviceTypePadded = color.New(color.FgHiBlack).Sprint(deviceTypePadded)
+			rttPadded = color.New(color.FgHiBlack).Sprint(rttPadded)
+			if state.FlapCount == 0 {
+				flapPadded = color.New(color.FgHiBlack).Sprint(flapPadded)
+			}
 			uptimePadded = color.New(color.FgHiBlack).Sprint(uptimePadded)
 		}
 
 		// Assemble row with UTF-8-aware padding
-		rowContent := displayIPPadded + " " + hostnamePadded + " " + vendorPadded + " " + uptimePadded
+		rowContent := displayIPPadded + " " + hostnamePadded + " " + macPadded + " " + vendorPadded + " " + deviceTypePadded + " " + rttPadded + " " + flapPadded + " " + uptimePadded
 
 		printTableRow(rowContent, width)
 	}
