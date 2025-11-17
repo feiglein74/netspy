@@ -985,8 +985,8 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 
 	// Status line (inside box) - use same fixed column widths as header
 	col1Status := padRightANSI(color.CyanString("▶")+" Next scan in: "+color.CyanString(formatDuration(nextScanIn)), col1Width)
-	col2Status := padRight("", col2Width)  // Empty middle column
-	col3Status := padRight("Ctrl+C/ESC: exit │ c: copy", col3Width)
+	col2Status := padRight("ESC: exit │ c: copy", col2Width)
+	col3Status := padRight("[G]=Gateway │ [!]=Flap", col3Width)
 	statusLine := fmt.Sprintf("%s  │  %s  │  %s", col1Status, col2Status, col3Status)
 	printBoxLine(statusLine, width)
 
