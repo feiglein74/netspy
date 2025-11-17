@@ -696,6 +696,14 @@ func padLeft(s string, width int) string {
 	return strings.Repeat(" ", width-currentLen) + s
 }
 
+// safeRepeat verhindert negative repeat counts die zu Panics führen
+func safeRepeat(str string, count int) string {
+	if count < 0 {
+		return ""
+	}
+	return strings.Repeat(str, count)
+}
+
 func moveCursorUp(lines int) {
 	for i := 0; i < lines; i++ {
 		fmt.Print("\033[A") // Move up one line
@@ -852,20 +860,17 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 	}
 
 	// Top border
-	screenBuffer.WriteString("╔" + strings.Repeat("═", width-2) + "╗\n")
+	screenBuffer.WriteString("╔" + safeRepeat("═", width-2) + "╗\n")
 
 	// Title line
 	title := "NetSpy - Network Monitor"
 	scanInfo := fmt.Sprintf("[Scan #%d]", scanCount)
 	spacesNeeded := width - runeLen(title) - runeLen(scanInfo) - 3
-	if spacesNeeded < 0 {
-		spacesNeeded = 0
-	}
-	titleLine := title + strings.Repeat(" ", spacesNeeded) + scanInfo
+	titleLine := title + safeRepeat(" ", spacesNeeded) + scanInfo
 	writeLine(titleLine)
 
 	// Separator
-	screenBuffer.WriteString("╠" + strings.Repeat("═", width-2) + "╣\n")
+	screenBuffer.WriteString("╠" + safeRepeat("═", width-2) + "╣\n")
 
 	// Info line 1
 	line1 := fmt.Sprintf("Network: %s  │  Mode: %s  │  Interval: %v", network, mode, interval)
@@ -877,7 +882,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 	writeLine(line2)
 
 	// Separator
-	screenBuffer.WriteString("╠" + strings.Repeat("═", width-2) + "╣\n")
+	screenBuffer.WriteString("╠" + safeRepeat("═", width-2) + "╣\n")
 
 	// Table header und Rows (vereinfacht - zeigt nur IPs und Status)
 	// Sortiere IPs
@@ -946,7 +951,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 	}
 
 	// Separator
-	screenBuffer.WriteString("╠" + strings.Repeat("═", width-2) + "╣\n")
+	screenBuffer.WriteString("╠" + safeRepeat("═", width-2) + "╣\n")
 
 	// Status line
 	statusLine := fmt.Sprintf("▶ Next scan in: %s │ Press Ctrl+C to exit or 'c' to copy",
@@ -954,7 +959,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 	writeLine(statusLine)
 
 	// Bottom border
-	screenBuffer.WriteString("╚" + strings.Repeat("═", width-2) + "╝\n")
+	screenBuffer.WriteString("╚" + safeRepeat("═", width-2) + "╝\n")
 }
 
 // drawTerminalTooSmallWarning zeigt Warnung wenn Terminal zu klein ist
@@ -969,7 +974,7 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 
 	// Top border
 	fmt.Print(color.CyanString("╔"))
-	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
 	fmt.Print(color.CyanString("╗\n"))
 
 	// Title line (abgeschnitten falls nötig)
@@ -978,15 +983,24 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 	threadCount := atomic.LoadInt32(activeThreads)
 	scanInfo := fmt.Sprintf("[Threads #%d / Scan #%d]", threadCount, scanCount)
 
-	titleLine := title + strings.Repeat(" ", width-runeLen(title)-runeLen(scanInfo)-4) + scanInfo
+	// Berechne Padding und verhindere negative Werte
+	paddingSpace := width - runeLen(title) - runeLen(scanInfo) - 4
+	titleLine := title + safeRepeat(" ", paddingSpace) + scanInfo
 	if runeLen(titleLine) > width-4 {
-		titleLine = string([]rune(titleLine)[:width-7]) + "..."
+		maxLen := width - 7
+		if maxLen < 0 {
+			maxLen = 0
+		}
+		if maxLen > runeLen(titleLine) {
+			maxLen = runeLen(titleLine)
+		}
+		titleLine = string([]rune(titleLine)[:maxLen]) + "..."
 	}
 	printBoxLine(titleLine, width)
 
 	// Separator
 	fmt.Print(color.CyanString("╠"))
-	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
 	fmt.Print(color.CyanString("╣\n"))
 
 	// Warning message
@@ -1008,7 +1022,7 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 
 	// Bottom border
 	fmt.Print(color.CyanString("╚"))
-	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
 	fmt.Print(color.CyanString("╝\n"))
 }
 
@@ -1051,7 +1065,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 
 	// Top border with title
 	fmt.Print(color.CyanString("╔"))
-	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
 	fmt.Print(color.CyanString("╗\n"))
 
 	// Title line - use printBoxLine with properly constructed content
@@ -1064,15 +1078,12 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	titleStripped := stripANSI(title)
 	scanInfoStripped := stripANSI(scanInfo)
 	spacesNeeded := width - runeLen(titleStripped) - runeLen(scanInfoStripped) - 4
-	if spacesNeeded < 0 {
-		spacesNeeded = 0
-	}
-	titleLine := title + strings.Repeat(" ", spacesNeeded) + scanInfo
+	titleLine := title + safeRepeat(" ", spacesNeeded) + scanInfo
 	printBoxLine(titleLine, width)
 
 	// Separator
 	fmt.Print(color.CyanString("╠"))
-	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
 	fmt.Print(color.CyanString("╣\n"))
 
 	// Fixed column widths from left (not dynamically divided)
@@ -1108,7 +1119,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 
 	// Separator before table (directly from info to table)
 	fmt.Print(color.CyanString("╠"))
-	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
 	fmt.Print(color.CyanString("╣\n"))
 
 	// Delegate to existing responsive table rendering
@@ -1116,7 +1127,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 
 	// Separator before status line
 	fmt.Print(color.CyanString("╠"))
-	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
 	fmt.Print(color.CyanString("╣\n"))
 
 	// Status line (inside box) - use same fixed column widths as header
@@ -1128,7 +1139,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 
 	// Bottom border
 	fmt.Print(color.CyanString("╚"))
-	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
 	fmt.Print(color.CyanString("╝\n"))
 
 	// Capture screen content für späteres Kopieren - VEREINFACHT
@@ -1514,10 +1525,7 @@ func updateHeaderLineOnly(scanCount int, activeThreads *int32) {
 	titleStripped := stripANSI(title)
 	scanInfoStripped := stripANSI(scanInfo)
 	spacesNeeded := width - runeLen(titleStripped) - runeLen(scanInfoStripped) - 4
-	if spacesNeeded < 0 {
-		spacesNeeded = 0
-	}
-	titleLine := title + strings.Repeat(" ", spacesNeeded) + scanInfo
+	titleLine := title + safeRepeat(" ", spacesNeeded) + scanInfo
 
 	// Move cursor to line 2, column 1 (header line is 2nd line after top border)
 	fmt.Print("\033[2;1H")
