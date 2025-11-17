@@ -993,7 +993,10 @@ func performScanCmd(network, mode string) tea.Cmd {
 		ctx := context.Background()
 
 		// Nutze bestehende performScanQuiet Logik
-		hosts := performScanQuiet(ctx, network, netCIDR, mode)
+		// nil = kein Thread-Counting für Bubbletea UI
+		// Calculate optimal thread configuration based on network size
+		threadConfig := calculateThreads(netCIDR, maxThreads)
+		hosts := performScanQuiet(ctx, network, netCIDR, mode, nil, threadConfig)
 
 		return scanCompleteMsg{
 			hosts:    hosts,

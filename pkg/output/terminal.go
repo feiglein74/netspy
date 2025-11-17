@@ -76,3 +76,8 @@ func (ts TerminalSize) IsWide() bool {
 func (ts TerminalSize) IsMedium() bool {
 	return !ts.IsNarrow() && !ts.IsWide()
 }
+
+// IsTooSmall prüft ob Terminal zu klein für Ausgabe ist
+func (ts TerminalSize) IsTooSmall() bool {
+	return ts.Width < 60 || ts.Height < 15
+}

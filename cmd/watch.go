@@ -29,6 +29,7 @@ var (
 	watchInterval   time.Duration
 	watchMode       string
 	watchUI         string          // UI-Mode: "bubbletea" oder "legacy"
+	maxThreads      int             // Maximum concurrent threads (0 = auto-calculate based on network size)
 	screenBuffer    bytes.Buffer    // Buffer für aktuellen Screen-Inhalt (legacy mode)
 	screenBufferMux sync.Mutex      // Mutex für Thread-Safe Zugriff (legacy mode)
 )
@@ -43,6 +44,45 @@ type DeviceState struct {
 	FlapCount           int           // Number of times status has changed (flapping counter)
 	TotalOfflineTime    time.Duration // Accumulated time spent offline (for continuous uptime calculation)
 	LastHostnameLookup  time.Time     // When we last tried to resolve hostname (for retry mechanism)
+}
+
+// ThreadConfig holds thread count configuration for different operations
+type ThreadConfig struct {
+	Scan        int // Scanner threads (TCP/Ping)
+	Reachability int // Quick reachability check threads
+	DNS         int // DNS/mDNS/NetBIOS lookup threads
+}
+
+// calculateThreads determines optimal thread counts based on network size
+// Returns (scanThreads, reachabilityThreads, dnsThreads)
+func calculateThreads(netCIDR *net.IPNet, maxThreadsOverride int) ThreadConfig {
+	// Count hosts in network
+	ones, bits := netCIDR.Mask.Size()
+	hostCount := 1 << uint(bits-ones) // 2^(bits-ones)
+
+	// If user specified max threads, scale all thread types proportionally
+	if maxThreadsOverride > 0 {
+		// Scale: 50% scan, 30% reachability, 20% DNS
+		return ThreadConfig{
+			Scan:        int(float64(maxThreadsOverride) * 0.50),
+			Reachability: int(float64(maxThreadsOverride) * 0.30),
+			DNS:         int(float64(maxThreadsOverride) * 0.20),
+		}
+	}
+
+	// Auto-calculate based on network size
+	switch {
+	case hostCount <= 16: // /28 or smaller
+		return ThreadConfig{Scan: 10, Reachability: 10, DNS: 5}
+	case hostCount <= 64: // /26
+		return ThreadConfig{Scan: 20, Reachability: 20, DNS: 8}
+	case hostCount <= 256: // /24 (most common home/office networks)
+		return ThreadConfig{Scan: 40, Reachability: 30, DNS: 10}
+	case hostCount <= 1024: // /22
+		return ThreadConfig{Scan: 80, Reachability: 50, DNS: 15}
+	default: // /16+ (large enterprise networks)
+		return ThreadConfig{Scan: 150, Reachability: 80, DNS: 20}
+	}
 }
 
 // watchCmd repräsentiert den watch-Befehl
@@ -74,6 +114,7 @@ func init() {
 	watchCmd.Flags().StringVar(&watchMode, "mode", "hybrid", "Scan mode (hybrid, arp, fast, thorough, conservative)")
 	watchCmd.Flags().IntSliceVarP(&ports, "ports", "p", []int{}, "Specific ports to scan")
 	watchCmd.Flags().StringVar(&watchUI, "ui", "legacy", "UI mode (legacy, bubbletea)")
+	watchCmd.Flags().IntVar(&maxThreads, "max-threads", 0, "Maximum concurrent threads (0 = auto-calculate based on network size)")
 }
 
 func runWatch(cmd *cobra.Command, args []string) error {
@@ -107,6 +148,14 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 // runWatchLegacy ist die alte ANSI-basierte Implementierung
 func runWatchLegacy(network string, netCIDR *net.IPNet) error {
+	// Calculate optimal thread counts based on network size
+	threadConfig := calculateThreads(netCIDR, maxThreads)
+	ones, bits := netCIDR.Mask.Size()
+	hostCount := 1 << uint(bits-ones)
+	fmt.Printf("🔧 Thread Config: Scan=%d, Reachability=%d, DNS=%d (Network: %s, %d potential hosts)\n",
+		threadConfig.Scan, threadConfig.Reachability, threadConfig.DNS,
+		netCIDR.String(), hostCount)
+
 	// Geräte-Status-Map - Schlüssel ist IP-Adresse als String
 	deviceStates := make(map[string]*DeviceState)
 
@@ -171,7 +220,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 		scanStart := time.Now()
 
 		// Perform scan quietly (no output during scan)
-		hosts := performScanQuiet(ctx, network, netCIDR, watchMode)
+		hosts := performScanQuiet(ctx, network, netCIDR, watchMode, &activeThreads, threadConfig)
 
 		// Check if cancelled during scan
 		if ctx.Err() != nil {
@@ -280,25 +329,25 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 
 		// Phase 2: Start slow background lookups (mDNS/NetBIOS/LLMNR/HTTP) while countdown is running
 		if nextScan > 0 {
-			go performBackgroundDNSLookups(ctx, deviceStates, &activeThreads)
+			go performBackgroundDNSLookups(ctx, deviceStates, &activeThreads, threadConfig)
 
 			// Show countdown with periodic table updates (pass scanStart for consistent uptime)
-			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, keyChan, &redrawMutex, network, watchInterval, watchMode, &activeThreads)
+			showCountdownWithTableUpdates(ctx, nextScan, deviceStates, scanCount, scanDuration, scanStart, winchChan, keyChan, &redrawMutex, network, watchInterval, watchMode, &activeThreads, threadConfig)
 		}
 	}
 }
 
-func performScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, mode string) []scanner.Host {
+func performScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, mode string, activeThreads *int32, threadConfig ThreadConfig) []scanner.Host {
 	var hosts []scanner.Host
 	var err error
 
 	switch mode {
 	case "hybrid":
-		hosts, err = performHybridScanQuiet(ctx, netCIDR)
+		hosts, err = performHybridScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
 	case "arp":
-		hosts, err = performARPScanQuiet(ctx, netCIDR)
+		hosts, err = performARPScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
 	case "fast", "thorough", "conservative":
-		hosts, err = performNormalScan(network, mode)
+		hosts, err = performNormalScan(network, mode, activeThreads, threadConfig)
 	default:
 		return nil
 	}
@@ -313,7 +362,7 @@ func performScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, m
 	return hosts
 }
 
-func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.Host, error) {
+func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
 	// Prüfe ob das Ziel-Netzwerk lokal oder fremd ist
 	isLocal, _ := discovery.IsLocalSubnet(netCIDR)
 
@@ -358,9 +407,9 @@ func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.
 		// Generate all IPs in network
 		ips := discovery.GenerateIPsFromCIDR(netCIDR)
 
-		// Scanner configuration (conservative mode for watch)
+		// Scanner configuration (dynamic based on network size)
 		config := scanner.Config{
-			Concurrency: 40,
+			Concurrency: threadConfig.Scan,
 			Timeout:     500 * time.Millisecond,
 			Fast:        false,
 			Thorough:    false,
@@ -368,7 +417,7 @@ func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.
 		}
 
 		s := scanner.New(config)
-		tcpHosts, err := s.ScanHosts(ips)
+		tcpHosts, err := s.ScanHosts(ips, activeThreads)
 		if err != nil {
 			return nil, err
 		}
@@ -449,7 +498,7 @@ func getLocalMAC() string {
 	return ""
 }
 
-func performARPScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.Host, error) {
+func performARPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
 	// Prüfe ob das Ziel-Netzwerk lokal oder fremd ist
 	isLocal, _ := discovery.IsLocalSubnet(netCIDR)
 
@@ -471,9 +520,9 @@ func performARPScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.Hos
 		// Generate all IPs in network
 		ips := discovery.GenerateIPsFromCIDR(netCIDR)
 
-		// Scanner configuration (conservative mode for watch)
+		// Scanner configuration (dynamic based on network size)
 		config := scanner.Config{
-			Concurrency: 40,
+			Concurrency: threadConfig.Scan,
 			Timeout:     500 * time.Millisecond,
 			Fast:        false,
 			Thorough:    false,
@@ -481,7 +530,7 @@ func performARPScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.Hos
 		}
 
 		s := scanner.New(config)
-		tcpHosts, err := s.ScanHosts(ips)
+		tcpHosts, err := s.ScanHosts(ips, activeThreads)
 		if err != nil {
 			return nil, err
 		}
@@ -552,7 +601,7 @@ func populateARPTableQuiet(ctx context.Context, network *net.IPNet) error {
 
 // Old streaming functions removed - now using static table with redrawTable()
 
-func performNormalScan(network string, mode string) ([]scanner.Host, error) {
+func performNormalScan(network string, mode string, activeThreads *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
 	hosts, err := parseNetworkInput(network)
 	if err != nil {
 		return nil, fmt.Errorf("invalid network specification: %v", err)
@@ -565,7 +614,7 @@ func performNormalScan(network string, mode string) ([]scanner.Host, error) {
 	config.Quiet = true // Suppress verbose output in watch mode
 	s := scanner.New(config)
 
-	results, err := s.ScanHosts(hosts)
+	results, err := s.ScanHosts(hosts, activeThreads)
 	if err != nil {
 		return nil, fmt.Errorf("scan failed: %v", err)
 	}
@@ -835,7 +884,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 	})
 
 	// Header
-	header := "IP               Stat Hostname           Uptime"
+	header := "IP               Stat Hostname               Vendor       Uptime"
 	writeLine(header)
 
 	// Rows
@@ -855,10 +904,21 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 		}
 
 		hostname := getHostname(state.Host)
-		// Hostname auf max 18 Zeichen (Runes) begrenzen
+		// Hostname auf max 22 Zeichen (Runes) begrenzen
 		hostnameRunes := []rune(hostname)
-		if len(hostnameRunes) > 18 {
-			hostname = string(hostnameRunes[:17]) + "…"
+		if len(hostnameRunes) > 22 {
+			hostname = string(hostnameRunes[:21]) + "…"
+		}
+
+		// Vendor from MAC lookup
+		vendor := getVendor(state.Host)
+		if vendor == "" || vendor == "-" {
+			vendor = "-"
+		}
+		// Vendor auf max 12 Zeichen begrenzen
+		vendorRunes := []rune(vendor)
+		if len(vendorRunes) > 12 {
+			vendor = string(vendorRunes[:11]) + "…"
 		}
 
 		var statusDuration time.Duration
@@ -871,10 +931,11 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 
 		// Manuelles Padding mit UTF-8-awareness
 		paddedIP := padRight(displayIP, 17)      // 17 Zeichen für IP
-		paddedHostname := padRight(hostname, 18) // 18 Zeichen für Hostname
-		paddedUptime := padLeft(formatDurationShort(statusDuration), 8) // Right-align (Dezimaltabulator)
+		paddedHostname := padRight(hostname, 22) // 22 Zeichen für Hostname
+		paddedVendor := padRight(vendor, 12)     // 12 Zeichen für Vendor
+		paddedUptime := padLeft(formatDurationShort(statusDuration), 6) // Right-align (Dezimaltabulator)
 
-		row := paddedIP + statusIcon + "    " + paddedHostname + paddedUptime
+		row := paddedIP + statusIcon + "    " + paddedHostname + " " + paddedVendor + " " + paddedUptime
 		writeLine(row)
 	}
 
@@ -890,10 +951,63 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 	screenBuffer.WriteString("╚" + strings.Repeat("═", width-2) + "╝\n")
 }
 
+// drawTerminalTooSmallWarning zeigt Warnung wenn Terminal zu klein ist
+func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCount int, activeThreads *int32) {
+	// Top border
+	fmt.Print(color.CyanString("╔"))
+	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString("╗\n"))
+
+	// Title line (abgeschnitten falls nötig)
+	gitVersion := getGitVersion()
+	title := fmt.Sprintf("NetSpy - Network Monitor %s", gitVersion)
+	threadCount := atomic.LoadInt32(activeThreads)
+	scanInfo := fmt.Sprintf("[Threads #%d / Scan #%d]", threadCount, scanCount)
+
+	titleLine := title + strings.Repeat(" ", width-runeLen(title)-runeLen(scanInfo)-4) + scanInfo
+	if runeLen(titleLine) > width-4 {
+		titleLine = string([]rune(titleLine)[:width-7]) + "..."
+	}
+	printBoxLine(titleLine, width)
+
+	// Separator
+	fmt.Print(color.CyanString("╠"))
+	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString("╣\n"))
+
+	// Warning message
+	printBoxLine("", width) // Empty line
+	warningMsg := color.YellowString("⚠ Terminal zu klein!")
+	printBoxLine(warningMsg, width)
+	printBoxLine("", width) // Empty line
+
+	minMsg := "Minimum: 60 Spalten x 15 Zeilen"
+	printBoxLine(minMsg, width)
+
+	currentMsg := fmt.Sprintf("Aktuell: %d Spalten x %d Zeilen", termSize.Width, termSize.Height)
+	printBoxLine(currentMsg, width)
+
+	printBoxLine("", width) // Empty line
+	helpMsg := "Bitte vergrößern Sie das Terminal-Fenster."
+	printBoxLine(helpMsg, width)
+	printBoxLine("", width) // Empty line
+
+	// Bottom border
+	fmt.Print(color.CyanString("╚"))
+	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
+	fmt.Print(color.CyanString("╝\n"))
+}
+
 // drawBtopLayout renders a btop-inspired fullscreen layout
 func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration, activeThreads *int32) {
 	termSize := output.GetTerminalSize()
 	width := termSize.GetDisplayWidth()
+
+	// Check if terminal is too small for display
+	if termSize.IsTooSmall() {
+		drawTerminalTooSmallWarning(termSize, width, scanCount, activeThreads)
+		return
+	}
 
 	// Count stats
 	onlineCount := 0
@@ -1043,8 +1157,9 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 
 	// Table header - use padRight für UTF-8-aware padding
 	headerContent := padRight("IP", 16) + " " +
-		padRight("Hostname", 18) + " " +
-		padRight("Uptime", 8)
+		padRight("Hostname", 22) + " " +
+		padRight("Vendor", 12) + " " +
+		padRight("Uptime", 6)
 	printTableRow(color.CyanString(headerContent), width)
 
 	// Sort IPs
@@ -1084,8 +1199,19 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		hostname := getHostname(state.Host)
 		// UTF-8-aware truncation
 		hostnameRunes := []rune(hostname)
-		if len(hostnameRunes) > 18 {
-			hostname = string(hostnameRunes[:17]) + "…"
+		if len(hostnameRunes) > 22 {
+			hostname = string(hostnameRunes[:21]) + "…"
+		}
+
+		// Vendor from MAC lookup
+		vendor := getVendor(state.Host)
+		if vendor == "" || vendor == "-" {
+			vendor = "-"
+		}
+		// UTF-8-aware truncation
+		vendorRunes := []rune(vendor)
+		if len(vendorRunes) > 12 {
+			vendor = string(vendorRunes[:11]) + "…"
 		}
 
 		// Calculate status duration
@@ -1099,8 +1225,9 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 
 		// Assemble row with UTF-8-aware padding
 		rowContent := displayIPPadded + " " +
-			padRight(hostname, 18) + " " +
-			padLeft(formatDurationShort(statusDuration), 8) // Right-align (Dezimaltabulator)
+			padRight(hostname, 22) + " " +
+			padRight(vendor, 12) + " " +
+			padLeft(formatDurationShort(statusDuration), 6) // Right-align (Dezimaltabulator)
 
 		printTableRow(rowContent, width)
 	}
@@ -1384,7 +1511,7 @@ func updateHeaderLineOnly(scanCount int, activeThreads *int32) {
 	printBoxLine(titleLine, width)
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32) {
+func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32, threadConfig ThreadConfig) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -1482,7 +1609,7 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 					redrawMutex.Unlock()
 				} else {
 					// Reachability check: quickly check if devices are still online
-					performQuickReachabilityCheck(states)
+					performQuickReachabilityCheck(states, activeThreads, threadConfig)
 					redrawMutex.Lock()
 					currentRefTime := scanStart.Add(elapsed)
 					redrawFullScreen(currentRefTime, scanDuration, remaining)
@@ -1501,9 +1628,9 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 
 // performQuickReachabilityCheck quickly checks if online devices are still reachable
 // Updates RTT and online/offline status without full ARP scan
-func performQuickReachabilityCheck(deviceStates map[string]*DeviceState) {
+func performQuickReachabilityCheck(deviceStates map[string]*DeviceState, activeThreads *int32, threadConfig ThreadConfig) {
 	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, 30) // Limit concurrent checks
+	semaphore := make(chan struct{}, threadConfig.Reachability) // Dynamic based on network size
 
 	for ipStr, state := range deviceStates {
 		// Only check devices that were online
@@ -1516,6 +1643,10 @@ func performQuickReachabilityCheck(deviceStates map[string]*DeviceState) {
 			defer wg.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
+
+			// Increment active thread counter
+			atomic.AddInt32(activeThreads, 1)
+			defer atomic.AddInt32(activeThreads, -1)
 
 			// Quick RTT check on the most likely port
 			parsedIP := net.ParseIP(ip)
@@ -1553,13 +1684,13 @@ func performQuickReachabilityCheck(deviceStates map[string]*DeviceState) {
 	wg.Wait()
 }
 
-func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState, activeThreads *int32) {
+func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState, activeThreads *int32, threadConfig ThreadConfig) {
 	// Phase 2: Slow background lookups for hosts without DNS names
 	// DNS was already tried in Phase 1 (performInitialDNSLookups)
 	// This focuses on alternative methods: mDNS/Bonjour, NetBIOS, LLMNR, and HTTP
 	// Only processes hosts without hostnames or retries after 5 minutes
 	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, 10) // Limit concurrent lookups
+	semaphore := make(chan struct{}, threadConfig.DNS) // Dynamic based on network size
 
 	retryInterval := 5 * time.Minute // Retry every 5 minutes if no hostname found
 
