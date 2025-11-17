@@ -703,6 +703,17 @@ func padRight(s string, length int) string {
 	return s + strings.Repeat(" ", length-currentLen)
 }
 
+// padRightANSI pads a string to a certain length, accounting for invisible ANSI color codes
+func padRightANSI(s string, length int) string {
+	// Calculate visible length (without ANSI codes)
+	visibleLen := runeLen(stripANSI(s))
+	if visibleLen >= length {
+		return s
+	}
+	// Add spaces based on visual length
+	return s + strings.Repeat(" ", length-visibleLen)
+}
+
 // printTableRow druckt eine Tabellenzeile mit korrektem Padding (UTF-8 + ANSI aware)
 func printTableRow(content string, width int) {
 	// Berechne sichtbare Länge (ohne ANSI codes)
@@ -925,24 +936,22 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
 	fmt.Print(color.CyanString("╣\n"))
 
-	// Calculate fixed column widths for stable layout (prevent jumping when numbers change)
-	// Total width available: width - 4 (borders "║ " + " ║") - 10 (two separators "  │  ") = width - 14
-	availableWidth := width - 14
-	col1Width := availableWidth / 3
-	col2Width := availableWidth / 3
-	col3Width := availableWidth - col1Width - col2Width // Remainder goes to col3
+	// Fixed column widths from left (not dynamically divided)
+	// Content-based sizing instead of equal thirds
+	col1Width := 25  // "Network: 10.0.0.0/24" + padding
+	col2Width := 18  // "Mode : hybrid" + padding
+	col3Width := 20  // "Interval: 30s" + padding
 
-	// Dezimaltabulator: Labels rechtsbündig (Doppelpunkt aligned), Werte rechtsbündig
-	labelWidth1 := 8  // "Network:" / "Devices:"
-	labelWidth2 := 8  // "Mode:" / "Flaps:" (mit leading spaces)
-	labelWidth3 := 9  // "Interval:" / "Scan:" (mit leading spaces)
-	valueWidth := 15  // Reserve für Werte
+	// Dezimaltabulator: Labels mit Doppelpunkt vertikal aligned in jeder Spalte
+	// Spalte 1: "Network" und "Devices" beide 7 chars → Doppelpunkt an Position 8
+	// Spalte 2: "Mode" (4) und "Flaps" (5) → max 5 → Doppelpunkt an Position 6
+	// Spalte 3: "Interval" (8) und "Scan" (4) → max 8 → Doppelpunkt an Position 9
 
 	// Info line 1 (static - doesn't change)
-	col1_line1 := padLeft("Network:", labelWidth1) + " " + padLeft(network, valueWidth) + strings.Repeat(" ", col1Width-labelWidth1-valueWidth-1)
-	col2_line1 := padLeft("Mode:", labelWidth2) + " " + padLeft(mode, valueWidth) + strings.Repeat(" ", col2Width-labelWidth2-valueWidth-1)
+	col1_line1 := padRight("Network: "+network, col1Width)
+	col2_line1 := padRight(padRight("Mode", 5)+": "+mode, col2Width)
 	intervalValue := fmt.Sprintf("%v", interval)
-	col3_line1 := padLeft("Interval:", labelWidth3) + " " + padLeft(intervalValue, valueWidth) + strings.Repeat(" ", col3Width-labelWidth3-valueWidth-1)
+	col3_line1 := padRight(padRight("Interval", 8)+": "+intervalValue, col3Width)
 	line1 := fmt.Sprintf("%s  │  %s  │  %s", col1_line1, col2_line1, col3_line1)
 	printBoxLine(line1, width)
 
@@ -950,11 +959,11 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	devicesValue := fmt.Sprintf("%d (%s%d %s%d)", len(states),
 		color.GreenString("↑"), onlineCount,
 		color.RedString("↓"), offlineCount)
-	col1_line2 := padLeft("Devices:", labelWidth1) + " " + padLeft(devicesValue, valueWidth) + strings.Repeat(" ", col1Width-labelWidth1-valueWidth-1)
+	col1_line2 := padRightANSI("Devices: "+devicesValue, col1Width)
 	flapsValue := fmt.Sprintf("%d", totalFlaps)
-	col2_line2 := padLeft("Flaps:", labelWidth2) + " " + padLeft(flapsValue, valueWidth) + strings.Repeat(" ", col2Width-labelWidth2-valueWidth-1)
+	col2_line2 := padRight(padRight("Flaps", 5)+": "+flapsValue, col2Width)
 	scanValue := formatDuration(scanDuration)
-	col3_line2 := padLeft("Scan:", labelWidth3) + " " + padLeft(scanValue, valueWidth) + strings.Repeat(" ", col3Width-labelWidth3-valueWidth-1)
+	col3_line2 := padRight(padRight("Scan", 8)+": "+scanValue, col3Width)
 	line2 := fmt.Sprintf("%s  │  %s  │  %s", col1_line2, col2_line2, col3_line2)
 	printBoxLine(line2, width)
 
@@ -971,10 +980,11 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString(strings.Repeat("═", width-2)))
 	fmt.Print(color.CyanString("╣\n"))
 
-	// Status line (inside box)
-	statusLine := fmt.Sprintf("%s Next scan in: %s │ Press Ctrl+C to exit or 'c' to copy",
-		color.CyanString("▶"),  // Cyan wie die Box-Borders
-		color.CyanString(formatDuration(nextScanIn)))
+	// Status line (inside box) - use same fixed column widths as header
+	col1Status := padRightANSI(color.CyanString("▶")+" Next scan in: "+color.CyanString(formatDuration(nextScanIn)), col1Width)
+	col2Status := padRight("", col2Width)  // Empty middle column
+	col3Status := padRight("Press Ctrl+C to exit or 'c' to copy", col3Width)
+	statusLine := fmt.Sprintf("%s  │  %s  │  %s", col1Status, col2Status, col3Status)
 	printBoxLine(statusLine, width)
 
 	// Bottom border
