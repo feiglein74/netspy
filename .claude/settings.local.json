@@ -96,7 +96,9 @@
       "Bash(nslookup:*)",
       "Bash(nbtstat:*)",
       "Bash(cmd //c \"taskkill /F /IM netspy.exe\")",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(./netspy.exe watch:* &:*)",
+      "Bash(NETSPY_PID=$!:*)"
     ],
     "deny": [],
     "ask": []
