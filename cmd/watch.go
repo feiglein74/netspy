@@ -1149,6 +1149,36 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	go captureScreenSimple(states, referenceTime, network, interval, mode, scanCount, scanDuration, nextScanIn)
 }
 
+// calculateMaxVisibleHosts berechnet wie viele Hosts auf den Bildschirm passen
+// basierend auf der Terminal-Höhe
+func calculateMaxVisibleHosts(termHeight int) int {
+	// Layout-Overhead:
+	// - Top Border: 1
+	// - Title: 1
+	// - Separator: 1
+	// - Info Line 1: 1
+	// - Info Line 2: 1
+	// - Separator: 1
+	// - Table Header: 1
+	// = 7 Zeilen Header
+	//
+	// - Separator: 1
+	// - Status Line: 1
+	// - Bottom Border: 1
+	// = 3 Zeilen Footer
+	//
+	// Total: 10 Zeilen Overhead
+	overhead := 10
+	availableLines := termHeight - overhead
+
+	// Mindestens 1 Host anzeigen (auch wenn Terminal sehr klein)
+	if availableLines < 1 {
+		return 1
+	}
+
+	return availableLines
+}
+
 func redrawTable(states map[string]*DeviceState, referenceTime time.Time) {
 	// Hide cursor during redraw to prevent visible cursor jumping
 	fmt.Print("\033[?25l")
@@ -1198,8 +1228,16 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		return compareIPs(ips[i], ips[j])
 	})
 
+	// Limit hosts to what fits on screen
+	totalHosts := len(ips)
+	maxVisible := calculateMaxVisibleHosts(termSize.Height)
+	visibleIPs := ips
+	if len(ips) > maxVisible {
+		visibleIPs = ips[:maxVisible]
+	}
+
 	// Print each device
-	for _, ipStr := range ips {
+	for _, ipStr := range visibleIPs {
 		state := states[ipStr]
 
 		// Build IP with markers (Gateway and/or Offline)
@@ -1258,6 +1296,12 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 
 		printTableRow(rowContent, width)
 	}
+
+	// Show indicator if not all hosts are visible
+	if totalHosts > maxVisible {
+		indicator := fmt.Sprintf("  Showing %d of %d hosts - resize window for more", maxVisible, totalHosts)
+		printTableRow(color.YellowString(indicator), width)
+	}
 }
 
 // redrawMediumTable - Standard-Ansicht für mittlere Terminals (100-139 cols)
@@ -1283,8 +1327,16 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 		return compareIPs(ips[i], ips[j])
 	})
 
+	// Limit hosts to what fits on screen
+	totalHosts := len(ips)
+	maxVisible := calculateMaxVisibleHosts(termSize.Height)
+	visibleIPs := ips
+	if len(ips) > maxVisible {
+		visibleIPs = ips[:maxVisible]
+	}
+
 	// Print each device
-	for _, ipStr := range ips {
+	for _, ipStr := range visibleIPs {
 		state := states[ipStr]
 
 		// Build IP with markers (Gateway and/or Offline)
@@ -1370,6 +1422,12 @@ func redrawMediumTable(states map[string]*DeviceState, _ time.Time, termSize out
 
 		printTableRow(rowContent, width)
 	}
+
+	// Show indicator if not all hosts are visible
+	if totalHosts > maxVisible {
+		indicator := fmt.Sprintf("  Showing %d of %d hosts - resize window for more", maxVisible, totalHosts)
+		printTableRow(color.YellowString(indicator), width)
+	}
 }
 
 // redrawWideTable - Volle Ansicht für breite Terminals (>= 140 cols)
@@ -1411,8 +1469,16 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		return compareIPs(ips[i], ips[j])
 	})
 
+	// Limit hosts to what fits on screen
+	totalHosts := len(ips)
+	maxVisible := calculateMaxVisibleHosts(termSize.Height)
+	visibleIPs := ips
+	if len(ips) > maxVisible {
+		visibleIPs = ips[:maxVisible]
+	}
+
 	// Print each device
-	for _, ipStr := range ips {
+	for _, ipStr := range visibleIPs {
 		state := states[ipStr]
 
 		// Build IP with markers (Gateway and/or Offline)
@@ -1510,6 +1576,12 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 			flapNum
 
 		printTableRow(rowContent, termWidth)
+	}
+
+	// Show indicator if not all hosts are visible
+	if totalHosts > maxVisible {
+		indicator := fmt.Sprintf("  Showing %d of %d hosts - resize window for more", maxVisible, totalHosts)
+		printTableRow(color.YellowString(indicator), termWidth)
 	}
 }
 
