@@ -1355,10 +1355,10 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 	sortCol, sortAsc := sortState.Get()
 
 	// Table header with sort indicators and underlined shortcut keys
-	headerContent := padRight(underlineChar("IP", 'i')+getSortIndicator(sortCol, SortByIP, sortAsc), 16) + " " +
-		padRight(underlineChar("Hostname", 'h')+getSortIndicator(sortCol, SortByHostname, sortAsc), 22) + " " +
-		padRight(underlineChar("Vendor", 'v')+getSortIndicator(sortCol, SortByVendor, sortAsc), 12) + " " +
-		padRight(underlineChar("Uptime", 'u')+getSortIndicator(sortCol, SortByUptime, sortAsc), 6)
+	headerContent := padRightANSI(underlineChar("IP", 'i')+getSortIndicator(sortCol, SortByIP, sortAsc), 16) + " " +
+		padRightANSI(underlineChar("Hostname", 'h')+getSortIndicator(sortCol, SortByHostname, sortAsc), 22) + " " +
+		padRightANSI(underlineChar("Vendor", 'v')+getSortIndicator(sortCol, SortByVendor, sortAsc), 12) + " " +
+		padRightANSI(underlineChar("Uptime", 'u')+getSortIndicator(sortCol, SortByUptime, sortAsc), 6)
 	printTableRow(color.CyanString(headerContent), width)
 
 	// Create IPs slice and sort based on current sort state
@@ -1493,13 +1493,13 @@ func redrawMediumTable(states map[string]*DeviceState, referenceTime time.Time, 
 	sortCol, sortAsc := sortState.Get()
 
 	// Table header with sort indicators and underlined shortcut keys
-	headerContent := padRight(underlineChar("IP Address", 'i')+getSortIndicator(sortCol, SortByIP, sortAsc), 18) + " " +
-		padRight(underlineChar("Hostname", 'h')+getSortIndicator(sortCol, SortByHostname, sortAsc), 20) + " " +
-		padRight(underlineChar("MAC Address", 'm')+getSortIndicator(sortCol, SortByMAC, sortAsc), 18) + " " +
-		padRight(underlineChar("Vendor", 'v')+getSortIndicator(sortCol, SortByVendor, sortAsc), 15) + " " +
-		padRight(underlineChar("Device", 'd')+getSortIndicator(sortCol, SortByDeviceType, sortAsc), 12) + " " +
-		padRight(underlineChar("RTT", 'r')+getSortIndicator(sortCol, SortByRTT, sortAsc), 8) + " " +
-		padRight(underlineChar("Flaps", 'f')+getSortIndicator(sortCol, SortByFlaps, sortAsc), 5)
+	headerContent := padRightANSI(underlineChar("IP Address", 'i')+getSortIndicator(sortCol, SortByIP, sortAsc), 18) + " " +
+		padRightANSI(underlineChar("Hostname", 'h')+getSortIndicator(sortCol, SortByHostname, sortAsc), 20) + " " +
+		padRightANSI(underlineChar("MAC Address", 'm')+getSortIndicator(sortCol, SortByMAC, sortAsc), 18) + " " +
+		padRightANSI(underlineChar("Vendor", 'v')+getSortIndicator(sortCol, SortByVendor, sortAsc), 15) + " " +
+		padRightANSI(underlineChar("Device", 'd')+getSortIndicator(sortCol, SortByDeviceType, sortAsc), 12) + " " +
+		padRightANSI(underlineChar("RTT", 'r')+getSortIndicator(sortCol, SortByRTT, sortAsc), 8) + " " +
+		padRightANSI(underlineChar("Flaps", 'f')+getSortIndicator(sortCol, SortByFlaps, sortAsc), 5)
 	printTableRow(color.CyanString(headerContent), width)
 
 	// Create IPs slice and sort based on current sort state
@@ -1683,15 +1683,15 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	sortCol, sortAsc := sortState.Get()
 
 	// Table header with sort indicators and underlined shortcut keys
-	headerContent := padRight(underlineChar("IP Address", 'i')+getSortIndicator(sortCol, SortByIP, sortAsc), 17) + " " +
-		padRight(underlineChar("Hostname", 'h')+getSortIndicator(sortCol, SortByHostname, sortAsc), hostnameWidth) + " " +
-		padRight(underlineChar("MAC Address", 'm')+getSortIndicator(sortCol, SortByMAC, sortAsc), 18) + " " +
-		padRight(underlineChar("Vendor", 'v')+getSortIndicator(sortCol, SortByVendor, sortAsc), vendorWidth) + " " +
-		padRight(underlineChar("Device", 'd')+getSortIndicator(sortCol, SortByDeviceType, sortAsc), typeWidth) + " " +
-		padRight(underlineChar("RTT", 'r')+getSortIndicator(sortCol, SortByRTT, sortAsc), 8) + " " +
-		padRight(underlineChar("Time", 't')+getSortIndicator(sortCol, SortByFirstSeen, sortAsc), 13) + " " +
-		padRight(underlineChar("Uptime", 'u')+getSortIndicator(sortCol, SortByUptime, sortAsc), 12) + " " +
-		padRight(underlineChar("Flaps", 'f')+getSortIndicator(sortCol, SortByFlaps, sortAsc), 5)
+	headerContent := padRightANSI(underlineChar("IP Address", 'i')+getSortIndicator(sortCol, SortByIP, sortAsc), 17) + " " +
+		padRightANSI(underlineChar("Hostname", 'h')+getSortIndicator(sortCol, SortByHostname, sortAsc), hostnameWidth) + " " +
+		padRightANSI(underlineChar("MAC Address", 'm')+getSortIndicator(sortCol, SortByMAC, sortAsc), 18) + " " +
+		padRightANSI(underlineChar("Vendor", 'v')+getSortIndicator(sortCol, SortByVendor, sortAsc), vendorWidth) + " " +
+		padRightANSI(underlineChar("Device", 'd')+getSortIndicator(sortCol, SortByDeviceType, sortAsc), typeWidth) + " " +
+		padRightANSI(underlineChar("RTT", 'r')+getSortIndicator(sortCol, SortByRTT, sortAsc), 8) + " " +
+		padRightANSI(underlineChar("Time", 't')+getSortIndicator(sortCol, SortByFirstSeen, sortAsc), 13) + " " +
+		padRightANSI(underlineChar("Uptime", 'u')+getSortIndicator(sortCol, SortByUptime, sortAsc), 12) + " " +
+		padRightANSI(underlineChar("Flaps", 'f')+getSortIndicator(sortCol, SortByFlaps, sortAsc), 5)
 
 	printTableRow(color.CyanString(headerContent), termWidth)
 
