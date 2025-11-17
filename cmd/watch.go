@@ -363,31 +363,16 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 		cancel()
 	}()
 
-	// Keyboard-Listener für 'c' zum Kopieren, 'n'/'p' für Paging, F1 für Help und ESC zum Beenden
+	// Keyboard-Listener für 'c' zum Kopieren, 'n'/'p' für Paging, '?' für Help und ESC zum Beenden
 	go func() {
-		buf := make([]byte, 6) // Größerer Buffer für Escape-Sequenzen
+		buf := make([]byte, 1)
 		for {
 			n, err := os.Stdin.Read(buf)
 			if err != nil || n == 0 {
 				continue
 			}
 
-			// ESC-Sequenzen (F1, Arrow keys, etc.)
-			if buf[0] == 27 && n > 1 {
-				// F1: ESC[11~ oder ESCOP
-				if n >= 4 && buf[1] == '[' && buf[2] == '1' && buf[3] == '1' {
-					keyChan <- rune(0xFFFF) // Special F1 marker
-					continue
-				}
-				if n >= 3 && buf[1] == 'O' && buf[2] == 'P' {
-					keyChan <- rune(0xFFFF) // Special F1 marker
-					continue
-				}
-				// Andere ESC-Sequenzen ignorieren
-				continue
-			}
-
-			// Single ESC key - exit
+			// ESC key - exit
 			if buf[0] == 27 {
 				cancel()
 				return
@@ -396,6 +381,12 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 			// Space key
 			if buf[0] == ' ' {
 				keyChan <- ' '
+				continue
+			}
+
+			// Question mark for help
+			if buf[0] == '?' {
+				keyChan <- '?'
 				continue
 			}
 
@@ -998,7 +989,7 @@ func showHelpOverlay(width int) {
 
 	// Print box
 	fmt.Println(strings.Repeat("═", width))
-	printBoxLine(color.CyanString("Hilfe (F1)"), width)
+	printBoxLine(color.CyanString("Hilfe (?)"), width)
 	fmt.Println(strings.Repeat("═", width))
 	printBoxLine(line1, width)
 	printBoxLine(line2, width)
@@ -1255,7 +1246,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 	screenBuffer.WriteString("╠" + safeRepeat("═", width-2) + "╣\n")
 
 	// Status line
-	statusLine := fmt.Sprintf("▶ Next scan in: %s │ F1 = Help",
+	statusLine := fmt.Sprintf("▶ Next scan in: %s │ ? = Help",
 		formatDuration(nextScanIn))
 	writeLine(statusLine)
 
@@ -1433,9 +1424,9 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	fmt.Print(color.CyanString(safeRepeat("═", width-2)))
 	fmt.Print(color.CyanString("╣\n"))
 
-	// Status line (inside box) - simplified with F1 help
+	// Status line (inside box) - simplified with ? help
 	statusText := color.CyanString("▶") + " Next scan in: " + color.CyanString(formatDuration(nextScanIn)) +
-		"       │  " + color.CyanString("F1") + " = Help"
+		"       │  " + color.CyanString("?") + " = Help"
 	printBoxLine(statusText, width)
 
 	// Bottom border
@@ -1585,7 +1576,7 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		}
 
 		// Color IP: red if offline, green if new, otherwise use zebra striping
-		displayIPPadded := padRight(displayIP, 16)
+		displayIPPadded := padRightANSI(displayIP, 16)
 		if state.Status == "offline" {
 			displayIPPadded = color.RedString(displayIPPadded)
 		} else if isNew {
@@ -1720,7 +1711,7 @@ func redrawMediumTable(states map[string]*DeviceState, referenceTime time.Time, 
 		}
 
 		// Color IP: red if offline, green if new, otherwise use zebra striping
-		displayIPPadded := padRight(displayIP, 18)
+		displayIPPadded := padRightANSI(displayIP, 18)
 		if state.Status == "offline" {
 			displayIPPadded = color.RedString(displayIPPadded)
 		} else if isNew {
@@ -1913,7 +1904,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		}
 
 		// Color IP: red if offline, green if new, otherwise use zebra striping
-		displayIPPadded := padRight(displayIP, 17)
+		displayIPPadded := padRightANSI(displayIP, 17)
 		if state.Status == "offline" {
 			displayIPPadded = color.RedString(displayIPPadded)
 		} else if isNew {
@@ -2143,8 +2134,8 @@ func showCountdownWithTableUpdates(ctx context.Context, duration time.Duration, 
 				// Sort by Flaps
 				sortState.Toggle(SortByFlaps)
 				atomic.StoreInt32(currentPage, 1)
-			} else if key == 0xFFFF {
-				// F1 - Show help overlay
+			} else if key == '?' {
+				// ? - Show help overlay
 				termSize := output.GetTerminalSize()
 				showHelpOverlay(termSize.GetDisplayWidth())
 			}
