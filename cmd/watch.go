@@ -349,6 +349,30 @@ func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet) ([]scanner.
 		}
 	}
 
+	// SSDP/UPnP Discovery für zusätzliche Device-Infos (nur wenn Hosts gefunden)
+	ssdpDevices := make(map[string]discovery.SSDPDevice)
+	if len(finalHosts) > 0 {
+		devices, err := discovery.DiscoverSSDPDevices(2 * time.Second)
+		if err == nil {
+			for _, device := range devices {
+				ssdpDevices[device.IP] = device
+			}
+		}
+
+		// Enriche Hosts mit SSDP-Daten falls kein Hostname vorhanden
+		for i := range finalHosts {
+			if finalHosts[i].Hostname == "" {
+				if ssdpDevice, found := ssdpDevices[finalHosts[i].IP.String()]; found {
+					deviceName := discovery.GetSSDPDeviceName(ssdpDevice)
+					if deviceName != "" {
+						finalHosts[i].Hostname = deviceName
+						finalHosts[i].HostnameSource = "SSDP"
+					}
+				}
+			}
+		}
+	}
+
 	// Fallback zu TCP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
 	if len(finalHosts) == 0 {
 		// Generate all IPs in network
@@ -985,8 +1009,8 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 
 	// Status line (inside box) - use same fixed column widths as header
 	col1Status := padRightANSI(color.CyanString("▶")+" Next scan in: "+color.CyanString(formatDuration(nextScanIn)), col1Width)
-	col2Status := padRight("ESC: exit │ c: copy", col2Width)
-	col3Status := padRight("[G]=Gateway │ [!]=Flap", col3Width)
+	col2Status := padRight("ESC: exit, c: copy", col2Width)
+	col3Status := padRight("[G]=Gateway, [!]=Offline", col3Width)
 	statusLine := fmt.Sprintf("%s  │  %s  │  %s", col1Status, col2Status, col3Status)
 	printBoxLine(statusLine, width)
 
