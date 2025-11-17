@@ -266,6 +266,9 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 
 		redrawMutex.Unlock()
 
+		// Phase 0: Pre-populate from DNS cache (instant, < 100ms!)
+		populateFromDNSCache(deviceStates)
+
 		// Phase 1: Quick DNS lookups immediately after scan (blocks briefly for fast results)
 		performInitialDNSLookups(ctx, deviceStates)
 
@@ -1584,6 +1587,30 @@ func performInitialDNSLookups(ctx context.Context, deviceStates map[string]*Devi
 	}
 
 	wg.Wait()
+}
+
+// populateFromDNSCache fills deviceStates with cached DNS names from system DNS cache
+// This is instant (< 100ms) and provides hostnames for recently accessed devices
+func populateFromDNSCache(deviceStates map[string]*DeviceState) {
+	cache := discovery.ReadDNSCache()
+
+	for ip, hostname := range cache {
+		if state, exists := deviceStates[ip]; exists {
+			// Only populate if we don't already have a hostname
+			if state.Host.Hostname == "" {
+				state.Host.Hostname = hostname
+				state.Host.HostnameSource = "dns-cache"
+
+				// Update device type based on hostname
+				state.Host.DeviceType = discovery.DetectDeviceType(
+					state.Host.Hostname,
+					state.Host.MAC,
+					state.Host.Vendor,
+					state.Host.Ports,
+				)
+			}
+		}
+	}
 }
 
 func compareIPs(ip1, ip2 string) bool {
