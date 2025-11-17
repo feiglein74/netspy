@@ -139,7 +139,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 		cancel()
 	}()
 
-	// Keyboard-Listener für 'c' zum Kopieren
+	// Keyboard-Listener für 'c' zum Kopieren und ESC zum Beenden
 	go func() {
 		buf := make([]byte, 1)
 		for {
@@ -149,6 +149,9 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 			}
 			if buf[0] == 'c' || buf[0] == 'C' {
 				keyChan <- rune(buf[0])
+			} else if buf[0] == 27 { // ESC key
+				cancel() // Beende das Programm
+				return
 			}
 		}
 	}()
@@ -983,7 +986,7 @@ func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, net
 	// Status line (inside box) - use same fixed column widths as header
 	col1Status := padRightANSI(color.CyanString("▶")+" Next scan in: "+color.CyanString(formatDuration(nextScanIn)), col1Width)
 	col2Status := padRight("", col2Width)  // Empty middle column
-	col3Status := padRight("Press Ctrl+C to exit or 'c' to copy", col3Width)
+	col3Status := padRight("Ctrl+C/ESC: exit │ c: copy", col3Width)
 	statusLine := fmt.Sprintf("%s  │  %s  │  %s", col1Status, col2Status, col3Status)
 	printBoxLine(statusLine, width)
 
