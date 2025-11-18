@@ -412,7 +412,7 @@ func (m watchModel) View() string {
 	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	s.WriteString(footerStyle.Render(fmt.Sprintf(
 		"▶ Next scan in: %s │ q: quit │ /: search │ ↑↓: scroll │ PgUp/PgDn: page",
-		formatDuration(nextScanIn))))
+		watch.FormatDuration(nextScanIn))))
 
 	return s.String()
 }
@@ -527,8 +527,8 @@ func (m watchModel) renderMediumLayout(s *strings.Builder, visibleDevices []stri
 	}
 
 	// Verteile dynamische Breite: 60% Hostname, 40% Vendor
-	hostnameWidth := max(15, (dynamicWidth*60)/100)
-	vendorWidth := max(10, dynamicWidth-hostnameWidth)
+	hostnameWidth := watch.Max(15, (dynamicWidth*60)/100)
+	vendorWidth := watch.Max(10, dynamicWidth-hostnameWidth)
 
 	// Header mit dynamischen Breiten
 	headerLine := fmt.Sprintf("%-15s %-15s %-*s %-18s %-*s %s",
@@ -572,9 +572,9 @@ func (m watchModel) renderWideLayout(s *strings.Builder, visibleDevices []string
 	}
 
 	// Verteile dynamische Breite: 40% Hostname, 30% Vendor, 30% Type
-	hostnameWidth := max(15, (dynamicWidth*40)/100)
-	vendorWidth := max(10, (dynamicWidth*30)/100)
-	typeWidth := max(10, dynamicWidth-hostnameWidth-vendorWidth)
+	hostnameWidth := watch.Max(15, (dynamicWidth*40)/100)
+	vendorWidth := watch.Max(10, (dynamicWidth*30)/100)
+	typeWidth := watch.Max(10, dynamicWidth-hostnameWidth-vendorWidth)
 
 	// Header mit dynamischen Breiten
 	headerLine := fmt.Sprintf("%-15s %-15s %-*s %-18s %-*s %-*s %-6s %s",
@@ -630,7 +630,7 @@ func (m watchModel) renderNarrowRowDynamic(state *watch.DeviceState, hostnameWid
 	uptime := time.Since(state.StatusSince)
 
 	return fmt.Sprintf("%-15s %-15s %-*s %s",
-		ipStr, statusStr, hostnameWidth, hostname, formatDuration(uptime))
+		ipStr, statusStr, hostnameWidth, hostname, watch.FormatDuration(uptime))
 }
 
 // renderNarrowRow - Kompakte Zeile (deprecated, wird nicht mehr verwendet)
@@ -662,7 +662,7 @@ func (m watchModel) renderNarrowRow(state *watch.DeviceState) string {
 	uptime := time.Since(state.StatusSince)
 
 	return fmt.Sprintf("%-15s %-15s %-20s %s",
-		ipStr, statusStr, hostname, formatDuration(uptime))
+		ipStr, statusStr, hostname, watch.FormatDuration(uptime))
 }
 
 // renderWideRowDynamic - Vollständige Zeile mit dynamischen Spaltenbreiten
@@ -732,7 +732,7 @@ func (m watchModel) renderWideRowDynamic(state *watch.DeviceState, hostnameWidth
 
 	return fmt.Sprintf("%-15s %-15s %-*s %-18s %-*s %-*s %-6s %s",
 		ipStr, statusStr, hostnameWidth, hostname, mac,
-		vendorWidth, vendor, typeWidth, deviceType, rttStr, formatDuration(uptime))
+		vendorWidth, vendor, typeWidth, deviceType, rttStr, watch.FormatDuration(uptime))
 }
 
 // renderWideRow - Vollständige Zeile mit allen Details (deprecated, wird nicht mehr verwendet)
@@ -805,7 +805,7 @@ func (m watchModel) renderWideRow(state *watch.DeviceState) string {
 		vendor,
 		deviceType,
 		rttStr,
-		formatDuration(uptime))
+		watch.FormatDuration(uptime))
 }
 
 // renderMediumRowDynamic - Zeile mit dynamischen Hostname- und Vendor-Breiten
@@ -861,7 +861,7 @@ func (m watchModel) renderMediumRowDynamic(state *watch.DeviceState, hostnameWid
 		hostnameWidth, hostname,
 		mac,
 		vendorWidth, vendor,
-		formatDuration(uptime))
+		watch.FormatDuration(uptime))
 }
 
 // renderMediumRow - Zeile mit MAC und Vendor (deprecated, wird nicht mehr verwendet)
@@ -917,7 +917,7 @@ func (m watchModel) renderMediumRow(state *watch.DeviceState) string {
 		hostname,
 		mac,
 		vendor,
-		formatDuration(uptime))
+		watch.FormatDuration(uptime))
 }
 
 // performBackgroundDNSLookupsCmd startet DNS-Lookups und returned Updates als Message
