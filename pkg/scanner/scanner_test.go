@@ -88,7 +88,7 @@ var _ = Describe("Scanner", func() {
 				s := scanner.New(config)
 				ips := []net.IP{net.ParseIP("127.0.0.1")}
 
-				results, err := s.ScanHosts(ips)
+				results, err := s.ScanHosts(ips, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				// Localhost kann offline erscheinen wenn keine üblichen Ports offen sind
@@ -110,7 +110,7 @@ var _ = Describe("Scanner", func() {
 				// 192.0.2.0/24 ist TEST-NET-1 (sollte nie online sein)
 				ips := []net.IP{net.ParseIP("192.0.2.1")}
 
-				results, err := s.ScanHosts(ips)
+				results, err := s.ScanHosts(ips, nil)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(results).NotTo(BeNil())

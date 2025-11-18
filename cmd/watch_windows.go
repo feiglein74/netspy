@@ -2,7 +2,30 @@
 
 package cmd
 
-import "github.com/fatih/color"
+import (
+	"os"
+
+	"github.com/fatih/color"
+)
+
+// setupTerminal sets up the terminal for raw mode (Windows no-op)
+// Windows Terminal handles ANSI codes by default, no special setup needed
+func setupTerminal() error {
+	return nil
+}
+
+// resetTerminal resets the terminal to normal mode (Windows no-op)
+func resetTerminal() error {
+	return nil
+}
+
+// getResizeChannel returns a channel for terminal resize signals (Windows stub)
+// Windows doesn't have SIGWINCH, return a dummy channel
+func getResizeChannel() chan os.Signal {
+	// Return a channel that never receives signals
+	// This prevents crashes but means no auto-resize on Windows
+	return make(chan os.Signal, 1)
+}
 
 // getZebraColor returns the color for zebra striping on Windows
 // Windows Terminal handles FgHiBlack well for alternating row colors

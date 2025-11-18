@@ -14,19 +14,21 @@ var (
 // IsLikelyGateway prüft ob eine IP wahrscheinlich ein Gateway ist
 // Kombiniert lokale Default-Gateway-Erkennung mit heuristischer Analyse
 func IsLikelyGateway(ip net.IP, network *net.IPNet) bool {
-	// 1. Prüfe ob es das lokale Default-Gateway ist
+	if ip == nil || network == nil {
+		return false
+	}
+
+	// 1. IP muss im Netzwerk liegen
+	if !network.Contains(ip) {
+		return false
+	}
+
+	// 2. Prüfe ob es das lokale Default-Gateway ist
 	if IsGateway(ip) {
 		return true
 	}
 
-	// 2. Wenn die IP im lokalen Netzwerk liegt, verlasse dich auf Default-Gateway
-	localGateway := GetDefaultGateway()
-	if localGateway != nil && network.Contains(localGateway) {
-		// Wir sind im lokalen Netzwerk - nur das Default-Gateway ist relevant
-		return false
-	}
-
-	// 3. Für entfernte Netzwerke: Heuristische Analyse
+	// 3. Heuristische Analyse für typische Gateway-IPs
 	return isHeuristicGateway(ip, network)
 }
 
