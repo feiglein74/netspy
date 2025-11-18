@@ -11,6 +11,7 @@ import (
 
 	"netspy/pkg/discovery"
 	"netspy/pkg/scanner"
+	"netspy/pkg/watch"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -24,7 +25,7 @@ type watchModel struct {
 	interval      time.Duration
 
 	// Device States
-	deviceStates  map[string]*DeviceState
+	deviceStates  map[string]*watch.DeviceState
 	sortedIPs     []string
 
 	// UI State
@@ -299,7 +300,7 @@ func (m *watchModel) updateDeviceStates(hosts []scanner.Host) {
 			}
 		} else {
 			// New device
-			m.deviceStates[ipStr] = &DeviceState{
+			m.deviceStates[ipStr] = &watch.DeviceState{
 				Host:        host,
 				FirstSeen:   now,
 				LastSeen:    now,
@@ -328,7 +329,7 @@ func (m *watchModel) updateDeviceStates(hosts []scanner.Host) {
 
 	// Sort IPs
 	sort.Slice(m.sortedIPs, func(i, j int) bool {
-		return compareIPs(m.sortedIPs[i], m.sortedIPs[j])
+		return watch.CompareIPs(m.sortedIPs[i], m.sortedIPs[j])
 	})
 }
 
@@ -600,7 +601,7 @@ func (m watchModel) renderWideLayout(s *strings.Builder, visibleDevices []string
 }
 
 // renderNarrowRowDynamic - Kompakte Zeile mit dynamischer Hostname-Breite
-func (m watchModel) renderNarrowRowDynamic(state *DeviceState, hostnameWidth int) string {
+func (m watchModel) renderNarrowRowDynamic(state *watch.DeviceState, hostnameWidth int) string {
 	// Status Icon und Color
 	statusIcon := "●"
 	statusColor := lipgloss.Color("82") // grün
@@ -633,7 +634,7 @@ func (m watchModel) renderNarrowRowDynamic(state *DeviceState, hostnameWidth int
 }
 
 // renderNarrowRow - Kompakte Zeile (deprecated, wird nicht mehr verwendet)
-func (m watchModel) renderNarrowRow(state *DeviceState) string {
+func (m watchModel) renderNarrowRow(state *watch.DeviceState) string {
 	// Status Icon
 	statusIcon := "●"
 	statusColor := lipgloss.Color("82") // grün
@@ -665,7 +666,7 @@ func (m watchModel) renderNarrowRow(state *DeviceState) string {
 }
 
 // renderWideRowDynamic - Vollständige Zeile mit dynamischen Spaltenbreiten
-func (m watchModel) renderWideRowDynamic(state *DeviceState, hostnameWidth, vendorWidth, typeWidth int) string {
+func (m watchModel) renderWideRowDynamic(state *watch.DeviceState, hostnameWidth, vendorWidth, typeWidth int) string {
 	// Status Icon und Color
 	statusIcon := "●"
 	statusColor := lipgloss.Color("82") // grün
@@ -735,7 +736,7 @@ func (m watchModel) renderWideRowDynamic(state *DeviceState, hostnameWidth, vend
 }
 
 // renderWideRow - Vollständige Zeile mit allen Details (deprecated, wird nicht mehr verwendet)
-func (m watchModel) renderWideRow(state *DeviceState) string {
+func (m watchModel) renderWideRow(state *watch.DeviceState) string {
 	// Status Icon und Color
 	statusIcon := "●"
 	statusColor := lipgloss.Color("82") // grün
@@ -808,7 +809,7 @@ func (m watchModel) renderWideRow(state *DeviceState) string {
 }
 
 // renderMediumRowDynamic - Zeile mit dynamischen Hostname- und Vendor-Breiten
-func (m watchModel) renderMediumRowDynamic(state *DeviceState, hostnameWidth, vendorWidth int) string {
+func (m watchModel) renderMediumRowDynamic(state *watch.DeviceState, hostnameWidth, vendorWidth int) string {
 	// Status Icon und Color
 	statusIcon := "●"
 	statusColor := lipgloss.Color("82") // grün
@@ -864,7 +865,7 @@ func (m watchModel) renderMediumRowDynamic(state *DeviceState, hostnameWidth, ve
 }
 
 // renderMediumRow - Zeile mit MAC und Vendor (deprecated, wird nicht mehr verwendet)
-func (m watchModel) renderMediumRow(state *DeviceState) string {
+func (m watchModel) renderMediumRow(state *watch.DeviceState) string {
 	// Status Icon und Color
 	statusIcon := "●"
 	statusColor := lipgloss.Color("82") // grün
@@ -920,7 +921,7 @@ func (m watchModel) renderMediumRow(state *DeviceState) string {
 }
 
 // performBackgroundDNSLookupsCmd startet DNS-Lookups und returned Updates als Message
-func performBackgroundDNSLookupsCmd(deviceStates map[string]*DeviceState) tea.Cmd {
+func performBackgroundDNSLookupsCmd(deviceStates map[string]*watch.DeviceState) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -995,7 +996,7 @@ func performScanCmd(network, mode string) tea.Cmd {
 		// Nutze bestehende performScanQuiet Logik
 		// nil = kein Thread-Counting für Bubbletea UI
 		// Calculate optimal thread configuration based on network size
-		threadConfig := calculateThreads(netCIDR, maxThreads)
+		threadConfig := watch.CalculateThreads(netCIDR, maxThreads)
 		hosts := performScanQuiet(ctx, network, netCIDR, mode, nil, threadConfig)
 
 		return scanCompleteMsg{
@@ -1011,7 +1012,7 @@ func newWatchModel(network, mode string, interval time.Duration) watchModel {
 		network:      network,
 		mode:         mode,
 		interval:     interval,
-		deviceStates: make(map[string]*DeviceState),
+		deviceStates: make(map[string]*watch.DeviceState),
 		sortedIPs:    []string{},
 		viewport: viewportState{
 			offset:     0,

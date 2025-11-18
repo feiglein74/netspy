@@ -19,6 +19,7 @@ import (
 	"netspy/pkg/discovery"
 	"netspy/pkg/output"
 	"netspy/pkg/scanner"
+	"netspy/pkg/watch"
 
 	"github.com/fatih/color"
 	"github.com/mattn/go-runewidth"
@@ -34,224 +35,6 @@ var (
 	screenBufferMux sync.Mutex      // Mutex für Thread-Safe Zugriff (legacy mode)
 	currentCIDR     *net.IPNet      // Current network CIDR for IP formatting
 )
-
-// DeviceState verfolgt den Zustand eines entdeckten Geräts über die Zeit
-type DeviceState struct {
-	Host                scanner.Host
-	FirstSeen           time.Time
-	FirstSeenScan       int           // Scan number when first detected (for "new" indicator)
-	LastSeen            time.Time
-	Status              string        // "online" or "offline"
-	StatusSince         time.Time     // When current status started
-	FlapCount           int           // Number of times status has changed (flapping counter)
-	TotalOfflineTime    time.Duration // Accumulated time spent offline (for continuous uptime calculation)
-	LastHostnameLookup  time.Time     // When we last tried to resolve hostname (for retry mechanism)
-}
-
-// ThreadConfig holds thread count configuration for different operations
-type ThreadConfig struct {
-	Scan        int // Scanner threads (TCP/Ping)
-	Reachability int // Quick reachability check threads
-	DNS         int // DNS/mDNS/NetBIOS lookup threads
-}
-
-// SortColumn represents which column to sort by
-type SortColumn int
-
-const (
-	SortByIP SortColumn = iota
-	SortByHostname
-	SortByMAC
-	SortByVendor
-	SortByDeviceType
-	SortByRTT
-	SortByFirstSeen
-	SortByUptime
-	SortByFlaps
-)
-
-// SortState tracks current sort configuration
-type SortState struct {
-	Column    SortColumn
-	Ascending bool
-	mu        sync.RWMutex
-}
-
-func (s *SortState) Toggle(col SortColumn) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.Column == col {
-		s.Ascending = !s.Ascending
-	} else {
-		s.Column = col
-		s.Ascending = true
-	}
-}
-
-func (s *SortState) Get() (SortColumn, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.Column, s.Ascending
-}
-
-// sortIPs sorts IP addresses based on the current sort state
-func sortIPs(ips []string, states map[string]*DeviceState, sortState *SortState, referenceTime time.Time) {
-	col, asc := sortState.Get()
-
-	sort.Slice(ips, func(i, j int) bool {
-		stateI := states[ips[i]]
-		stateJ := states[ips[j]]
-
-		var less bool
-		switch col {
-		case SortByIP:
-			less = compareIPs(ips[i], ips[j])
-		case SortByHostname:
-			hostI := getHostname(stateI.Host)
-			hostJ := getHostname(stateJ.Host)
-			if hostI == hostJ {
-				// Secondary sort by IP for stable ordering
-				less = compareIPs(ips[i], ips[j])
-			} else {
-				less = hostI < hostJ
-			}
-		case SortByMAC:
-			macI := stateI.Host.MAC
-			macJ := stateJ.Host.MAC
-			if macI == macJ {
-				// Secondary sort by IP for stable ordering
-				less = compareIPs(ips[i], ips[j])
-			} else {
-				less = macI < macJ
-			}
-		case SortByVendor:
-			vendorI := getVendor(stateI.Host)
-			vendorJ := getVendor(stateJ.Host)
-			if vendorI == vendorJ {
-				// Secondary sort by IP for stable ordering
-				less = compareIPs(ips[i], ips[j])
-			} else {
-				less = vendorI < vendorJ
-			}
-		case SortByDeviceType:
-			typeI := stateI.Host.DeviceType
-			typeJ := stateJ.Host.DeviceType
-			if typeI == typeJ {
-				// Secondary sort by IP for stable ordering
-				less = compareIPs(ips[i], ips[j])
-			} else {
-				less = typeI < typeJ
-			}
-		case SortByRTT:
-			if stateI.Host.RTT == stateJ.Host.RTT {
-				// Secondary sort by IP for stable ordering
-				less = compareIPs(ips[i], ips[j])
-			} else {
-				less = stateI.Host.RTT < stateJ.Host.RTT
-			}
-		case SortByFirstSeen:
-			if stateI.FirstSeen.Equal(stateJ.FirstSeen) {
-				// Secondary sort by IP for stable ordering
-				less = compareIPs(ips[i], ips[j])
-			} else {
-				less = stateI.FirstSeen.Before(stateJ.FirstSeen)
-			}
-		case SortByUptime:
-			// Calculate uptime for comparison
-			var uptimeI, uptimeJ time.Duration
-			if stateI.Status == "online" {
-				totalTimeI := referenceTime.Sub(stateI.FirstSeen)
-				uptimeI = totalTimeI - stateI.TotalOfflineTime
-			} else {
-				uptimeI = referenceTime.Sub(stateI.StatusSince)
-			}
-			if stateJ.Status == "online" {
-				totalTimeJ := referenceTime.Sub(stateJ.FirstSeen)
-				uptimeJ = totalTimeJ - stateJ.TotalOfflineTime
-			} else {
-				uptimeJ = referenceTime.Sub(stateJ.StatusSince)
-			}
-			if uptimeI == uptimeJ {
-				// Secondary sort by IP for stable ordering
-				less = compareIPs(ips[i], ips[j])
-			} else {
-				less = uptimeI < uptimeJ
-			}
-		case SortByFlaps:
-			if stateI.FlapCount == stateJ.FlapCount {
-				// Secondary sort by IP for stable ordering
-				less = compareIPs(ips[i], ips[j])
-			} else {
-				less = stateI.FlapCount < stateJ.FlapCount
-			}
-		default:
-			less = compareIPs(ips[i], ips[j])
-		}
-
-		if !asc {
-			less = !less
-		}
-		return less
-	})
-}
-
-// getSortIndicator returns the sort indicator (↑ or ↓) for a column, or empty string
-func getSortIndicator(currentCol SortColumn, targetCol SortColumn, ascending bool) string {
-	if currentCol == targetCol {
-		if ascending {
-			return " ↑"
-		}
-		return " ↓"
-	}
-	return ""
-}
-
-// underlineChar underlines a specific character in a string (case-insensitive)
-// Example: underlineChar("Hostname", 'h') → "H̲ostname"
-func underlineChar(s string, char rune) string {
-	charLower := strings.ToLower(string(char))
-	charUpper := strings.ToUpper(string(char))
-
-	for i, c := range s {
-		if string(c) == charLower || string(c) == charUpper {
-			// Found the character - underline it
-			return s[:i] + "\033[4m" + string(c) + "\033[24m" + s[i+1:]
-		}
-	}
-	return s // Character not found, return unchanged
-}
-
-// calculateThreads determines optimal thread counts based on network size
-// Returns (scanThreads, reachabilityThreads, dnsThreads)
-func calculateThreads(netCIDR *net.IPNet, maxThreadsOverride int) ThreadConfig {
-	// Count hosts in network
-	ones, bits := netCIDR.Mask.Size()
-	hostCount := 1 << uint(bits-ones) // 2^(bits-ones)
-
-	// If user specified max threads, scale all thread types proportionally
-	if maxThreadsOverride > 0 {
-		// Scale: 50% scan, 30% reachability, 20% DNS
-		return ThreadConfig{
-			Scan:        int(float64(maxThreadsOverride) * 0.50),
-			Reachability: int(float64(maxThreadsOverride) * 0.30),
-			DNS:         int(float64(maxThreadsOverride) * 0.20),
-		}
-	}
-
-	// Auto-calculate based on network size
-	switch {
-	case hostCount <= 16: // /28 or smaller
-		return ThreadConfig{Scan: 10, Reachability: 10, DNS: 5}
-	case hostCount <= 64: // /26
-		return ThreadConfig{Scan: 20, Reachability: 20, DNS: 8}
-	case hostCount <= 256: // /24 (most common home/office networks)
-		return ThreadConfig{Scan: 40, Reachability: 30, DNS: 10}
-	case hostCount <= 1024: // /22
-		return ThreadConfig{Scan: 80, Reachability: 50, DNS: 15}
-	default: // /16+ (large enterprise networks)
-		return ThreadConfig{Scan: 150, Reachability: 80, DNS: 20}
-	}
-}
 
 // watchCmd repräsentiert den watch-Befehl
 var watchCmd = &cobra.Command{
@@ -324,7 +107,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 	_ = setupTerminal()
 
 	// Calculate optimal thread counts based on network size
-	threadConfig := calculateThreads(netCIDR, maxThreads)
+	threadConfig := watch.CalculateThreads(netCIDR, maxThreads)
 	ones, bits := netCIDR.Mask.Size()
 	hostCount := 1 << uint(bits-ones)
 	fmt.Printf("🔧 Thread Config: Scan=%d, Reachability=%d, DNS=%d (Network: %s, %d potential hosts)\n",
@@ -338,7 +121,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 	fmt.Print("\033[2J\033[H")
 
 	// Geräte-Status-Map - Schlüssel ist IP-Adresse als String
-	deviceStates := make(map[string]*DeviceState)
+	deviceStates := make(map[string]*watch.DeviceState)
 
 	// Signal-Handling für graceful Shutdown und Window-Resize einrichten
 	ctx, cancel := context.WithCancel(context.Background())
@@ -410,7 +193,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 	var redrawMutex sync.Mutex // Prevent concurrent redraws
 	var activeThreads int32    // Tracks active background DNS lookup threads (atomic counter)
 	var currentPage int32 = 1  // Current page for host list pagination (atomic for thread-safety)
-	sortState := &SortState{Column: SortByIP, Ascending: true} // Default sort by IP ascending
+	sortState := &watch.SortState{Column: watch.SortByIP, Ascending: true} // Default sort by IP ascending
 
 	for {
 		// Check if context is cancelled before starting new scan
@@ -480,7 +263,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 				}
 			} else {
 				// New device - use scanStart so all devices in this scan have same FirstSeen
-				deviceStates[ipStr] = &DeviceState{
+				deviceStates[ipStr] = &watch.DeviceState{
 					Host:          host,
 					FirstSeen:     scanStart,
 					FirstSeenScan: scanCount,
@@ -541,7 +324,7 @@ func runWatchLegacy(network string, netCIDR *net.IPNet) error {
 	}
 }
 
-func performScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, mode string, activeThreads *int32, threadConfig ThreadConfig) []scanner.Host {
+func performScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, mode string, activeThreads *int32, threadConfig watch.ThreadConfig) []scanner.Host {
 	var hosts []scanner.Host
 	var err error
 
@@ -566,7 +349,7 @@ func performScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, m
 	return hosts
 }
 
-func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
+func performHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, threadConfig watch.ThreadConfig) ([]scanner.Host, error) {
 	// Prüfe ob das Ziel-Netzwerk lokal oder fremd ist
 	isLocal, _ := discovery.IsLocalSubnet(netCIDR)
 
@@ -702,7 +485,7 @@ func getLocalMAC() string {
 	return ""
 }
 
-func performARPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
+func performARPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, threadConfig watch.ThreadConfig) ([]scanner.Host, error) {
 	// Prüfe ob das Ziel-Netzwerk lokal oder fremd ist
 	isLocal, _ := discovery.IsLocalSubnet(netCIDR)
 
@@ -805,7 +588,7 @@ func populateARPTableQuiet(ctx context.Context, network *net.IPNet) error {
 
 // Old streaming functions removed - now using static table with redrawTable()
 
-func performNormalScan(network string, mode string, activeThreads *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
+func performNormalScan(network string, mode string, activeThreads *int32, threadConfig watch.ThreadConfig) ([]scanner.Host, error) {
 	hosts, err := parseNetworkInput(network)
 	if err != nil {
 		return nil, fmt.Errorf("invalid network specification: %v", err)
@@ -827,24 +610,6 @@ func performNormalScan(network string, mode string, activeThreads *int32, thread
 }
 
 // Old print functions removed - now using redrawTable() for static table updates
-
-func getHostname(host scanner.Host) string {
-	if host.Hostname != "" {
-		// DEBUG: Farbige Kennzeichnung für SSDP-gelernte Namen
-		if host.HostnameSource == "SSDP" {
-			return color.MagentaString(host.Hostname)
-		}
-		return host.Hostname
-	}
-	return "-"
-}
-
-func getVendor(host scanner.Host) string {
-	if host.Vendor != "" {
-		return host.Vendor
-	}
-	return "-"
-}
 
 // splitIPNetworkHost splits an IP into network and host parts based on CIDR
 // Returns (networkPart, hostPart, ok). If splitting fails, ok is false.
@@ -1182,7 +947,7 @@ func printTableRow(content string, width int) {
 
 // captureScreenSimple speichert eine vereinfachte Text-Version des Screens
 // HINWEIS: Dies ist eine Fallback-Lösung. Ideally würden wir das exakte Layout capturen
-func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration) {
+func captureScreenSimple(states map[string]*watch.DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration) {
 	screenBufferMux.Lock()
 	defer screenBufferMux.Unlock()
 
@@ -1254,7 +1019,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 		ips = append(ips, ip)
 	}
 	sort.Slice(ips, func(i, j int) bool {
-		return compareIPs(ips[i], ips[j])
+		return watch.CompareIPs(ips[i], ips[j])
 	})
 
 	// Header
@@ -1277,7 +1042,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 			displayIP = displayIP[:16]
 		}
 
-		hostname := getHostname(state.Host)
+		hostname := watch.GetHostname(state.Host)
 		// Hostname auf max 22 Zeichen (Runes) begrenzen
 		hostnameRunes := []rune(hostname)
 		if len(hostnameRunes) > 22 {
@@ -1285,7 +1050,7 @@ func captureScreenSimple(states map[string]*DeviceState, referenceTime time.Time
 		}
 
 		// Vendor from MAC lookup
-		vendor := getVendor(state.Host)
+		vendor := watch.GetVendor(state.Host)
 		if vendor == "" || vendor == "-" {
 			vendor = "-"
 		}
@@ -1390,7 +1155,7 @@ func drawTerminalTooSmallWarning(termSize output.TerminalSize, width int, scanCo
 }
 
 // drawBtopLayout renders a btop-inspired fullscreen layout
-func drawBtopLayout(states map[string]*DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration, activeThreads *int32, currentPage *int32, sortState *SortState, isLocal bool) {
+func drawBtopLayout(states map[string]*watch.DeviceState, referenceTime time.Time, network string, interval time.Duration, mode string, scanCount int, scanDuration time.Duration, nextScanIn time.Duration, activeThreads *int32, currentPage *int32, sortState *watch.SortState, isLocal bool) {
 	termSize := output.GetTerminalSize()
 	width := termSize.GetDisplayWidth()
 
@@ -1546,7 +1311,7 @@ func calculateMaxVisibleHosts(termHeight int) int {
 	return availableLines
 }
 
-func redrawTable(states map[string]*DeviceState, referenceTime time.Time, currentPage *int32, scanCount int, sortState *SortState) {
+func redrawTable(states map[string]*watch.DeviceState, referenceTime time.Time, currentPage *int32, scanCount int, sortState *watch.SortState) {
 	// Hide cursor during redraw to prevent visible cursor jumping
 	fmt.Print("\033[?25l")
 	defer fmt.Print("\033[?25h") // Show cursor when done
@@ -1576,21 +1341,21 @@ func redrawTable(states map[string]*DeviceState, referenceTime time.Time, curren
 }
 
 // redrawNarrowTable - Kompakte Ansicht für schmale Terminals (< 100 cols)
-func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32, scanCount int, sortState *SortState) {
+func redrawNarrowTable(states map[string]*watch.DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32, scanCount int, sortState *watch.SortState) {
 	width := termSize.GetDisplayWidth()
 
 	// Get current sort state for indicators
 	sortCol, sortAsc := sortState.Get()
 
 	// Table header with sort indicators and underlined shortcut keys (compact for 80-char terminals)
-	headerContent := padRightANSI(underlineChar("IP", 'i')+getSortIndicator(sortCol, SortByIP, sortAsc), 15) + " " +
-		padRightANSI(underlineChar("Hostname", 'h')+getSortIndicator(sortCol, SortByHostname, sortAsc), 12) + " " +
-		padRightANSI(underlineChar("MAC", 'm')+getSortIndicator(sortCol, SortByMAC, sortAsc), 17) + " " +
-		padRightANSI(underlineChar("Vendor", 'v')+getSortIndicator(sortCol, SortByVendor, sortAsc), 7) + " " +
-		padRightANSI(underlineChar("Device", 'd')+getSortIndicator(sortCol, SortByDeviceType, sortAsc), 6) + " " +
-		padRightANSI(underlineChar("RTT", 'r')+getSortIndicator(sortCol, SortByRTT, sortAsc), 4) + " " +
-		padRightANSI(underlineChar("Flp", 'f')+getSortIndicator(sortCol, SortByFlaps, sortAsc), 3) + " " +
-		padRightANSI(underlineChar("Up", 'u')+getSortIndicator(sortCol, SortByUptime, sortAsc), 5)
+	headerContent := padRightANSI(watch.UnderlineChar("IP", 'i')+watch.GetSortIndicator(sortCol, watch.SortByIP, sortAsc), 15) + " " +
+		padRightANSI(watch.UnderlineChar("Hostname", 'h')+watch.GetSortIndicator(sortCol, watch.SortByHostname, sortAsc), 12) + " " +
+		padRightANSI(watch.UnderlineChar("MAC", 'm')+watch.GetSortIndicator(sortCol, watch.SortByMAC, sortAsc), 17) + " " +
+		padRightANSI(watch.UnderlineChar("Vendor", 'v')+watch.GetSortIndicator(sortCol, watch.SortByVendor, sortAsc), 7) + " " +
+		padRightANSI(watch.UnderlineChar("Device", 'd')+watch.GetSortIndicator(sortCol, watch.SortByDeviceType, sortAsc), 6) + " " +
+		padRightANSI(watch.UnderlineChar("RTT", 'r')+watch.GetSortIndicator(sortCol, watch.SortByRTT, sortAsc), 4) + " " +
+		padRightANSI(watch.UnderlineChar("Flp", 'f')+watch.GetSortIndicator(sortCol, watch.SortByFlaps, sortAsc), 3) + " " +
+		padRightANSI(watch.UnderlineChar("Up", 'u')+watch.GetSortIndicator(sortCol, watch.SortByUptime, sortAsc), 5)
 	printTableRow(color.CyanString(headerContent), width)
 
 	// Create IPs slice and sort based on current sort state
@@ -1598,7 +1363,7 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 	for ip := range states {
 		ips = append(ips, ip)
 	}
-	sortIPs(ips, states, sortState, referenceTime)
+	watch.SortIPs(ips, states, sortState, referenceTime)
 
 	// Calculate paging
 	totalHosts := len(ips)
@@ -1665,7 +1430,7 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 			displayIPPadded = getZebraColor().Sprint(displayIPPadded)
 		}
 
-		hostname := getHostname(state.Host)
+		hostname := watch.GetHostname(state.Host)
 		// UTF-8-aware truncation (compact: 12 chars)
 		hostnameRunes := []rune(hostname)
 		if len(hostnameRunes) > 12 {
@@ -1679,7 +1444,7 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 		}
 
 		// Vendor from MAC lookup (compact: 7 chars)
-		vendor := getVendor(state.Host)
+		vendor := watch.GetVendor(state.Host)
 		if vendor == "" || vendor == "-" {
 			vendor = "-"
 		}
@@ -1779,20 +1544,20 @@ func redrawNarrowTable(states map[string]*DeviceState, referenceTime time.Time, 
 }
 
 // redrawMediumTable - Standard-Ansicht für mittlere Terminals (100-139 cols)
-func redrawMediumTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32, scanCount int, sortState *SortState) {
+func redrawMediumTable(states map[string]*watch.DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32, scanCount int, sortState *watch.SortState) {
 	width := termSize.GetDisplayWidth()
 
 	// Get current sort state for indicators
 	sortCol, sortAsc := sortState.Get()
 
 	// Table header with sort indicators and underlined shortcut keys
-	headerContent := padRightANSI(underlineChar("IP Address", 'i')+getSortIndicator(sortCol, SortByIP, sortAsc), 18) + " " +
-		padRightANSI(underlineChar("Hostname", 'h')+getSortIndicator(sortCol, SortByHostname, sortAsc), 20) + " " +
-		padRightANSI(underlineChar("MAC Address", 'm')+getSortIndicator(sortCol, SortByMAC, sortAsc), 18) + " " +
-		padRightANSI(underlineChar("Vendor", 'v')+getSortIndicator(sortCol, SortByVendor, sortAsc), 15) + " " +
-		padRightANSI(underlineChar("Device", 'd')+getSortIndicator(sortCol, SortByDeviceType, sortAsc), 12) + " " +
-		padRightANSI(underlineChar("RTT", 'r')+getSortIndicator(sortCol, SortByRTT, sortAsc), 8) + " " +
-		padRightANSI(underlineChar("Flaps", 'f')+getSortIndicator(sortCol, SortByFlaps, sortAsc), 5)
+	headerContent := padRightANSI(watch.UnderlineChar("IP Address", 'i')+watch.GetSortIndicator(sortCol, watch.SortByIP, sortAsc), 18) + " " +
+		padRightANSI(watch.UnderlineChar("Hostname", 'h')+watch.GetSortIndicator(sortCol, watch.SortByHostname, sortAsc), 20) + " " +
+		padRightANSI(watch.UnderlineChar("MAC Address", 'm')+watch.GetSortIndicator(sortCol, watch.SortByMAC, sortAsc), 18) + " " +
+		padRightANSI(watch.UnderlineChar("Vendor", 'v')+watch.GetSortIndicator(sortCol, watch.SortByVendor, sortAsc), 15) + " " +
+		padRightANSI(watch.UnderlineChar("Device", 'd')+watch.GetSortIndicator(sortCol, watch.SortByDeviceType, sortAsc), 12) + " " +
+		padRightANSI(watch.UnderlineChar("RTT", 'r')+watch.GetSortIndicator(sortCol, watch.SortByRTT, sortAsc), 8) + " " +
+		padRightANSI(watch.UnderlineChar("Flaps", 'f')+watch.GetSortIndicator(sortCol, watch.SortByFlaps, sortAsc), 5)
 	printTableRow(color.CyanString(headerContent), width)
 
 	// Create IPs slice and sort based on current sort state
@@ -1800,7 +1565,7 @@ func redrawMediumTable(states map[string]*DeviceState, referenceTime time.Time, 
 	for ip := range states {
 		ips = append(ips, ip)
 	}
-	sortIPs(ips, states, sortState, referenceTime)
+	watch.SortIPs(ips, states, sortState, referenceTime)
 
 	// Calculate paging
 	totalHosts := len(ips)
@@ -1861,7 +1626,7 @@ func redrawMediumTable(states map[string]*DeviceState, referenceTime time.Time, 
 			displayIPPadded = getZebraColor().Sprint(displayIPPadded)
 		}
 
-		hostname := getHostname(state.Host)
+		hostname := watch.GetHostname(state.Host)
 		// UTF-8-aware truncation
 		hostnameRunes := []rune(hostname)
 		if len(hostnameRunes) > 20 {
@@ -1879,7 +1644,7 @@ func redrawMediumTable(states map[string]*DeviceState, referenceTime time.Time, 
 		}
 
 		// Vendor from MAC lookup
-		vendor := getVendor(state.Host)
+		vendor := watch.GetVendor(state.Host)
 		if vendor == "" || vendor == "-" {
 			vendor = "-"
 		}
@@ -1956,7 +1721,7 @@ func redrawMediumTable(states map[string]*DeviceState, referenceTime time.Time, 
 }
 
 // redrawWideTable - Volle Ansicht für breite Terminals (>= 140 cols)
-func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32, scanCount int, sortState *SortState) {
+func redrawWideTable(states map[string]*watch.DeviceState, referenceTime time.Time, termSize output.TerminalSize, currentPage *int32, scanCount int, sortState *watch.SortState) {
 	// Calculate dynamic column widths based on terminal size
 	termWidth := termSize.GetDisplayWidth()
 
@@ -1976,15 +1741,15 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	sortCol, sortAsc := sortState.Get()
 
 	// Table header with sort indicators and underlined shortcut keys
-	headerContent := padRightANSI(underlineChar("IP Address", 'i')+getSortIndicator(sortCol, SortByIP, sortAsc), 17) + " " +
-		padRightANSI(underlineChar("Hostname", 'h')+getSortIndicator(sortCol, SortByHostname, sortAsc), hostnameWidth) + " " +
-		padRightANSI(underlineChar("MAC Address", 'm')+getSortIndicator(sortCol, SortByMAC, sortAsc), 18) + " " +
-		padRightANSI(underlineChar("Vendor", 'v')+getSortIndicator(sortCol, SortByVendor, sortAsc), vendorWidth) + " " +
-		padRightANSI(underlineChar("Device", 'd')+getSortIndicator(sortCol, SortByDeviceType, sortAsc), typeWidth) + " " +
-		padRightANSI(underlineChar("RTT", 'r')+getSortIndicator(sortCol, SortByRTT, sortAsc), 8) + " " +
-		padRightANSI(underlineChar("Time", 't')+getSortIndicator(sortCol, SortByFirstSeen, sortAsc), 13) + " " +
-		padRightANSI(underlineChar("Uptime", 'u')+getSortIndicator(sortCol, SortByUptime, sortAsc), 12) + " " +
-		padRightANSI(underlineChar("Flaps", 'f')+getSortIndicator(sortCol, SortByFlaps, sortAsc), 5)
+	headerContent := padRightANSI(watch.UnderlineChar("IP Address", 'i')+watch.GetSortIndicator(sortCol, watch.SortByIP, sortAsc), 17) + " " +
+		padRightANSI(watch.UnderlineChar("Hostname", 'h')+watch.GetSortIndicator(sortCol, watch.SortByHostname, sortAsc), hostnameWidth) + " " +
+		padRightANSI(watch.UnderlineChar("MAC Address", 'm')+watch.GetSortIndicator(sortCol, watch.SortByMAC, sortAsc), 18) + " " +
+		padRightANSI(watch.UnderlineChar("Vendor", 'v')+watch.GetSortIndicator(sortCol, watch.SortByVendor, sortAsc), vendorWidth) + " " +
+		padRightANSI(watch.UnderlineChar("Device", 'd')+watch.GetSortIndicator(sortCol, watch.SortByDeviceType, sortAsc), typeWidth) + " " +
+		padRightANSI(watch.UnderlineChar("RTT", 'r')+watch.GetSortIndicator(sortCol, watch.SortByRTT, sortAsc), 8) + " " +
+		padRightANSI(watch.UnderlineChar("Time", 't')+watch.GetSortIndicator(sortCol, watch.SortByFirstSeen, sortAsc), 13) + " " +
+		padRightANSI(watch.UnderlineChar("Uptime", 'u')+watch.GetSortIndicator(sortCol, watch.SortByUptime, sortAsc), 12) + " " +
+		padRightANSI(watch.UnderlineChar("Flaps", 'f')+watch.GetSortIndicator(sortCol, watch.SortByFlaps, sortAsc), 5)
 
 	printTableRow(color.CyanString(headerContent), termWidth)
 
@@ -1993,7 +1758,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 	for ip := range states {
 		ips = append(ips, ip)
 	}
-	sortIPs(ips, states, sortState, referenceTime)
+	watch.SortIPs(ips, states, sortState, referenceTime)
 
 	// Calculate paging
 	totalHosts := len(ips)
@@ -2055,7 +1820,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		}
 
 		// Hostname - use dynamic width with UTF-8 awareness
-		hostname := getHostname(state.Host)
+		hostname := watch.GetHostname(state.Host)
 		hostnameRunes := []rune(hostname)
 		if len(hostnameRunes) > hostnameWidth {
 			hostname = string(hostnameRunes[:hostnameWidth-1]) + "…"
@@ -2073,7 +1838,7 @@ func redrawWideTable(states map[string]*DeviceState, referenceTime time.Time, te
 		}
 
 		// Vendor from MAC lookup - use dynamic width
-		vendor := getVendor(state.Host)
+		vendor := watch.GetVendor(state.Host)
 		if vendor == "" || vendor == "-" {
 			vendor = "-"
 		}
@@ -2185,7 +1950,7 @@ func updateHeaderLineOnly(scanCount int, activeThreads *int32) {
 	printBoxLine(titleLine, width)
 }
 
-func showCountdownWithTableUpdates(ctx context.Context, cancel context.CancelFunc, duration time.Duration, states map[string]*DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32, currentPage *int32, sortState *SortState, threadConfig ThreadConfig, isLocal bool) {
+func showCountdownWithTableUpdates(ctx context.Context, cancel context.CancelFunc, duration time.Duration, states map[string]*watch.DeviceState, scanCount int, scanDuration time.Duration, scanStart time.Time, winchChan <-chan os.Signal, keyChan <-chan rune, redrawMutex *sync.Mutex, network string, watchInterval time.Duration, watchMode string, activeThreads *int32, currentPage *int32, sortState *watch.SortState, threadConfig watch.ThreadConfig, isLocal bool) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -2245,39 +2010,39 @@ func showCountdownWithTableUpdates(ctx context.Context, cancel context.CancelFun
 				}
 			} else if key == 'i' || key == 'I' {
 				// Sort by IP
-				sortState.Toggle(SortByIP)
+				sortState.Toggle(watch.SortByIP)
 				atomic.StoreInt32(currentPage, 1) // Reset to page 1
 			} else if key == 'h' || key == 'H' {
 				// Sort by Hostname
-				sortState.Toggle(SortByHostname)
+				sortState.Toggle(watch.SortByHostname)
 				atomic.StoreInt32(currentPage, 1)
 			} else if key == 'm' || key == 'M' {
 				// Sort by MAC
-				sortState.Toggle(SortByMAC)
+				sortState.Toggle(watch.SortByMAC)
 				atomic.StoreInt32(currentPage, 1)
 			} else if key == 'v' || key == 'V' {
 				// Sort by Vendor
-				sortState.Toggle(SortByVendor)
+				sortState.Toggle(watch.SortByVendor)
 				atomic.StoreInt32(currentPage, 1)
 			} else if key == 'd' || key == 'D' {
 				// Sort by Device Type
-				sortState.Toggle(SortByDeviceType)
+				sortState.Toggle(watch.SortByDeviceType)
 				atomic.StoreInt32(currentPage, 1)
 			} else if key == 'r' || key == 'R' {
 				// Sort by RTT
-				sortState.Toggle(SortByRTT)
+				sortState.Toggle(watch.SortByRTT)
 				atomic.StoreInt32(currentPage, 1)
 			} else if key == 't' || key == 'T' {
 				// Sort by First Seen Time
-				sortState.Toggle(SortByFirstSeen)
+				sortState.Toggle(watch.SortByFirstSeen)
 				atomic.StoreInt32(currentPage, 1)
 			} else if key == 'u' || key == 'U' {
 				// Sort by Uptime
-				sortState.Toggle(SortByUptime)
+				sortState.Toggle(watch.SortByUptime)
 				atomic.StoreInt32(currentPage, 1)
 			} else if key == 'f' || key == 'F' {
 				// Sort by Flaps
-				sortState.Toggle(SortByFlaps)
+				sortState.Toggle(watch.SortByFlaps)
 				atomic.StoreInt32(currentPage, 1)
 			} else if key == '?' {
 				// ? - Show help overlay
@@ -2367,7 +2132,7 @@ func showCountdownWithTableUpdates(ctx context.Context, cancel context.CancelFun
 
 // performQuickReachabilityCheck quickly checks if online devices are still reachable
 // Updates RTT and online/offline status without full ARP scan
-func performQuickReachabilityCheck(deviceStates map[string]*DeviceState, activeThreads *int32, threadConfig ThreadConfig) {
+func performQuickReachabilityCheck(deviceStates map[string]*watch.DeviceState, activeThreads *int32, threadConfig watch.ThreadConfig) {
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, threadConfig.Reachability) // Dynamic based on network size
 
@@ -2378,7 +2143,7 @@ func performQuickReachabilityCheck(deviceStates map[string]*DeviceState, activeT
 		}
 
 		wg.Add(1)
-		go func(ip string, s *DeviceState) {
+		go func(ip string, s *watch.DeviceState) {
 			defer wg.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
@@ -2423,7 +2188,7 @@ func performQuickReachabilityCheck(deviceStates map[string]*DeviceState, activeT
 	wg.Wait()
 }
 
-func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState, activeThreads *int32, threadConfig ThreadConfig) {
+func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*watch.DeviceState, activeThreads *int32, threadConfig watch.ThreadConfig) {
 	// Phase 2: Slow background lookups for hosts without DNS names
 	// DNS was already tried in Phase 1 (performInitialDNSLookups)
 	// This focuses on alternative methods: mDNS/Bonjour, NetBIOS, LLMNR, and HTTP
@@ -2450,7 +2215,7 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 		}
 
 		wg.Add(1)
-		go func(ip string, s *DeviceState) {
+		go func(ip string, s *watch.DeviceState) {
 			defer wg.Done()
 
 			// Check if context was cancelled
@@ -2497,7 +2262,7 @@ func performBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 
 // performInitialDNSLookups performs fast DNS lookups immediately after scan
 // Only uses DNS (no mDNS/NetBIOS/etc) for quick wins
-func performInitialDNSLookups(ctx context.Context, deviceStates map[string]*DeviceState) {
+func performInitialDNSLookups(ctx context.Context, deviceStates map[string]*watch.DeviceState) {
 	var wg sync.WaitGroup
 	semaphore := make(chan struct{}, 50) // High concurrency for fast DNS
 
@@ -2513,7 +2278,7 @@ func performInitialDNSLookups(ctx context.Context, deviceStates map[string]*Devi
 		}
 
 		wg.Add(1)
-		go func(ip string, s *DeviceState) {
+		go func(ip string, s *watch.DeviceState) {
 			defer wg.Done()
 
 			select {
@@ -2555,7 +2320,7 @@ func performInitialDNSLookups(ctx context.Context, deviceStates map[string]*Devi
 
 // populateFromDNSCache fills deviceStates with cached DNS names from system DNS cache
 // This is instant (< 100ms) and provides hostnames for recently accessed devices
-func populateFromDNSCache(deviceStates map[string]*DeviceState) {
+func populateFromDNSCache(deviceStates map[string]*watch.DeviceState) {
 	cache := discovery.ReadDNSCache()
 
 	for ip, hostname := range cache {
@@ -2575,35 +2340,6 @@ func populateFromDNSCache(deviceStates map[string]*DeviceState) {
 			}
 		}
 	}
-}
-
-func compareIPs(ip1, ip2 string) bool {
-	// Parse IPs for proper binary comparison
-	parsedIP1 := net.ParseIP(ip1)
-	parsedIP2 := net.ParseIP(ip2)
-
-	if parsedIP1 == nil || parsedIP2 == nil {
-		// Fallback to string comparison if parsing fails
-		return ip1 < ip2
-	}
-
-	// Convert to 4-byte representation for IPv4
-	parsedIP1 = parsedIP1.To4()
-	parsedIP2 = parsedIP2.To4()
-
-	if parsedIP1 == nil || parsedIP2 == nil {
-		// Fallback to string comparison
-		return ip1 < ip2
-	}
-
-	// Compare byte by byte
-	for i := 0; i < len(parsedIP1); i++ {
-		if parsedIP1[i] != parsedIP2[i] {
-			return parsedIP1[i] < parsedIP2[i]
-		}
-	}
-
-	return false
 }
 
 // populateAndStreamARP removed - now using populateARPTableQuiet() for batch scanning
