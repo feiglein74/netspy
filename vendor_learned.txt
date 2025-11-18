@@ -7,3 +7,4 @@ F0:B6:1E = Intel Corporate
 BC:7E:8B = Samsung Electronics Co.,Ltd
 04:92:26 = ASUSTek COMPUTER INC.
 84:3A:5B = Inventec(Chongqing)
+70:03:9F = Espressif Inc.
