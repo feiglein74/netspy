@@ -997,7 +997,7 @@ func performScanCmd(network, mode string) tea.Cmd {
 		// nil = kein Thread-Counting für Bubbletea UI
 		// Calculate optimal thread configuration based on network size
 		threadConfig := watch.CalculateThreads(netCIDR, maxThreads)
-		hosts := performScanQuiet(ctx, network, netCIDR, mode, nil, threadConfig)
+		hosts := watch.PerformScanQuiet(ctx, network, netCIDR, mode, nil, threadConfig)
 
 		return scanCompleteMsg{
 			hosts:    hosts,

@@ -24,7 +24,7 @@ func resetTerminal() error {
 }
 
 // getResizeChannel returns a channel that receives signals when terminal is resized (Unix only)
-func getResizeChannel() chan os.Signal {
+func getResizeChannel() <-chan os.Signal {
 	winchChan := make(chan os.Signal, 1)
 	signal.Notify(winchChan, syscall.SIGWINCH)
 	return winchChan

@@ -21,10 +21,11 @@ func resetTerminal() error {
 
 // getResizeChannel returns a channel for terminal resize signals (Windows stub)
 // Windows doesn't have SIGWINCH, return a dummy channel
-func getResizeChannel() chan os.Signal {
+func getResizeChannel() <-chan os.Signal {
 	// Return a channel that never receives signals
 	// This prevents crashes but means no auto-resize on Windows
-	return make(chan os.Signal, 1)
+	ch := make(chan os.Signal, 1)
+	return ch
 }
 
 // getZebraColor returns the color for zebra striping on Windows
