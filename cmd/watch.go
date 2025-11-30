@@ -55,7 +55,7 @@ func init() {
 	watchCmd.Flags().DurationVar(&watchInterval, "interval", 60*time.Second, "Scan interval")
 	watchCmd.Flags().StringVar(&watchMode, "mode", "hybrid", "Scan mode (hybrid, arp, fast, thorough, conservative)")
 	watchCmd.Flags().IntSliceVarP(&ports, "ports", "p", []int{}, "Specific ports to scan")
-	watchCmd.Flags().StringVar(&watchUI, "ui", "legacy", "UI mode (legacy, bubbletea)")
+	watchCmd.Flags().StringVar(&watchUI, "ui", "legacy", "UI mode (legacy, bubbletea, tview)")
 	watchCmd.Flags().IntVar(&maxThreads, "max-threads", 0, "Maximum concurrent threads (0 = auto-calculate based on network size)")
 }
 
@@ -79,13 +79,16 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid CIDR: %v", err)
 	}
 
-	// Bubbletea UI verwenden wenn --ui=bubbletea
-	if watchUI == "bubbletea" {
+	// UI-Auswahl basierend auf --ui Flag
+	switch watchUI {
+	case "tview":
+		return runWatchTview(network, netCIDR, watchInterval, watchMode, maxThreads)
+	case "bubbletea":
 		return runWatchBubbletea(network, watchMode, watchInterval)
+	default:
+		// Legacy UI (alte Implementierung)
+		return runWatchLegacy(network, netCIDR)
 	}
-
-	// Legacy UI (alte Implementierung)
-	return runWatchLegacy(network, netCIDR)
 }
 
 // runWatchLegacy ist die alte ANSI-basierte Implementierung
