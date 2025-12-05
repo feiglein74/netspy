@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
 
 // SplitIPNetworkHost splits an IP into network and host parts based on CIDR
@@ -214,4 +215,80 @@ func CopyScreenToClipboard(screenBuffer *bytes.Buffer, screenBufferMux *sync.Mut
 func CommandExists(cmd string) bool {
 	_, err := exec.LookPath(cmd)
 	return err == nil
+}
+
+// FormatDuration formats a duration in a human-readable short format
+func FormatDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	} else if d < time.Hour {
+		mins := int(d.Minutes())
+		secs := int(d.Seconds()) % 60
+		if secs > 0 {
+			return fmt.Sprintf("%dm%ds", mins, secs)
+		}
+		return fmt.Sprintf("%dm", mins)
+	} else if d < 24*time.Hour {
+		hours := int(d.Hours())
+		mins := int(d.Minutes()) % 60
+		if mins > 0 {
+			return fmt.Sprintf("%dh%dm", hours, mins)
+		}
+		return fmt.Sprintf("%dh", hours)
+	} else {
+		days := int(d.Hours() / 24)
+		hours := int(d.Hours()) % 24
+		if hours > 0 {
+			return fmt.Sprintf("%dd%dh", days, hours)
+		}
+		return fmt.Sprintf("%dd", days)
+	}
+}
+
+// IsLocallyAdministered checks if a MAC address is locally administered
+// Locally administered MACs have the second-least-significant bit of the first octet set
+// (e.g., x2:xx:xx:xx:xx:xx, x6:xx:xx:xx:xx:xx, xA:xx:xx:xx:xx:xx, xE:xx:xx:xx:xx:xx)
+func IsLocallyAdministered(mac string) bool {
+	if mac == "" || mac == "-" {
+		return false
+	}
+
+	// Normalize MAC - handle both : and - separators
+	mac = strings.ToUpper(mac)
+	mac = strings.ReplaceAll(mac, "-", ":")
+
+	parts := strings.Split(mac, ":")
+	if len(parts) < 1 {
+		return false
+	}
+
+	// Parse the first octet
+	var firstOctet int
+	_, err := fmt.Sscanf(parts[0], "%X", &firstOctet)
+	if err != nil {
+		return false
+	}
+
+	// Check if locally administered bit (second-least-significant bit) is set
+	return (firstOctet & 0x02) != 0
+}
+
+// Max returns the maximum of two integers
+func Max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// Min returns the minimum of two integers
+func Min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

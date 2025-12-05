@@ -156,9 +156,9 @@ func (w *TviewApp) setupUI() {
 	// Haupt-Layout
 	w.flex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(topRow, 6, 0, false).           // Header+Info oben (6 Zeilen für 4 Info-Zeilen + Border)
+		AddItem(topRow, 5, 0, false).           // Header+Info oben (5 Zeilen: 3 Text + 2 Border)
 		AddItem(w.table, 0, 1, true).           // Tabelle bekommt restlichen Platz
-		AddItem(w.footerView, 3, 0, false)      // Footer unten (3 Zeilen)
+		AddItem(w.footerView, 3, 0, false)      // Footer unten (3 Zeilen: 1 Text + 2 Border)
 
 	// Pages für Modal-Handling
 	w.pages = tview.NewPages().
@@ -357,11 +357,9 @@ func (w *TviewApp) updateTable() {
 	referenceTime := time.Now()
 	SortIPs(ips, w.deviceStates, w.sortState, referenceTime)
 
-	// Tabelle leeren (außer Header)
-	rowCount := w.table.GetRowCount()
-	for row := rowCount - 1; row >= 1; row-- {
-		w.table.RemoveRow(row)
-	}
+	// Tabelle komplett leeren und Header neu erstellen
+	w.table.Clear()
+	w.setupTableHeader()
 
 	// Zeilen hinzufügen
 	for i, ipStr := range ips {
@@ -525,6 +523,9 @@ SYMBOLE:
 
 // Run startet die Anwendung
 func (w *TviewApp) Run() error {
+	// Alternate Screen Buffer aktivieren (verhindert Überlappung mit Terminal-History)
+	w.app.EnableMouse(false) // Mouse deaktivieren (optional, aber cleaner)
+
 	// Scan-Loop in Goroutine starten
 	go w.scanLoop()
 

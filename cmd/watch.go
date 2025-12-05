@@ -1,15 +1,8 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 	"net"
-	"os"
-	"os/exec"
-	"os/signal"
-	"strings"
-	"sync"
-	"syscall"
 	"time"
 
 	"netspy/pkg/watch"
@@ -18,13 +11,9 @@ import (
 )
 
 var (
-	watchInterval   time.Duration
-	watchMode       string
-	watchUI         string          // UI-Mode: "bubbletea" oder "legacy"
-	maxThreads      int             // Maximum concurrent threads (0 = auto-calculate based on network size)
-	screenBuffer    bytes.Buffer    // Buffer für aktuellen Screen-Inhalt (legacy mode)
-	screenBufferMux sync.Mutex      // Mutex für Thread-Safe Zugriff (legacy mode)
-	currentCIDR     *net.IPNet      // Current network CIDR for IP formatting
+	watchInterval time.Duration
+	watchMode     string
+	maxThreads    int // Maximum concurrent threads (0 = auto-calculate based on network size)
 )
 
 // watchCmd repräsentiert den watch-Befehl
@@ -55,7 +44,6 @@ func init() {
 	watchCmd.Flags().DurationVar(&watchInterval, "interval", 60*time.Second, "Scan interval")
 	watchCmd.Flags().StringVar(&watchMode, "mode", "hybrid", "Scan mode (hybrid, arp, fast, thorough, conservative)")
 	watchCmd.Flags().IntSliceVarP(&ports, "ports", "p", []int{}, "Specific ports to scan")
-	watchCmd.Flags().StringVar(&watchUI, "ui", "legacy", "UI mode (legacy, bubbletea, tview)")
 	watchCmd.Flags().IntVar(&maxThreads, "max-threads", 0, "Maximum concurrent threads (0 = auto-calculate based on network size)")
 }
 
@@ -79,116 +67,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid CIDR: %v", err)
 	}
 
-	// UI-Auswahl basierend auf --ui Flag
-	switch watchUI {
-	case "tview":
-		return runWatchTview(network, netCIDR, watchInterval, watchMode, maxThreads)
-	case "bubbletea":
-		return runWatchBubbletea(network, watchMode, watchInterval)
-	default:
-		// Legacy UI (alte Implementierung)
-		return runWatchLegacy(network, netCIDR)
-	}
-}
-
-// runWatchLegacy ist die alte ANSI-basierte Implementierung
-func runWatchLegacy(network string, netCIDR *net.IPNet) error {
-	// Store CIDR for IP formatting (bold host part)
-	currentCIDR = netCIDR
-
-	// Setup signal handling BEFORE calling RunWatchLegacy
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	// Create callbacks structure with platform-specific functions
-	callbacks := watch.WatchCallbacks{
-		DrawBtopLayout:        watch.DrawBtopLayout,
-		UpdateHeaderLineOnly:  watch.UpdateHeaderLineOnly,
-		ShowHelpOverlay:       watch.ShowHelpOverlay,
-		CopyScreenToClipboard: copyScreenToClipboard,
-		GetGitVersion:         getGitVersion,
-		CaptureScreen:         captureScreen,
-		FormatIPWithBoldHost:  formatIPWithBoldHost,
-		IsLocallyAdministered: watch.IsLocallyAdministered,
-		GetZebraColor:         getZebraColor,
-	}
-
-	// Call the extracted watch loop function
-	return watch.RunWatchLegacy(
-		network,
-		netCIDR,
-		watchInterval,
-		watchMode,
-		maxThreads,
-		sigChan,
-		setupTerminal,
-		resetTerminal,
-		getResizeChannel,
-		callbacks,
-	)
-}
-
-// Removed: All scan-related functions have been moved to pkg/watch/scanner.go
-// The functions are now exported and called directly from pkg/watch package
-
-// Old print functions removed - now using redrawTable() for static table updates
-
-// splitIPNetworkHost wrapper for watch.SplitIPNetworkHost
-func splitIPNetworkHost(ip string) (string, string, bool) {
-	return watch.SplitIPNetworkHost(ip, currentCIDR)
-}
-
-// formatIPWithBoldHost formats an IP address with the host part in bold
-// based on the current CIDR mask. For example:
-// - 10.0.0.1 with /24 → "10.0.0." + BOLD("1")
-// - 192.168.1.10 with /16 → "192.168." + BOLD("1.10")
-// Platform-specific implementation (see watch_windows.go, watch_darwin.go, watch_linux.go)
-
-// formatDurationShort formats duration in compact format (e.g., "5m", "2h", "3d")
-func formatDurationShort(d time.Duration) string {
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	} else if d < time.Hour {
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	} else if d < 24*time.Hour {
-		return fmt.Sprintf("%dh", int(d.Hours()))
-	} else {
-		return fmt.Sprintf("%dd", int(d.Hours()/24))
-	}
-}
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// max returns the maximum of two integers
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// copyScreenToClipboard wrapper for watch.CopyScreenToClipboard
-func copyScreenToClipboard() error {
-	return watch.CopyScreenToClipboard(&screenBuffer, &screenBufferMux)
-}
-
-// getGitVersion gibt die aktuelle Git-Version zurück (kurzer Hash)
-func getGitVersion() string {
-	cmd := exec.Command("git", "rev-parse", "--short", "HEAD")
-	output, err := cmd.Output()
-	if err != nil {
-		return "dev"
-	}
-	return "(" + strings.TrimSpace(string(output)) + ")"
-}
-
-// captureScreen wrapper for display.CaptureScreenSimple
-func captureScreen() {
-	watch.CaptureScreenSimple(nil, time.Now(), "", 0, "", 0, 0, 0, &screenBuffer, &screenBufferMux, formatIPWithBoldHost)
+	// tview App erstellen und starten
+	app := watch.NewTviewApp(network, netCIDR, watchMode, watchInterval, maxThreads)
+	return app.Run()
 }

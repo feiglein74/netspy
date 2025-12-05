@@ -3,8 +3,9 @@
 # Format: OUI = Vendor Name
 # Sie können diese Datei manuell bearbeiten
 
-F0:B6:1E = Intel Corporate
-BC:7E:8B = Samsung Electronics Co.,Ltd
-04:92:26 = ASUSTek COMPUTER INC.
-84:3A:5B = Inventec(Chongqing)
-70:03:9F = Espressif Inc.
+80:8A:BD = Samsung Electronics Co.,Ltd
+04:7B:CB = Universal Global Scientif
+00:00:0C = Cisco Systems, Inc
+18:C0:4D = GIGA-BYTE TECHNOLOGY CO.,LTD.
+80:6D:97 = Private
+44:67:52 = Wistron INFOCOMM (Zhongsh
