@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +26,18 @@ type TviewApp struct {
 	footerView *tview.TextView
 	helpModal  *tview.Modal
 	pages      *tview.Pages
+
+	// Filter UI
+	filterInput       *tview.InputField
+	dropdown          *tview.List
+	dropdownFlex      *tview.Flex // Container für Dropdown-Positionierung
+	dropdownVisible   bool
+	dropdownDisabled  bool // Verhindert sofortiges Wieder-Öffnen nach ESC
+	filterInputActive bool // TRUE wenn Filter-Eingabe aktiv ist (für Keyboard-Routing)
+	suggestions       []string
+	filterText        string // Aktiver Filter-Text
+	filterHistory     []string
+	historyIndex      int // -1 = neue Eingabe, 0+ = Historie durchblättern
 
 	// State
 	deviceStates map[string]*DeviceState
@@ -49,15 +63,12 @@ type TviewApp struct {
 
 // Farb-Konstanten
 var (
-	colorOnline     = tcell.ColorGreen
-	colorOffline    = tcell.ColorRed
-	colorNew        = tcell.ColorLime
-	colorFlapping   = tcell.ColorYellow
-	colorLocalMAC   = tcell.ColorYellow
-	colorHeader     = tcell.ColorAqua
-	colorBorder     = tcell.ColorAqua
-	colorZebraLight = tcell.ColorWhite
-	colorZebraDark  = tcell.Color240
+	colorOffline  = tcell.ColorRed
+	colorNew      = tcell.ColorLime
+	colorFlapping = tcell.ColorYellow
+	colorLocalMAC = tcell.ColorYellow
+	colorHeader   = tcell.ColorAqua
+	colorBorder   = tcell.ColorAqua
 )
 
 // NewTviewApp erstellt eine neue tview Watch-Anwendung
@@ -92,6 +103,69 @@ func NewTviewApp(network string, netCIDR *net.IPNet, mode string, interval time.
 
 // setupUI erstellt das UI-Layout
 func (w *TviewApp) setupUI() {
+	// Filter Input (ganz oben)
+	w.filterInput = tview.NewInputField().
+		SetLabel("Filter: ").
+		SetFieldWidth(0).
+		SetFieldBackgroundColor(tcell.ColorDarkBlue)
+	w.filterInput.SetBorder(true).
+		SetBorderColor(colorBorder).
+		SetTitle(" Filter (↑↓ History, Tab Select, Enter Apply, Esc Close) ").
+		SetTitleColor(colorHeader).
+		SetTitleAlign(tview.AlignCenter)
+
+	// Focus/Blur Handler für Maus-Support
+	w.filterInput.SetFocusFunc(func() {
+		w.filterInputActive = true
+	})
+	w.filterInput.SetBlurFunc(func() {
+		w.filterInputActive = false
+	})
+
+	w.setupFilterInput()
+
+	// Dropdown Overlay für Vorschläge
+	w.dropdown = tview.NewList().
+		ShowSecondaryText(false).
+		SetHighlightFullLine(true).
+		SetSelectedBackgroundColor(tcell.ColorDarkCyan).
+		SetSelectedTextColor(tcell.ColorWhite).
+		SetMainTextColor(tcell.ColorYellow)
+	w.dropdown.SetBorder(true).
+		SetTitle(" ↑↓ Navigate, Tab/Enter Select, Esc Close ").
+		SetBackgroundColor(tcell.ColorBlack)
+
+	// ESC-Handler für Dropdown (falls Fokus dort landet)
+	w.dropdown.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEscape:
+			w.dropdownDisabled = true
+			w.hideDropdown()
+			w.app.SetFocus(w.filterInput)
+			return nil
+		case tcell.KeyTab, tcell.KeyEnter:
+			// Auswahl übernehmen
+			idx := w.dropdown.GetCurrentItem()
+			if idx >= 0 && idx < len(w.suggestions) {
+				w.filterInput.SetText(w.suggestions[idx])
+			}
+			w.hideDropdown()
+			w.app.SetFocus(w.filterInput)
+			return nil
+		}
+		return event
+	})
+
+	// Container für Dropdown-Positionierung (oben links, begrenzte Größe)
+	w.dropdownFlex = tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(nil, 3, 0, false). // Platz für Filter-Input
+		AddItem(tview.NewFlex().
+			AddItem(w.dropdown, 40, 0, true). // Dropdown links, 40 Zeichen breit
+			AddItem(nil, 0, 1, false),        // Rest leer
+			10, 0, true). // Max 10 Zeilen hoch
+		AddItem(nil, 0, 1, false) // Rest des Bildschirms leer
+
 	// Statistics Box (links oben) - wie im Netflow-Tool
 	w.headerView = tview.NewTextView().
 		SetDynamicColors(true).
@@ -119,7 +193,8 @@ func (w *TviewApp) setupUI() {
 		SetBorders(false).
 		SetSelectable(true, false). // Zeilen selektierbar, Spalten nicht
 		SetFixed(1, 0).             // Header-Zeile fixiert
-		SetSeparator(' ')
+		SetSeparator(' ').          // Ein Leerzeichen zwischen Spalten
+		SetEvaluateAllRows(true)    // Alle Zeilen für Spaltenbreite berücksichtigen
 	w.table.SetBorder(true).
 		SetBorderColor(colorBorder).
 		SetTitle(" Devices ").
@@ -156,7 +231,8 @@ func (w *TviewApp) setupUI() {
 	// Haupt-Layout
 	w.flex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(topRow, 5, 0, false).           // Header+Info oben (5 Zeilen: 3 Text + 2 Border)
+		AddItem(w.filterInput, 3, 0, false).    // Filter oben (3 Zeilen: 1 Text + 2 Border)
+		AddItem(topRow, 5, 0, false).           // Header+Info (5 Zeilen: 3 Text + 2 Border)
 		AddItem(w.table, 0, 1, true).           // Tabelle bekommt restlichen Platz
 		AddItem(w.footerView, 3, 0, false)      // Footer unten (3 Zeilen: 1 Text + 2 Border)
 
@@ -170,33 +246,34 @@ func (w *TviewApp) setupUI() {
 
 // setupTableHeader erstellt die Tabellen-Kopfzeile
 func (w *TviewApp) setupTableHeader() {
-	headers := []string{"IP Address", "Hostname", "MAC Address", "Vendor", "Device", "RTT", "Uptime", "Flaps"}
+	// Header mit festen Max-Breiten für Stabilität
+	type colDef struct {
+		name      string
+		maxWidth  int // 0 = unbegrenzt
+		expansion int // 0 = nur Inhalt, >0 = Gewichtung für Extra-Platz
+	}
 
-	for col, header := range headers {
-		cell := tview.NewTableCell(header).
+	columns := []colDef{
+		{"IP Address", 18, 0},  // IP + evtl. [G] [!]
+		{"Hostname", 0, 3},     // flexibel, bekommt meisten Extra-Platz
+		{"MAC", 19, 0},         // 17 Zeichen + 2 Padding
+		{"Vendor", 0, 2},       // flexibel
+		{"Device", 0, 1},       // flexibel
+		{"RTT", 8, 0},          // z.B. "999.9ms"
+		{"Up", 6, 0},           // z.B. "99d23h"
+		{"Fl", 3, 0},           // z.B. "99"
+	}
+
+	for col, def := range columns {
+		cell := tview.NewTableCell(def.name).
 			SetTextColor(colorHeader).
 			SetAlign(tview.AlignLeft).
 			SetSelectable(false).
-			SetAttributes(tcell.AttrBold)
+			SetAttributes(tcell.AttrBold).
+			SetExpansion(def.expansion)
 
-		// Spaltenbreiten setzen
-		switch col {
-		case 0: // IP
-			cell.SetExpansion(1)
-		case 1: // Hostname
-			cell.SetExpansion(2)
-		case 2: // MAC
-			cell.SetExpansion(1)
-		case 3: // Vendor
-			cell.SetExpansion(1)
-		case 4: // Device
-			cell.SetExpansion(1)
-		case 5: // RTT
-			cell.SetExpansion(0)
-		case 6: // Uptime
-			cell.SetExpansion(0)
-		case 7: // Flaps
-			cell.SetExpansion(0)
+		if def.maxWidth > 0 {
+			cell.SetMaxWidth(def.maxWidth)
 		}
 
 		w.table.SetCell(0, col, cell)
@@ -218,6 +295,26 @@ func (w *TviewApp) setupKeyBindings() {
 			}
 		}
 
+		// Wenn Filter aktiv ist, die meisten Tasten durchlassen
+		if w.filterInputActive {
+			switch event.Key() {
+			case tcell.KeyEscape:
+				return event // An FilterInput weitergeben
+			case tcell.KeyEnter, tcell.KeyTab, tcell.KeyUp, tcell.KeyDown:
+				return event // Navigation im Filter
+			case tcell.KeyCtrlC, tcell.KeyCtrlV, tcell.KeyCtrlX, tcell.KeyCtrlA:
+				return event // Clipboard-Operationen
+			case tcell.KeyBackspace, tcell.KeyBackspace2, tcell.KeyDelete:
+				return event // Löschen
+			case tcell.KeyLeft, tcell.KeyRight, tcell.KeyHome, tcell.KeyEnd:
+				return event // Cursor-Navigation
+			case tcell.KeyRune:
+				return event // Normale Texteingabe
+			default:
+				return event // Alles andere auch durchlassen
+			}
+		}
+
 		switch event.Key() {
 		case tcell.KeyEscape:
 			w.Stop()
@@ -229,6 +326,15 @@ func (w *TviewApp) setupKeyBindings() {
 				return nil
 			case '?':
 				w.pages.SwitchToPage("help")
+				return nil
+			case '/':
+				// / öffnet Filter-Eingabe (wie vim)
+				w.filterInputActive = true
+				w.app.SetFocus(w.filterInput)
+				return nil
+			case 'c', 'C':
+				// c löscht Filter
+				w.clearFilter()
 				return nil
 			case 'i', 'I':
 				w.sortState.Toggle(SortByIP)
@@ -329,17 +435,23 @@ func (w *TviewApp) updateInfo() {
 		sortName = "Flaps"
 	}
 
-	// Sortierung und Shortcuts wie im Netflow-Tool
-	text := fmt.Sprintf("[yellow]Sort:[white] %s %s\n"+
-		"[gray]i[white]=IP [gray]h[white]=host [gray]m[white]=MAC [gray]v[white]=vendor\n"+
-		"[gray]d[white]=device [gray]r[white]=RTT [gray]u[white]=up [gray]f[white]=flaps",
-		sortName, sortDir)
+	// Filter-Anzeige
+	filterInfo := "[gray](none)[white]"
+	if w.filterText != "" {
+		filterInfo = fmt.Sprintf("[green]\"%s\"[white]", w.filterText)
+	}
+
+	// Sortierung, Filter und Shortcuts
+	text := fmt.Sprintf("[yellow]Sort:[white] %s %s  [yellow]Filter:[white] %s\n"+
+		"[gray]/[white]=filter [gray]c[white]=clear [gray]i[white]=IP [gray]h[white]=host\n"+
+		"[gray]m[white]=MAC [gray]v[white]=vendor [gray]d[white]=dev [gray]r[white]=RTT [gray]u[white]=up [gray]f[white]=fl",
+		sortName, sortDir, filterInfo)
 	w.infoView.SetText(text)
 }
 
 // updateFooter aktualisiert die Footer-Zeile
 func (w *TviewApp) updateFooter() {
-	text := "[yellow]?[white]=Help  [yellow]q[white]/[yellow]ESC[white]=Quit  [yellow]↑↓[white]=Scroll  [yellow]PgUp/PgDn[white]=Page"
+	text := "[yellow]/[white]=Filter  [yellow]c[white]=Clear  [yellow]?[white]=Help  [yellow]q[white]/[yellow]ESC[white]=Quit  [yellow]↑↓[white]=Scroll"
 	w.footerView.SetText(text)
 }
 
@@ -348,10 +460,13 @@ func (w *TviewApp) updateTable() {
 	w.statesMu.RLock()
 	defer w.statesMu.RUnlock()
 
-	// Sortierte IP-Liste erstellen
+	// Sortierte IP-Liste erstellen (mit Filter)
 	ips := make([]string, 0, len(w.deviceStates))
 	for ip := range w.deviceStates {
-		ips = append(ips, ip)
+		// Filter anwenden
+		if w.matchesFilter(ip, w.deviceStates[ip]) {
+			ips = append(ips, ip)
+		}
 	}
 
 	referenceTime := time.Now()
@@ -361,16 +476,30 @@ func (w *TviewApp) updateTable() {
 	w.table.Clear()
 	w.setupTableHeader()
 
+	// Spalten-Definitionen für konsistente Breiten (muss mit setupTableHeader übereinstimmen)
+	type colDef struct {
+		maxWidth  int
+		expansion int
+		align     int // tview.AlignLeft = 0, tview.AlignRight = 2
+	}
+	columns := []colDef{
+		{18, 0, tview.AlignLeft},  // IP Address
+		{0, 3, tview.AlignLeft},   // Hostname
+		{19, 0, tview.AlignLeft},  // MAC
+		{0, 2, tview.AlignLeft},   // Vendor
+		{0, 1, tview.AlignLeft},   // Device
+		{8, 0, tview.AlignRight},  // RTT
+		{6, 0, tview.AlignRight},  // Up
+		{3, 0, tview.AlignRight},  // Fl
+	}
+
 	// Zeilen hinzufügen
 	for i, ipStr := range ips {
 		row := i + 1 // +1 wegen Header
 		state := w.deviceStates[ipStr]
 
-		// Bestimme Zeilenfarbe
-		rowColor := colorZebraLight
-		if i%2 == 1 {
-			rowColor = colorZebraDark
-		}
+		// Standard-Farbe (weiß)
+		rowColor := tcell.ColorWhite
 
 		// Status-spezifische Farben
 		ipColor := rowColor
@@ -380,7 +509,7 @@ func (w *TviewApp) updateTable() {
 			ipColor = colorNew
 		}
 
-		// IP mit Markern
+		// IP mit Markern + extra Leerzeichen für visuelle Trennung
 		displayIP := ipStr
 		if state.Host.IsGateway {
 			displayIP += " [G]"
@@ -388,14 +517,12 @@ func (w *TviewApp) updateTable() {
 		if state.Status == "offline" {
 			displayIP += " [!]"
 		}
+		displayIP += " " // Extra Abstand vor Hostname
 
-		// Hostname
+		// Hostname - tview schneidet automatisch ab wenn nötig
 		hostname := GetHostname(state.Host)
-		if len(hostname) > 20 {
-			hostname = hostname[:19] + "…"
-		}
 
-		// MAC
+		// MAC + extra Leerzeichen für visuelle Trennung
 		mac := state.Host.MAC
 		if mac == "" {
 			mac = "-"
@@ -404,20 +531,15 @@ func (w *TviewApp) updateTable() {
 		if IsLocallyAdministered(mac) {
 			macColor = colorLocalMAC
 		}
+		mac += " " // Extra Abstand vor Vendor
 
-		// Vendor
+		// Vendor - tview schneidet automatisch ab wenn nötig
 		vendor := GetVendor(state.Host)
-		if len(vendor) > 15 {
-			vendor = vendor[:14] + "…"
-		}
 
-		// Device Type
+		// Device Type - nicht abschneiden
 		deviceType := state.Host.DeviceType
 		if deviceType == "" || deviceType == "Unknown" {
 			deviceType = "-"
-		}
-		if len(deviceType) > 12 {
-			deviceType = deviceType[:11] + "…"
 		}
 
 		// RTT
@@ -447,35 +569,56 @@ func (w *TviewApp) updateTable() {
 			flapColor = colorFlapping
 		}
 
-		// Zellen setzen
-		w.table.SetCell(row, 0, tview.NewTableCell(displayIP).SetTextColor(ipColor))
-		w.table.SetCell(row, 1, tview.NewTableCell(hostname).SetTextColor(rowColor))
-		w.table.SetCell(row, 2, tview.NewTableCell(mac).SetTextColor(macColor))
-		w.table.SetCell(row, 3, tview.NewTableCell(vendor).SetTextColor(rowColor))
-		w.table.SetCell(row, 4, tview.NewTableCell(deviceType).SetTextColor(rowColor))
-		w.table.SetCell(row, 5, tview.NewTableCell(rttText).SetTextColor(rowColor).SetAlign(tview.AlignRight))
-		w.table.SetCell(row, 6, tview.NewTableCell(uptimeText).SetTextColor(rowColor).SetAlign(tview.AlignRight))
-		w.table.SetCell(row, 7, tview.NewTableCell(flapText).SetTextColor(flapColor).SetAlign(tview.AlignRight))
+		// Daten für jede Spalte
+		cellData := []struct {
+			text  string
+			color tcell.Color
+		}{
+			{displayIP, ipColor},
+			{hostname, rowColor},
+			{mac, macColor},
+			{vendor, rowColor},
+			{deviceType, rowColor},
+			{rttText, rowColor},
+			{uptimeText, rowColor},
+			{flapText, flapColor},
+		}
+
+		// Zellen setzen mit gleichen MaxWidth/Expansion wie Header
+		for col, def := range columns {
+			cell := tview.NewTableCell(cellData[col].text).
+				SetTextColor(cellData[col].color).
+				SetAlign(def.align).
+				SetExpansion(def.expansion)
+			if def.maxWidth > 0 {
+				cell.SetMaxWidth(def.maxWidth)
+			}
+			w.table.SetCell(row, col, cell)
+		}
 	}
 
 	// Sort-Indikator im Header aktualisieren
 	w.updateTableHeaderWithSort()
+
+	// Scroll-Indikator im Tabellen-Titel aktualisieren
+	w.updateScrollIndicators(len(ips))
 }
 
 // updateTableHeaderWithSort aktualisiert Header mit Sort-Indikator
 func (w *TviewApp) updateTableHeaderWithSort() {
+	// Kurze Header-Namen (müssen mit setupTableHeader übereinstimmen)
 	headers := []struct {
 		name string
 		col  SortColumn
 	}{
 		{"IP Address", SortByIP},
 		{"Hostname", SortByHostname},
-		{"MAC Address", SortByMAC},
+		{"MAC", SortByMAC},
 		{"Vendor", SortByVendor},
 		{"Device", SortByDeviceType},
 		{"RTT", SortByRTT},
-		{"Uptime", SortByUptime},
-		{"Flaps", SortByFlaps},
+		{"Up", SortByUptime},
+		{"Fl", SortByFlaps},
 	}
 
 	sortCol, sortAsc := w.sortState.Get()
@@ -493,9 +636,53 @@ func (w *TviewApp) updateTableHeaderWithSort() {
 	}
 }
 
+// updateScrollIndicators fügt Scroll-Hinweise oben und unten in die Tabelle ein
+func (w *TviewApp) updateScrollIndicators(totalDevices int) {
+	_, _, _, height := w.table.GetInnerRect()
+	visibleRows := height - 1 // -1 für Header
+
+	if visibleRows <= 0 || totalDevices <= visibleRows {
+		// Alle sichtbar oder kein Platz - Titel zurücksetzen
+		w.table.SetTitle(" Devices ")
+		return
+	}
+
+	// Scroll-Position ermitteln
+	rowOffset, _ := w.table.GetOffset()
+
+	// Berechne wie viele Einträge oben/unten versteckt sind
+	hiddenAbove := rowOffset
+	hiddenBelow := totalDevices - (rowOffset + visibleRows)
+	if hiddenBelow < 0 {
+		hiddenBelow = 0
+	}
+
+	// Titel mit Scroll-Info
+	if hiddenAbove > 0 || hiddenBelow > 0 {
+		titleParts := []string{}
+		if hiddenAbove > 0 {
+			titleParts = append(titleParts, fmt.Sprintf("↑%d", hiddenAbove))
+		}
+		if hiddenBelow > 0 {
+			titleParts = append(titleParts, fmt.Sprintf("↓%d", hiddenBelow))
+		}
+		w.table.SetTitle(fmt.Sprintf(" Devices (%d) %s ", totalDevices, strings.Join(titleParts, " ")))
+	} else {
+		w.table.SetTitle(fmt.Sprintf(" Devices (%d) ", totalDevices))
+	}
+}
+
 // getHelpText gibt den Help-Text zurück
 func (w *TviewApp) getHelpText() string {
 	return `NetSpy Hilfe
+
+FILTER:
+  / = Filter öffnen
+  c = Filter löschen
+  ↑/↓ = History durchblättern
+  Tab = Vorschlag übernehmen
+  Enter = Filter anwenden
+  Esc = Filter schließen
 
 SORTIERUNG:
   i = Sort by IP
@@ -525,6 +712,9 @@ SYMBOLE:
 func (w *TviewApp) Run() error {
 	// Screen vor Start clearen (Windows Terminal Fix)
 	fmt.Print("\033[2J\033[H")
+
+	// Maus-Unterstützung aktivieren
+	w.app.EnableMouse(true)
 
 	// Bei JEDEM Draw den Screen vollständig synchronisieren (Windows Terminal Fix)
 	w.app.SetAfterDrawFunc(func(screen tcell.Screen) {
@@ -701,6 +891,485 @@ func (w *TviewApp) countdownLoop() {
 			})
 		}
 	}
+}
+
+// setupFilterInput richtet die Tastatur-Behandlung für das Filter-Feld ein
+func (w *TviewApp) setupFilterInput() {
+	w.historyIndex = -1
+
+	w.filterInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyUp:
+			// Dropdown navigieren oder History durchblättern
+			if w.dropdownVisible && w.dropdown.GetItemCount() > 0 {
+				idx := w.dropdown.GetCurrentItem()
+				if idx > 0 {
+					w.dropdown.SetCurrentItem(idx - 1)
+				} else {
+					w.dropdown.SetCurrentItem(w.dropdown.GetItemCount() - 1)
+				}
+				return nil
+			}
+			// History nach oben
+			if len(w.filterHistory) > 0 {
+				if w.historyIndex < len(w.filterHistory)-1 {
+					w.historyIndex++
+					w.filterInput.SetText(w.filterHistory[len(w.filterHistory)-1-w.historyIndex])
+				}
+			}
+			return nil
+		case tcell.KeyDown:
+			// Dropdown navigieren oder History durchblättern
+			if w.dropdownVisible && w.dropdown.GetItemCount() > 0 {
+				idx := w.dropdown.GetCurrentItem()
+				if idx < w.dropdown.GetItemCount()-1 {
+					w.dropdown.SetCurrentItem(idx + 1)
+				} else {
+					w.dropdown.SetCurrentItem(0)
+				}
+				return nil
+			}
+			// History nach unten
+			if w.historyIndex > 0 {
+				w.historyIndex--
+				w.filterInput.SetText(w.filterHistory[len(w.filterHistory)-1-w.historyIndex])
+			} else if w.historyIndex == 0 {
+				w.historyIndex = -1
+				w.filterInput.SetText("")
+			}
+			return nil
+		case tcell.KeyTab:
+			// Tab wählt aus Dropdown
+			if w.dropdownVisible && w.dropdown.GetItemCount() > 0 {
+				idx := w.dropdown.GetCurrentItem()
+				if idx >= 0 && idx < len(w.suggestions) {
+					w.applySuggestion(w.suggestions[idx])
+				}
+				w.hideDropdown()
+				return nil
+			}
+		case tcell.KeyEnter:
+			// Wenn Dropdown sichtbar, erst ausgewählten Eintrag übernehmen
+			if w.dropdownVisible && w.dropdown.GetItemCount() > 0 {
+				idx := w.dropdown.GetCurrentItem()
+				if idx >= 0 && idx < len(w.suggestions) {
+					w.applySuggestion(w.suggestions[idx])
+				}
+			}
+			w.hideDropdown()
+			w.filterInputActive = false // Filter-Modus beenden
+			w.applyFilter()
+			return nil
+		case tcell.KeyEscape:
+			// Esc schließt Dropdown oder Filter-Feld
+			if w.dropdownVisible {
+				w.dropdownDisabled = true // Verhindert sofortiges Wieder-Öffnen
+				w.hideDropdown()
+				return nil
+			}
+			w.filterInputActive = false // Filter-Modus beenden
+			w.app.SetFocus(w.table)
+			return nil
+		}
+		return event
+	})
+
+	// Dropdown aktualisieren bei Texteingabe
+	w.filterInput.SetChangedFunc(func(text string) {
+		// Bei neuer Eingabe das Dropdown wieder erlauben
+		w.dropdownDisabled = false
+		w.updateDropdown(text)
+	})
+}
+
+// applySuggestion fügt eine Suggestion in den Filter-Text ein
+// Bei && / || / AND / OR wird nur der Teil nach dem letzten Operator ersetzt
+// NOT ist ein Präfix und wird NICHT als Trennstelle verwendet
+func (w *TviewApp) applySuggestion(suggestion string) {
+	currentText := w.filterInput.GetText()
+
+	// Finde den letzten Infix-Operator (AND/OR, NICHT: NOT)
+	type opMatch struct {
+		pos int
+		len int
+	}
+	operators := []struct {
+		pattern string
+		length  int
+	}{
+		{"&&", 2},
+		{"||", 2},
+		{" AND ", 5},
+		{" and ", 5},
+		{" And ", 5},
+		{" OR ", 4},
+		{" or ", 4},
+		{" Or ", 4},
+		// NOT ist Präfix, nicht hier!
+	}
+
+	var lastMatch *opMatch
+	for _, op := range operators {
+		pos := strings.LastIndex(currentText, op.pattern)
+		if pos >= 0 && (lastMatch == nil || pos > lastMatch.pos) {
+			lastMatch = &opMatch{pos: pos, len: op.length}
+		}
+	}
+
+	if lastMatch != nil {
+		// Alles bis zum letzten Operator behalten
+		prefix := currentText[:lastMatch.pos+lastMatch.len]
+		// Prüfen ob nach dem Operator ein NOT/! steht - das behalten
+		suffix := strings.TrimSpace(currentText[lastMatch.pos+lastMatch.len:])
+		notPrefix := ""
+		for _, notOp := range []string{"NOT ", "not ", "Not ", "!"} {
+			if strings.HasPrefix(suffix, notOp) {
+				notPrefix = notOp
+				break
+			}
+		}
+		// Zusammenbauen
+		if strings.HasSuffix(prefix, " ") {
+			w.filterInput.SetText(prefix + notPrefix + suggestion)
+		} else {
+			w.filterInput.SetText(prefix + " " + notPrefix + suggestion)
+		}
+	} else {
+		// Kein Infix-Operator - prüfen ob NOT am Anfang steht
+		trimmed := strings.TrimSpace(currentText)
+		for _, notOp := range []string{"NOT ", "not ", "Not ", "!"} {
+			if strings.HasPrefix(trimmed, notOp) {
+				w.filterInput.SetText(notOp + suggestion)
+				return
+			}
+		}
+		// Kein Operator - einfach ersetzen
+		w.filterInput.SetText(suggestion)
+	}
+}
+
+// updateDropdown aktualisiert die Vorschlagsliste basierend auf Eingabe
+func (w *TviewApp) updateDropdown(text string) {
+	if text == "" {
+		w.hideDropdown()
+		return
+	}
+
+	w.statesMu.RLock()
+	defer w.statesMu.RUnlock()
+
+	// Normalisiere Operatoren für Suche
+	normalizedText := normalizeFilterText(text)
+
+	// Teil nach dem letzten Operator für Suggestions verwenden
+	searchText := normalizedText
+	lastAnd := strings.LastIndex(normalizedText, "&&")
+	lastOr := strings.LastIndex(normalizedText, "||")
+	lastOp := lastAnd
+	if lastOr > lastOp {
+		lastOp = lastOr
+	}
+	if lastOp >= 0 {
+		searchText = strings.TrimSpace(normalizedText[lastOp+2:])
+		if searchText == "" {
+			w.hideDropdown()
+			return
+		}
+	}
+
+	// NOT-Prefix entfernen für Suche
+	if strings.HasPrefix(searchText, "!") {
+		searchText = strings.TrimSpace(searchText[1:])
+		if searchText == "" {
+			w.hideDropdown()
+			return
+		}
+	}
+
+	// Sammle alle matchenden Werte
+	matches := make(map[string]bool)
+	textLower := strings.ToLower(searchText)
+
+	for ipStr, state := range w.deviceStates {
+		// IP prüfen
+		if strings.Contains(strings.ToLower(ipStr), textLower) {
+			matches[ipStr] = true
+		}
+		// Hostname prüfen
+		if state.Host.Hostname != "" && strings.Contains(strings.ToLower(state.Host.Hostname), textLower) {
+			matches[state.Host.Hostname] = true
+		}
+		// MAC prüfen
+		if state.Host.MAC != "" && strings.Contains(strings.ToLower(state.Host.MAC), textLower) {
+			matches[state.Host.MAC] = true
+		}
+		// Vendor prüfen
+		if state.Host.Vendor != "" && strings.Contains(strings.ToLower(state.Host.Vendor), textLower) {
+			matches[state.Host.Vendor] = true
+		}
+		// DeviceType prüfen
+		if state.Host.DeviceType != "" && strings.Contains(strings.ToLower(state.Host.DeviceType), textLower) {
+			matches[state.Host.DeviceType] = true
+		}
+	}
+
+	// In Liste umwandeln und sortieren
+	w.suggestions = make([]string, 0, len(matches))
+	for match := range matches {
+		w.suggestions = append(w.suggestions, match)
+	}
+	sort.Strings(w.suggestions)
+
+	// Maximal 8 Vorschläge
+	if len(w.suggestions) > 8 {
+		w.suggestions = w.suggestions[:8]
+	}
+
+	if len(w.suggestions) == 0 {
+		w.hideDropdown()
+		return
+	}
+
+	// Dropdown befüllen
+	w.dropdown.Clear()
+	for _, suggestion := range w.suggestions {
+		w.dropdown.AddItem(suggestion, "", 0, nil)
+	}
+	// Ersten Eintrag auswählen
+	w.dropdown.SetCurrentItem(0)
+
+	w.showDropdown()
+}
+
+// showDropdown zeigt das Dropdown-Overlay
+func (w *TviewApp) showDropdown() {
+	if w.dropdownVisible {
+		return
+	}
+	w.dropdownVisible = true
+	// Dropdown in Container hinzufügen (resize=true damit es sich anpasst, aber Container begrenzt Größe)
+	w.pages.AddPage("dropdown", w.dropdownFlex, true, true)
+	// Fokus bleibt auf FilterInput
+	w.app.SetFocus(w.filterInput)
+}
+
+// hideDropdown versteckt das Dropdown-Overlay
+func (w *TviewApp) hideDropdown() {
+	if !w.dropdownVisible {
+		return
+	}
+	w.dropdownVisible = false
+	// Merken ob Filter aktiv war (RemovePage kann Blur auslösen)
+	wasFilterActive := w.filterInputActive
+	w.pages.RemovePage("dropdown")
+	// Fokus und State wiederherstellen falls Filter aktiv war
+	if wasFilterActive {
+		w.filterInputActive = true
+		w.app.SetFocus(w.filterInput)
+	}
+}
+
+// applyFilter wendet den aktuellen Filter an
+// WICHTIG: Diese Funktion wird aus InputCapture aufgerufen, also bereits im UI-Thread!
+// Daher KEIN QueueUpdateDraw verwenden - das würde einen Deadlock verursachen.
+func (w *TviewApp) applyFilter() {
+	text := strings.TrimSpace(w.filterInput.GetText())
+	w.filterText = text
+
+	// Zur History hinzufügen (wenn nicht leer und nicht bereits vorhanden)
+	if text != "" {
+		// Duplikate entfernen
+		newHistory := make([]string, 0, len(w.filterHistory)+1)
+		for _, h := range w.filterHistory {
+			if h != text {
+				newHistory = append(newHistory, h)
+			}
+		}
+		newHistory = append(newHistory, text)
+		// Max 20 Einträge behalten
+		if len(newHistory) > 20 {
+			newHistory = newHistory[len(newHistory)-20:]
+		}
+		w.filterHistory = newHistory
+	}
+
+	w.historyIndex = -1
+
+	// Direkt updaten (wir sind bereits im UI-Thread aus InputCapture)
+	w.updateTable()
+	w.updateInfo()
+
+	// Fokus zurück zur Tabelle
+	w.app.SetFocus(w.table)
+}
+
+// clearFilter löscht den aktuellen Filter
+// WICHTIG: Wird aus InputCapture aufgerufen - kein QueueUpdateDraw!
+func (w *TviewApp) clearFilter() {
+	w.filterText = ""
+	w.filterInput.SetText("")
+	w.historyIndex = -1
+
+	// Direkt updaten (bereits im UI-Thread)
+	w.updateTable()
+	w.updateInfo()
+}
+
+// normalizeFilterText ersetzt Wort-Operatoren durch Symbole
+// AND/and → &&, OR/or → ||, NOT/not → !
+func normalizeFilterText(text string) string {
+	// Groß/Kleinschreibung beachten für Wort-Grenzen
+	// Ersetze " AND " oder " and " durch " && "
+	result := text
+	for _, word := range []string{" AND ", " and ", " And "} {
+		result = strings.ReplaceAll(result, word, " && ")
+	}
+	for _, word := range []string{" OR ", " or ", " Or "} {
+		result = strings.ReplaceAll(result, word, " || ")
+	}
+	// NOT am Anfang oder nach Operator
+	for _, word := range []string{"NOT ", "not ", "Not "} {
+		result = strings.ReplaceAll(result, word, "!")
+	}
+	return result
+}
+
+// matchesFilter prüft ob ein Device zum aktuellen Filter passt
+// Unterstützt:
+// - Wildcards: * für beliebige Zeichen (z.B. "192.168.*" oder "*router*")
+// - AND-Verknüpfung: && oder AND (z.B. "apple && online" oder "apple AND online")
+// - OR-Verknüpfung: || oder OR (z.B. "apple || samsung" oder "apple OR samsung")
+// - NOT: ! oder NOT am Anfang (z.B. "!offline" oder "NOT offline")
+// Priorität: || wird zuerst gesplittet (niedrigste Priorität), dann &&
+func (w *TviewApp) matchesFilter(ipStr string, state *DeviceState) bool {
+	if w.filterText == "" {
+		return true
+	}
+
+	// Wort-Operatoren zu Symbolen normalisieren
+	filterText := normalizeFilterText(w.filterText)
+
+	// Alle durchsuchbaren Felder sammeln
+	searchFields := []string{
+		strings.ToLower(ipStr),
+		strings.ToLower(state.Host.Hostname),
+		strings.ToLower(state.Host.MAC),
+		strings.ToLower(state.Host.Vendor),
+		strings.ToLower(state.Host.DeviceType),
+		strings.ToLower(state.Status), // "online" oder "offline"
+	}
+
+	// OR hat niedrigste Priorität - mindestens ein Teil muss matchen
+	if strings.Contains(filterText, "||") {
+		orParts := strings.Split(filterText, "||")
+		for _, orPart := range orParts {
+			orPart = strings.TrimSpace(orPart)
+			if orPart == "" {
+				continue
+			}
+			if matchesAndExpression(orPart, searchFields) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Kein OR - als AND-Expression behandeln
+	return matchesAndExpression(filterText, searchFields)
+}
+
+// matchesAndExpression prüft einen AND-Ausdruck (kann mehrere && enthalten)
+func matchesAndExpression(expr string, fields []string) bool {
+	// Bei && müssen ALLE Teile matchen
+	if strings.Contains(expr, "&&") {
+		parts := strings.Split(expr, "&&")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if !matchesSingleFilter(part, fields) {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Einzelner Filter
+	return matchesSingleFilter(expr, fields)
+}
+
+// matchesSingleFilter prüft einen einzelnen Filter-Term gegen alle Felder
+// Ohne Wildcard: Exakter Match auf ein Feld
+// Mit Wildcard (*): Pattern-Matching
+// Mit ! am Anfang: Negation (NOT)
+func matchesSingleFilter(filter string, fields []string) bool {
+	filterLower := strings.ToLower(strings.TrimSpace(filter))
+	if filterLower == "" {
+		return true
+	}
+
+	// NOT-Operator: ! am Anfang
+	negated := false
+	if strings.HasPrefix(filterLower, "!") {
+		negated = true
+		filterLower = strings.TrimSpace(filterLower[1:])
+		if filterLower == "" {
+			return true
+		}
+	}
+
+	var matches bool
+
+	// Wildcard-Support: * wird zu Regex-Pattern
+	if strings.Contains(filterLower, "*") {
+		matches = matchesWildcard(filterLower, fields)
+	} else {
+		// Ohne Wildcard: Exakter Match auf ein Feld
+		matches = false
+		for _, field := range fields {
+			if field != "" && field == filterLower {
+				matches = true
+				break
+			}
+		}
+	}
+
+	// Bei Negation umkehren
+	if negated {
+		return !matches
+	}
+	return matches
+}
+
+// matchesWildcard prüft Wildcard-Pattern gegen Felder
+// * = beliebige Zeichen (auch keine)
+func matchesWildcard(pattern string, fields []string) bool {
+	// Pattern in Regex konvertieren:
+	// - * wird zu .*
+	// - Andere Regex-Sonderzeichen escapen
+	regexPattern := wildcardToRegex(pattern)
+
+	for _, field := range fields {
+		if field == "" {
+			continue
+		}
+		matched, _ := regexp.MatchString(regexPattern, field)
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
+// wildcardToRegex konvertiert ein Wildcard-Pattern zu Regex
+func wildcardToRegex(pattern string) string {
+	// Regex-Sonderzeichen escapen (außer *)
+	escaped := regexp.QuoteMeta(pattern)
+	// \* (escaped asterisk) zurück zu .* (regex any)
+	result := strings.ReplaceAll(escaped, `\*`, `.*`)
+	// Vollständiger Match (Anfang und Ende)
+	return "^" + result + "$"
 }
 
 // IsLocalSubnet prüft ob das Subnet lokal ist (Wrapper für discovery.IsLocalSubnet)
