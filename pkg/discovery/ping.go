@@ -143,10 +143,8 @@ func GenerateIPsFromCIDR(network *net.IPNet) []net.IP {
 	maxHosts := numHosts - 2
 	ips := make([]net.IP, 0, maxHosts)
 
-	if maxHosts > 254 {
-		fmt.Printf("📡 Scanning %d hosts\n", maxHosts)
-		fmt.Printf("💡 Tip: Use --arp for most accurate results on local networks\n")
-	}
+	// Hinweis entfernt - stört tview-Modus
+	_ = maxHosts // Compiler-Warnung vermeiden
 
 	for i := 1; i < numHosts-1; i++ {
 		currentIP := make(net.IP, len(ip))
