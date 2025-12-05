@@ -125,7 +125,7 @@ func (w *TviewApp) setupUI() {
 		SetTitle(" Devices ").
 		SetTitleColor(colorHeader).
 		SetTitleAlign(tview.AlignCenter)
-	w.table.SetBorderPadding(0, 0, 1, 1)
+	// Kein BorderPadding - verursacht Rendering-Probleme bei vielen Einträgen
 	w.setupTableHeader()
 
 	// Footer/Controls
@@ -523,8 +523,13 @@ SYMBOLE:
 
 // Run startet die Anwendung
 func (w *TviewApp) Run() error {
-	// Alternate Screen Buffer aktivieren (verhindert Überlappung mit Terminal-History)
-	w.app.EnableMouse(false) // Mouse deaktivieren (optional, aber cleaner)
+	// Screen vor Start clearen (Windows Terminal Fix)
+	fmt.Print("\033[2J\033[H")
+
+	// Bei JEDEM Draw den Screen vollständig synchronisieren (Windows Terminal Fix)
+	w.app.SetAfterDrawFunc(func(screen tcell.Screen) {
+		screen.Sync()
+	})
 
 	// Scan-Loop in Goroutine starten
 	go w.scanLoop()
@@ -598,9 +603,12 @@ func (w *TviewApp) performScan() {
 		PerformInitialDNSLookups(w.ctx, w.deviceStates)
 		w.statesMu.Unlock()
 
-		// UI nach DNS-Updates aktualisieren
+		// UI nach DNS-Updates aktualisieren (alle Komponenten für Konsistenz)
 		w.app.QueueUpdateDraw(func() {
+			w.updateHeader()
+			w.updateInfo()
 			w.updateTable()
+			w.updateFooter()
 		})
 	}()
 }
@@ -686,8 +694,10 @@ func (w *TviewApp) countdownLoop() {
 			}
 
 			w.app.QueueUpdateDraw(func() {
+				w.updateHeader()
+				w.updateInfo()
+				w.updateTable()
 				w.updateFooter()
-				w.updateHeader() // Thread-Count aktualisieren
 			})
 		}
 	}
