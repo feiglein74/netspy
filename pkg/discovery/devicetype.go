@@ -147,8 +147,13 @@ func detectByVendor(vendor string) string {
 		return DeviceTypeNetwork
 	}
 
-	// Printer vendors
-	if containsAny(vendor, []string{"hewlett packard", "hp ", "canon", "epson", "brother", "xerox", "lexmark"}) {
+	// HP differenzieren: Enterprise vs Consumer
+	if containsAny(vendor, []string{"hp enterprise", "hpe ", "hewlett packard enterprise"}) {
+		return DeviceTypeNetwork // HPE = Server, Switches, Enterprise-Lösungen
+	}
+
+	// Printer vendors (HP Inc. = Consumer + Drucker)
+	if containsAny(vendor, []string{"hewlett packard", "hp inc", "canon", "epson", "brother", "xerox", "lexmark"}) {
 		return DeviceTypePrinter
 	}
 
