@@ -220,8 +220,11 @@ func (w *TviewApp) setupUI() {
 				if cell != nil {
 					ipText := cell.Text
 					// Marker entfernen ([G], [!], etc.)
-					ipStr := strings.Fields(ipText)[0]
-					w.showHostDetails(ipStr)
+					fields := strings.Fields(ipText)
+					if len(fields) > 0 {
+						ipStr := fields[0]
+						w.showHostDetails(ipStr)
+					}
 				}
 			}
 			return nil
