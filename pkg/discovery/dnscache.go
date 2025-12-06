@@ -14,7 +14,9 @@ type DNSCacheEntry struct {
 }
 
 // ReadDNSCache reads the system's DNS cache and returns IP->Hostname mappings
-// This is much faster than doing individual DNS lookups for known hosts
+// WICHTIG: Liest nur Forward-DNS (A-Records), NICHT Reverse-DNS (PTR-Records)
+// Damit kann man später im Details-Pane einen Reverse-Check machen und
+// Inkonsistenzen erkennen (DNS-Spoofing, Hijacking, etc.)
 func ReadDNSCache() map[string]string {
 	cache := make(map[string]string)
 
@@ -73,35 +75,9 @@ func readWindowsDNSCache(cache map[string]string) {
 			continue
 		}
 
-		// Parse PTR record (Reverse DNS: IP -> hostname)
-		// English: "PTR Record  . . . . . . : hostname"
-		// German:  "PTR-Eintrag . . . . . : hostname"
-		if strings.Contains(line, "PTR Record") || strings.Contains(line, "PTR-Eintrag") {
-			parts := strings.Split(line, ":")
-			if len(parts) >= 2 && currentRecordName != "" {
-				hostname := strings.TrimSpace(parts[1])
-
-				// Skip (null) entries
-				if hostname == "(null)" || hostname == "" {
-					continue
-				}
-
-				// Extract IP from reverse DNS name (e.g., "10.0.0.1.in-addr.arpa")
-				if strings.HasSuffix(currentRecordName, ".in-addr.arpa") {
-					// Remove .in-addr.arpa suffix
-					ipReversed := strings.TrimSuffix(currentRecordName, ".in-addr.arpa")
-					// Reverse the octets (10.0.0.1 is stored as 1.0.0.10)
-					octets := strings.Split(ipReversed, ".")
-					if len(octets) == 4 {
-						// Reverse array
-						ip := octets[3] + "." + octets[2] + "." + octets[1] + "." + octets[0]
-						cache[ip] = hostname
-					}
-				}
-				currentRecordName = "" // Reset for next record
-			}
-			continue
-		}
+		// PTR-Records (Reverse DNS) werden ABSICHTLICH ignoriert!
+		// Wir wollen nur Forward-Einträge, um später einen Reverse-Check
+		// machen zu können und Inkonsistenzen zu erkennen.
 	}
 }
 

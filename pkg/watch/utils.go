@@ -218,34 +218,30 @@ func CommandExists(cmd string) bool {
 }
 
 // FormatDuration formats a duration in a human-readable short format
+// Uses fixed-width formatting (6 chars) to prevent column jumping
 func FormatDuration(d time.Duration) string {
 	if d < 0 {
 		d = 0
 	}
 
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	} else if d < time.Hour {
+	if d < time.Hour {
+		// Unter 1 Stunde: "XXmYYs" (beide 2-stellig, 6 Zeichen)
 		mins := int(d.Minutes())
 		secs := int(d.Seconds()) % 60
-		if secs > 0 {
-			return fmt.Sprintf("%dm%ds", mins, secs)
-		}
-		return fmt.Sprintf("%dm", mins)
+		return fmt.Sprintf("%02dm%02ds", mins, secs)
 	} else if d < 24*time.Hour {
+		// 1-24 Stunden: "XXhYYm" (beide 2-stellig, 6 Zeichen)
 		hours := int(d.Hours())
 		mins := int(d.Minutes()) % 60
-		if mins > 0 {
-			return fmt.Sprintf("%dh%dm", hours, mins)
-		}
-		return fmt.Sprintf("%dh", hours)
+		return fmt.Sprintf("%02dh%02dm", hours, mins)
 	} else {
+		// 1+ Tage: "XXdYYh" (beide 2-stellig, 6 Zeichen)
 		days := int(d.Hours() / 24)
 		hours := int(d.Hours()) % 24
-		if hours > 0 {
-			return fmt.Sprintf("%dd%dh", days, hours)
+		if days > 99 {
+			return fmt.Sprintf("%dd%02dh", days, hours) // Tage > 99 brauchen mehr Platz
 		}
-		return fmt.Sprintf("%dd", days)
+		return fmt.Sprintf("%02dd%02dh", days, hours)
 	}
 }
 

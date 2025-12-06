@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os/exec"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +13,40 @@ import (
 	"netspy/pkg/discovery"
 	"netspy/pkg/scanner"
 )
+
+// pingHost sends an ICMP ping using the system ping command
+// Works on Windows, Linux, and macOS without admin rights
+func pingHost(ip string, timeout time.Duration) bool {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "windows":
+		// Windows: -n count, -w timeout in milliseconds
+		timeoutMs := int(timeout.Milliseconds())
+		if timeoutMs < 1 {
+			timeoutMs = 1
+		}
+		cmd = exec.Command("ping", "-n", "1", "-w", fmt.Sprintf("%d", timeoutMs), ip)
+	case "darwin":
+		// macOS: -c count, -W timeout in milliseconds
+		timeoutMs := int(timeout.Milliseconds())
+		if timeoutMs < 1 {
+			timeoutMs = 1
+		}
+		cmd = exec.Command("ping", "-c", "1", "-W", fmt.Sprintf("%d", timeoutMs), ip)
+	default:
+		// Linux: -c count, -W timeout in seconds (minimum 1)
+		timeoutSec := int(timeout.Seconds())
+		if timeoutSec < 1 {
+			timeoutSec = 1
+		}
+		cmd = exec.Command("ping", "-c", "1", "-W", fmt.Sprintf("%d", timeoutSec), ip)
+	}
+
+	// Run silently - we only care about triggering ARP, not the result
+	_ = cmd.Run()
+	return true
+}
 
 // PerformScanQuiet performs a scan based on the selected mode without output
 func PerformScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, mode string, activeThreads *int32, threadConfig ThreadConfig) []scanner.Host {
@@ -234,11 +270,12 @@ func ReadCurrentARPTableQuiet(network *net.IPNet) []scanner.Host {
 }
 
 // PopulateARPTableQuiet populates ARP table by pinging all IPs without output
+// Uses ICMP ping (system command) for better device detection
 func PopulateARPTableQuiet(ctx context.Context, network *net.IPNet) error {
 	ips := discovery.GenerateIPsFromCIDR(network)
 
 	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, 254)
+	semaphore := make(chan struct{}, 100) // Limit concurrent pings
 
 	for _, ip := range ips {
 		select {
@@ -254,11 +291,8 @@ func PopulateARPTableQuiet(ctx context.Context, network *net.IPNet) error {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			// Quick ping to populate ARP table
-			conn, err := net.DialTimeout("tcp", net.JoinHostPort(targetIP.String(), "80"), 20*time.Millisecond)
-			if err == nil {
-				_ = conn.Close() // Ignore close error
-			}
+			// Use ICMP ping via system command (works without admin rights)
+			pingHost(targetIP.String(), 50*time.Millisecond)
 		}(ip)
 	}
 

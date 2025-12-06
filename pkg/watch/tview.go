@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,7 +25,6 @@ type TviewApp struct {
 	headerView *tview.TextView
 	infoView   *tview.TextView
 	table      *tview.Table
-	footerView *tview.TextView
 	helpModal  *tview.Modal
 	pages      *tview.Pages
 
@@ -33,9 +34,10 @@ type TviewApp struct {
 	dropdownFlex      *tview.Flex // Container für Dropdown-Positionierung
 	dropdownVisible   bool
 	dropdownDisabled  bool // Verhindert sofortiges Wieder-Öffnen nach ESC
-	filterInputActive bool // TRUE wenn Filter-Eingabe aktiv ist (für Keyboard-Routing)
+	filterInputActive bool   // TRUE wenn Filter-Eingabe aktiv ist (für Keyboard-Routing)
 	suggestions       []string
 	filterText        string // Aktiver Filter-Text
+	filterError       string // Fehler bei Filter-Validierung
 	filterHistory     []string
 	historyIndex      int // -1 = neue Eingabe, 0+ = Historie durchblättern
 
@@ -203,16 +205,29 @@ func (w *TviewApp) setupUI() {
 	// Kein BorderPadding - verursacht Rendering-Probleme bei vielen Einträgen
 	w.setupTableHeader()
 
-	// Footer/Controls
-	w.footerView = tview.NewTextView().
-		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter)
-	w.footerView.SetBorder(true).
-		SetBorderColor(colorBorder).
-		SetTitle(" Controls ").
-		SetTitleColor(colorHeader).
-		SetTitleAlign(tview.AlignCenter)
-	w.updateFooter()
+	// Focus-Handler für Tabelle: filterInputActive zurücksetzen
+	w.table.SetFocusFunc(func() {
+		w.filterInputActive = false
+	})
+
+	// Enter-Handler für Tabelle: Host-Details Modal öffnen
+	w.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter {
+			row, _ := w.table.GetSelection()
+			if row > 0 { // Nicht auf Header-Zeile
+				// IP aus erster Spalte extrahieren
+				cell := w.table.GetCell(row, 0)
+				if cell != nil {
+					ipText := cell.Text
+					// Marker entfernen ([G], [!], etc.)
+					ipStr := strings.Fields(ipText)[0]
+					w.showHostDetails(ipStr)
+				}
+			}
+			return nil
+		}
+		return event
+	})
 
 	// Help Modal
 	w.helpModal = tview.NewModal().
@@ -228,13 +243,12 @@ func (w *TviewApp) setupUI() {
 		AddItem(w.headerView, 0, 2, false).  // Statistics breit
 		AddItem(w.infoView, 0, 1, false)     // Scan & Sort schmaler
 
-	// Haupt-Layout
+	// Haupt-Layout (ohne Footer - Controls sind in "Scan & Sort")
 	w.flex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(w.filterInput, 3, 0, false).    // Filter oben (3 Zeilen: 1 Text + 2 Border)
 		AddItem(topRow, 5, 0, false).           // Header+Info (5 Zeilen: 3 Text + 2 Border)
-		AddItem(w.table, 0, 1, true).           // Tabelle bekommt restlichen Platz
-		AddItem(w.footerView, 3, 0, false)      // Footer unten (3 Zeilen: 1 Text + 2 Border)
+		AddItem(w.table, 0, 1, true)            // Tabelle bekommt restlichen Platz
 
 	// Pages für Modal-Handling
 	w.pages = tview.NewPages().
@@ -254,13 +268,13 @@ func (w *TviewApp) setupTableHeader() {
 	}
 
 	columns := []colDef{
-		{"IP Address", 18, 0},  // IP + evtl. [G] [!]
-		{"Hostname", 0, 3},     // flexibel, bekommt meisten Extra-Platz
-		{"MAC", 19, 0},         // 17 Zeichen + 2 Padding
-		{"Vendor", 0, 2},       // flexibel
-		{"Device", 0, 1},       // flexibel
-		{"RTT", 8, 0},          // z.B. "999.9ms"
-		{"Up", 6, 0},           // z.B. "99d23h"
+		{"IP Address", 16, 0},  // IP + evtl. [G] [!]
+		{"Hostname", 20, 1},    // flexibel aber begrenzt
+		{"MAC", 17, 0},         // 17 Zeichen
+		{"Vendor", 15, 1},      // flexibel aber begrenzt
+		{"Device", 12, 1},      // flexibel aber begrenzt
+		{"RTT", 7, 0},          // z.B. "99.9ms"
+		{"Up", 7, 0},           // z.B. "00m00s" (6 + 1 Padding)
 		{"Fl", 3, 0},           // z.B. "99"
 	}
 
@@ -283,6 +297,15 @@ func (w *TviewApp) setupTableHeader() {
 // setupKeyBindings richtet die Tastatur-Shortcuts ein
 func (w *TviewApp) setupKeyBindings() {
 	w.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Host-Details Modal ist offen - ESC schließt das Modal
+		if w.pages.HasPage("hostdetails") {
+			name, _ := w.pages.GetFrontPage()
+			if name == "hostdetails" {
+				// Alle Eingaben ans Modal weiterleiten
+				return event
+			}
+		}
+
 		// Help Modal ist offen - nur ESC/Enter durchlassen
 		if w.pages.HasPage("help") {
 			name, _ := w.pages.GetFrontPage()
@@ -296,7 +319,8 @@ func (w *TviewApp) setupKeyBindings() {
 		}
 
 		// Wenn Filter aktiv ist, die meisten Tasten durchlassen
-		if w.filterInputActive {
+		// Double-check: filterInputActive UND tatsächlicher Fokus
+		if w.filterInputActive && w.app.GetFocus() == w.filterInput {
 			switch event.Key() {
 			case tcell.KeyEscape:
 				return event // An FilterInput weitergeben
@@ -369,6 +393,18 @@ func (w *TviewApp) setupKeyBindings() {
 				w.updateTable()
 				return nil
 			}
+		case tcell.KeyBackspace, tcell.KeyBackspace2:
+			// Backspace löscht letztes Zeichen des Filters (ohne in Filter-Modus zu wechseln)
+			if w.filterText != "" {
+				// Letztes Zeichen entfernen
+				runes := []rune(w.filterText)
+				w.filterText = string(runes[:len(runes)-1])
+				w.filterInput.SetText(w.filterText)
+				w.filterError = validateFilter(w.filterText)
+				w.updateTable()
+				w.updateInfo()
+				return nil
+			}
 		}
 		return event
 	})
@@ -435,24 +471,21 @@ func (w *TviewApp) updateInfo() {
 		sortName = "Flaps"
 	}
 
-	// Filter-Anzeige
-	filterInfo := "[gray](none)[white]"
-	if w.filterText != "" {
-		filterInfo = fmt.Sprintf("[green]\"%s\"[white]", w.filterText)
+	// Sortierung und Shortcuts (Filter ist oben im Input-Feld sichtbar)
+	var text string
+	if w.filterError != "" {
+		// Fehler anzeigen statt Shortcuts
+		text = fmt.Sprintf("[yellow]Sort:[white] %s %s\n"+
+			"[red]Filter Error:[white] %s\n"+
+			"[gray]/[white]=filter [gray]c[white]=clear",
+			sortName, sortDir, w.filterError)
+	} else {
+		text = fmt.Sprintf("[yellow]Sort:[white] %s %s\n"+
+			"[gray]/[white]=filter [gray]c[white]=clear [gray]i[white]=IP [gray]h[white]=host\n"+
+			"[gray]m[white]=MAC [gray]v[white]=vendor [gray]d[white]=dev [gray]r[white]=RTT [gray]u[white]=up [gray]f[white]=fl",
+			sortName, sortDir)
 	}
-
-	// Sortierung, Filter und Shortcuts
-	text := fmt.Sprintf("[yellow]Sort:[white] %s %s  [yellow]Filter:[white] %s\n"+
-		"[gray]/[white]=filter [gray]c[white]=clear [gray]i[white]=IP [gray]h[white]=host\n"+
-		"[gray]m[white]=MAC [gray]v[white]=vendor [gray]d[white]=dev [gray]r[white]=RTT [gray]u[white]=up [gray]f[white]=fl",
-		sortName, sortDir, filterInfo)
 	w.infoView.SetText(text)
-}
-
-// updateFooter aktualisiert die Footer-Zeile
-func (w *TviewApp) updateFooter() {
-	text := "[yellow]/[white]=Filter  [yellow]c[white]=Clear  [yellow]?[white]=Help  [yellow]q[white]/[yellow]ESC[white]=Quit  [yellow]↑↓[white]=Scroll"
-	w.footerView.SetText(text)
 }
 
 // updateTable aktualisiert die Host-Tabelle
@@ -483,13 +516,13 @@ func (w *TviewApp) updateTable() {
 		align     int // tview.AlignLeft = 0, tview.AlignRight = 2
 	}
 	columns := []colDef{
-		{18, 0, tview.AlignLeft},  // IP Address
-		{0, 3, tview.AlignLeft},   // Hostname
-		{19, 0, tview.AlignLeft},  // MAC
-		{0, 2, tview.AlignLeft},   // Vendor
-		{0, 1, tview.AlignLeft},   // Device
-		{8, 0, tview.AlignRight},  // RTT
-		{6, 0, tview.AlignRight},  // Up
+		{16, 0, tview.AlignLeft},  // IP Address
+		{20, 1, tview.AlignLeft},  // Hostname
+		{17, 0, tview.AlignLeft},  // MAC
+		{15, 1, tview.AlignLeft},  // Vendor
+		{12, 1, tview.AlignLeft},  // Device
+		{7, 0, tview.AlignRight},  // RTT
+		{7, 0, tview.AlignRight},  // Up
 		{3, 0, tview.AlignRight},  // Fl
 	}
 
@@ -697,6 +730,7 @@ SORTIERUNG:
 NAVIGATION:
   ↑/↓ = Scroll
   PgUp/PgDn = Page
+  Enter = Host Details + Port Scan
   q/ESC = Quit
   ? = This help
 
@@ -710,6 +744,14 @@ SYMBOLE:
 
 // Run startet die Anwendung
 func (w *TviewApp) Run() error {
+	// Panic recovery um unerwartete Beendigungen zu debuggen
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("\n[DEBUG] PANIC recovered: %v\n", r)
+			debug.PrintStack()
+		}
+	}()
+
 	// Screen vor Start clearen (Windows Terminal Fix)
 	fmt.Print("\033[2J\033[H")
 
@@ -733,6 +775,9 @@ func (w *TviewApp) Run() error {
 
 // Stop beendet die Anwendung
 func (w *TviewApp) Stop() {
+	// Debug: Stack trace ausgeben um zu sehen woher der Stop kommt
+	fmt.Println("\n[DEBUG] Stop() aufgerufen von:")
+	debug.PrintStack()
 	w.cancel()
 	w.app.Stop()
 }
@@ -784,7 +829,6 @@ func (w *TviewApp) performScan() {
 		w.updateHeader()
 		w.updateInfo()
 		w.updateTable()
-		w.updateFooter()
 	})
 
 	// Background DNS Lookups starten
@@ -798,7 +842,6 @@ func (w *TviewApp) performScan() {
 			w.updateHeader()
 			w.updateInfo()
 			w.updateTable()
-			w.updateFooter()
 		})
 	}()
 }
@@ -887,7 +930,6 @@ func (w *TviewApp) countdownLoop() {
 				w.updateHeader()
 				w.updateInfo()
 				w.updateTable()
-				w.updateFooter()
 			})
 		}
 	}
@@ -1169,6 +1211,68 @@ func (w *TviewApp) hideDropdown() {
 	}
 }
 
+// validateFilter prüft ob ein Filter gültig ist und gibt ggf. einen Fehler zurück
+func validateFilter(filter string) string {
+	if filter == "" {
+		return ""
+	}
+
+	// Normalisiere Operatoren
+	normalized := normalizeFilterText(filter)
+
+	// Prüfe alle Teile (OR-Split, dann AND-Split)
+	orParts := strings.Split(normalized, "||")
+	for _, orPart := range orParts {
+		andParts := strings.Split(orPart, "&&")
+		for _, part := range andParts {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			// NOT-Prefix entfernen
+			if strings.HasPrefix(part, "!") {
+				part = strings.TrimSpace(part[1:])
+			}
+			if part == "" {
+				continue
+			}
+
+			// CIDR validieren (z.B. 10.0.113.0/28)
+			if strings.Contains(part, "/") {
+				_, _, err := net.ParseCIDR(part)
+				if err != nil {
+					return fmt.Sprintf("Invalid CIDR: %s", part)
+				}
+				continue
+			}
+
+			// IP-Bereich validieren (z.B. 10.0.113.11-13)
+			if isIPRangeFilter(part) {
+				// Zusätzliche Validierung: Bereich prüfen
+				lastDot := strings.LastIndex(part, ".")
+				rangePart := part[lastDot+1:]
+				rangeParts := strings.Split(rangePart, "-")
+				start, _ := strconv.Atoi(rangeParts[0])
+				end, _ := strconv.Atoi(rangeParts[1])
+				if start < 0 || start > 255 || end < 0 || end > 255 {
+					return fmt.Sprintf("Invalid IP range: %s (0-255)", part)
+				}
+				continue
+			}
+
+			// Wildcard-Pattern validieren
+			if strings.Contains(part, "*") {
+				regexPattern := wildcardToRegex(part)
+				_, err := regexp.Compile(regexPattern)
+				if err != nil {
+					return fmt.Sprintf("Invalid pattern: %s", part)
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // applyFilter wendet den aktuellen Filter an
 // WICHTIG: Diese Funktion wird aus InputCapture aufgerufen, also bereits im UI-Thread!
 // Daher KEIN QueueUpdateDraw verwenden - das würde einen Deadlock verursachen.
@@ -1176,7 +1280,10 @@ func (w *TviewApp) applyFilter() {
 	text := strings.TrimSpace(w.filterInput.GetText())
 	w.filterText = text
 
-	// Zur History hinzufügen (wenn nicht leer und nicht bereits vorhanden)
+	// Filter validieren
+	w.filterError = validateFilter(text)
+
+	// Zur History hinzufügen (wenn nicht leer und nicht bereits vorhanden, und kein Fehler)
 	if text != "" {
 		// Duplikate entfernen
 		newHistory := make([]string, 0, len(w.filterHistory)+1)
@@ -1207,6 +1314,7 @@ func (w *TviewApp) applyFilter() {
 // WICHTIG: Wird aus InputCapture aufgerufen - kein QueueUpdateDraw!
 func (w *TviewApp) clearFilter() {
 	w.filterText = ""
+	w.filterError = ""
 	w.filterInput.SetText("")
 	w.historyIndex = -1
 
@@ -1303,6 +1411,8 @@ func matchesAndExpression(expr string, fields []string) bool {
 // Ohne Wildcard: Exakter Match auf ein Feld
 // Mit Wildcard (*): Pattern-Matching
 // Mit ! am Anfang: Negation (NOT)
+// IP-Bereich: 10.0.113.11-13 matcht .11, .12, .13
+// CIDR: 10.0.113.0/28 matcht alle IPs im Subnet
 func matchesSingleFilter(filter string, fields []string) bool {
 	filterLower := strings.ToLower(strings.TrimSpace(filter))
 	if filterLower == "" {
@@ -1321,8 +1431,20 @@ func matchesSingleFilter(filter string, fields []string) bool {
 
 	var matches bool
 
-	// Wildcard-Support: * wird zu Regex-Pattern
-	if strings.Contains(filterLower, "*") {
+	// IP-Feld extrahieren (erstes Feld ist immer die IP)
+	ipField := ""
+	if len(fields) > 0 {
+		ipField = fields[0]
+	}
+
+	// CIDR-Filter: z.B. 10.0.113.0/28
+	if strings.Contains(filterLower, "/") {
+		matches = matchesCIDR(filterLower, ipField)
+	} else if isIPRangeFilter(filterLower) {
+		// IP-Bereich-Filter: z.B. 10.0.113.11-13
+		matches = matchesIPRange(filterLower, ipField)
+	} else if strings.Contains(filterLower, "*") {
+		// Wildcard-Support: * wird zu Regex-Pattern
 		matches = matchesWildcard(filterLower, fields)
 	} else {
 		// Ohne Wildcard: Exakter Match auf ein Feld
@@ -1340,6 +1462,106 @@ func matchesSingleFilter(filter string, fields []string) bool {
 		return !matches
 	}
 	return matches
+}
+
+// isIPRangeFilter prüft ob der Filter ein IP-Bereich ist (z.B. 10.0.113.11-13)
+func isIPRangeFilter(filter string) bool {
+	// Muss mindestens einen Punkt und einen Bindestrich enthalten
+	// Format: x.x.x.start-end
+	if !strings.Contains(filter, ".") || !strings.Contains(filter, "-") {
+		return false
+	}
+
+	// Letztes Oktett muss den Bereich enthalten
+	lastDot := strings.LastIndex(filter, ".")
+	if lastDot == -1 || lastDot >= len(filter)-1 {
+		return false
+	}
+
+	lastOctet := filter[lastDot+1:]
+	parts := strings.Split(lastOctet, "-")
+	if len(parts) != 2 {
+		return false
+	}
+
+	// Beide Teile müssen Zahlen sein
+	_, err1 := strconv.Atoi(parts[0])
+	_, err2 := strconv.Atoi(parts[1])
+	return err1 == nil && err2 == nil
+}
+
+// matchesIPRange prüft ob eine IP in einem Bereich liegt (z.B. 10.0.113.11-13)
+func matchesIPRange(filter string, ipField string) bool {
+	if ipField == "" {
+		return false
+	}
+
+	// Filter parsen: 10.0.113.11-13
+	lastDot := strings.LastIndex(filter, ".")
+	if lastDot == -1 {
+		return false
+	}
+
+	prefix := filter[:lastDot+1] // "10.0.113."
+	rangePart := filter[lastDot+1:]
+	parts := strings.Split(rangePart, "-")
+	if len(parts) != 2 {
+		return false
+	}
+
+	start, err1 := strconv.Atoi(parts[0])
+	end, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil {
+		return false
+	}
+
+	// IP-Feld parsen
+	ipLastDot := strings.LastIndex(ipField, ".")
+	if ipLastDot == -1 {
+		return false
+	}
+
+	ipPrefix := ipField[:ipLastDot+1]
+	ipLastOctet := ipField[ipLastDot+1:]
+
+	// Prefix muss übereinstimmen
+	if ipPrefix != prefix {
+		return false
+	}
+
+	// Letztes Oktett der IP parsen
+	ipNum, err := strconv.Atoi(ipLastOctet)
+	if err != nil {
+		return false
+	}
+
+	// Prüfen ob im Bereich (start und end können vertauscht sein)
+	if start > end {
+		start, end = end, start
+	}
+
+	return ipNum >= start && ipNum <= end
+}
+
+// matchesCIDR prüft ob eine IP in einem CIDR-Bereich liegt (z.B. 10.0.113.0/28)
+func matchesCIDR(filter string, ipField string) bool {
+	if ipField == "" {
+		return false
+	}
+
+	// CIDR parsen
+	_, network, err := net.ParseCIDR(filter)
+	if err != nil {
+		return false
+	}
+
+	// IP parsen
+	ip := net.ParseIP(ipField)
+	if ip == nil {
+		return false
+	}
+
+	return network.Contains(ip)
 }
 
 // matchesWildcard prüft Wildcard-Pattern gegen Felder
@@ -1404,4 +1626,23 @@ func (w *TviewApp) GetSortedIPs() []string {
 	})
 
 	return ips
+}
+
+// showHostDetails zeigt das Host-Details Modal für eine IP
+func (w *TviewApp) showHostDetails(ipStr string) {
+	w.statesMu.RLock()
+	state, exists := w.deviceStates[ipStr]
+	w.statesMu.RUnlock()
+
+	if !exists {
+		return
+	}
+
+	// Modal erstellen mit Callback zum Schließen
+	modal := NewHostDetailsModal(w.app, w.pages, ipStr, state, func() {
+		// Fokus zurück zur Tabelle
+		w.app.SetFocus(w.table)
+	})
+
+	modal.Show()
 }
