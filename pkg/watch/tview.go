@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"netspy/pkg/crash"
 	"netspy/pkg/scanner"
 
 	"github.com/gdamore/tcell/v2"
@@ -747,13 +748,10 @@ SYMBOLE:
 
 // Run startet die Anwendung
 func (w *TviewApp) Run() error {
-	// Panic recovery um unerwartete Beendigungen zu debuggen
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("\n[DEBUG] PANIC recovered: %v\n", r)
-			debug.PrintStack()
-		}
-	}()
+	// Terminal-Reset-Funktion registrieren für sauberen Crash-Exit
+	crash.SetTerminalResetFunc(func() {
+		w.app.Stop()
+	})
 
 	// Screen vor Start clearen (Windows Terminal Fix)
 	fmt.Print("\033[2J\033[H")
@@ -766,11 +764,11 @@ func (w *TviewApp) Run() error {
 		screen.Sync()
 	})
 
-	// Scan-Loop in Goroutine starten
-	go w.scanLoop()
+	// Scan-Loop in Goroutine starten (mit Crash-Recovery)
+	crash.SafeGo("scanLoop", w.scanLoop)
 
-	// Countdown-Timer in Goroutine
-	go w.countdownLoop()
+	// Countdown-Timer in Goroutine (mit Crash-Recovery)
+	crash.SafeGo("countdownLoop", w.countdownLoop)
 
 	// UI starten (blockiert)
 	return w.app.Run()

@@ -36,3 +36,4 @@ AC:5F:3E = SAMSUNG ELECTRO-MECHANICS
 F0:B6:1E = Intel Corporate
 BC:7E:8B = Samsung Electronics Co.,Ltd
 94:89:78 = Apple, Inc.
+84:3A:5B = Inventec(Chongqing)
