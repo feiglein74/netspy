@@ -307,7 +307,10 @@ func (m *HostDetailsModal) startPortScan() {
 	portsText := m.portsInput.GetText()
 	ports := parsePortList(portsText)
 
-	// Tabelle leeren
+	// Ergebnisse UND Tabelle leeren BEVOR neuer Scan startet
+	m.scanMu.Lock()
+	m.scanResults = nil
+	m.scanMu.Unlock()
 	m.portsTable.Clear()
 	m.setupPortsTableHeader()
 
