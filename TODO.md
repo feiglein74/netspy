@@ -12,6 +12,23 @@
   - Wide-Layout enthält DeviceType und RTT Spalten
   - Thread-Safe Message-Pattern eliminiert DNS-Hostname-Flickering
 
+### 🔴 Kritische Bugs
+
+- [x] **Sentinel-File Mechanismus** ✅
+  - `.netspy.running` Datei zeigt laufenden Prozess an
+  - Beim Start: Warnung wenn letzter Lauf unsauber beendet wurde
+  - Unterscheidet: Crash (mit Log) vs. Kill (ohne Log)
+
+- [ ] **Goroutine-Panics abfangen** (KRITISCH)
+  - `pkg/crash/handler.go` fängt NUR Main-Thread-Panics
+  - **Problem**: Goroutine-Panics werden nicht erfasst!
+  - **TODO**: Alle `go func()` durch `crash.SafeGo()` ersetzen
+  - Besonders prüfen: `cmd/watch.go`, `pkg/watch/*.go`, tview-Callbacks
+
+- [ ] **MAC-Adresse wird um 1 Zeichen abgeschnitten**
+  - Bug in `pkg/output/truncate.go` oder `table_responsive.go`
+  - MAC sollte immer vollständig sein (17 Zeichen: `aa:bb:cc:dd:ee:ff`)
+
 ### 🔴 Cross-Platform Critical Issues (v0.2.0)
 - [ ] **Spinner-Fix auf Windows testen** (nach macOS-Fix)
   - ANSI-Escape-Codes statt Carriage Return
@@ -40,6 +57,53 @@
 
 ### ⚙️ Configuration
 - [ ] Add configuration file support (.netspy.yaml)
+
+## Projektregeln-Compliance
+
+> **Audit vom 2026-01-09**: Prüfung gegen `PROJECT_RULES.md`
+
+### 📄 Dokumentation & Versionierung
+- [x] **LICENSE-Datei erstellen** ✅ (MIT License)
+- [x] **DESIGN-PRINCIPLES.md erstellen** ✅
+  - Leitprinzipien dokumentiert (Vollständigkeit vor Kürze, Opt-in, Transparenz)
+  - Verweis von CLAUDE.md hinzugefügt
+
+### 🔧 .gitignore Konfiguration
+- [x] **Claude Code Dateien ausschließen** ✅
+  - `.claude/` hinzugefügt
+  - `CLAUDE.md` hinzugefügt
+
+### 📝 Git-Commit-Stil
+- [ ] **Commit-Stil entscheiden**: Aktuell Mischstil (englische Präfixe `feat:`, `fix:` + deutsche Beschreibung)
+  - Option A: Vollständig Deutsch ("Füge Feature hinzu")
+  - Option B: Conventional Commits auf Englisch beibehalten
+  - In PROJECT_RULES.md dokumentieren
+
+### 🎯 Design-Prinzipien im Code (Kritisch!)
+
+**Regel: "Vollständigkeit vor Kürze" & "Opt-in statt Opt-out"**
+
+Alle folgenden automatischen Kürzungen verstoßen gegen die Projektregeln:
+
+| Priorität | Datei | Zeile | Problem |
+|-----------|-------|-------|---------|
+| KRITISCH | `pkg/discovery/arp.go` | 287-289 | ARP-Refresh auf 50 IPs limitiert, **keine Transparenz** |
+| KRITISCH | `pkg/discovery/http.go` | 159-160 | Banner automatisch auf 50 Zeichen gekürzt |
+| KRITISCH | `pkg/discovery/http.go` | 184-185 | Page-Title automatisch auf 40 Zeichen gekürzt |
+| HOCH | `pkg/output/table_responsive.go` | 45-46 | Hostname automatisch auf 13-25 Zeichen gekürzt |
+| HOCH | `pkg/output/table_responsive.go` | 59-64 | MAC-Adresse "intelligent" gekürzt ohne Opt-in |
+| MITTEL | `pkg/output/table_responsive.go` | 122-183 | DeviceType automatisch auf 16-23 Zeichen gekürzt |
+| MITTEL | `pkg/output/table_responsive.go` | 191-204 | HTTP-Banner + Ports automatisch gekürzt |
+| MITTEL | `pkg/discovery/vendor_learn.go` | 177-202 | Vendor-Name automatisch auf 25 Zeichen gekürzt |
+| MITTEL | `pkg/watch/details.go` | 478-479 | Banner in Modal auf 30 Zeichen gekürzt |
+
+**Lösungsansatz:**
+- [x] Globales Flag `--full-output` implementiert ✅
+  - `pkg/output/truncate.go` mit `Truncate()` und `TruncateMAC()` Funktionen
+  - Alle Tabellen-Ausgaben nutzen jetzt die zentrale Truncation-Logik
+- [x] Transparente Warnung bei Kürzung ✅ (zeigt "[+N]" für versteckte Zeichen)
+- [ ] Konfigurationsoption für Truncation-Limits (optional, niedrige Priorität)
+- [ ] ARP-Refresh-Limit transparent machen oder konfigurierbar
 
 ## Features
 - [ ] Add export functionality for watch mode results

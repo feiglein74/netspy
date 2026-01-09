@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"netspy/pkg/discovery"
+	"netspy/pkg/output"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -11,6 +12,11 @@ import (
 
 var cfgFile string
 var showVersion bool
+
+// FullOutput steuert ob Ausgaben vollständig (true) oder gekürzt (false) angezeigt werden
+// Default ist false (responsive Kürzung für Terminal-Breite)
+// Mit --full-output wird alles ungekürzt ausgegeben
+var FullOutput bool
 
 // rootCmd repräsentiert den Basis-Befehl wenn ohne Unterbefehle aufgerufen
 var rootCmd = &cobra.Command{
@@ -25,6 +31,10 @@ Features:
 - Multiple discovery methods (ICMP, ARP)
 - Beautiful CLI output
 - Non-intrusive scanning`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// FullOutput-Flag an Output-Package weitergeben
+		output.SetFullOutput(FullOutput)
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		// Wenn --version Flag gesetzt ist, Version anzeigen
 		if showVersion {
@@ -51,6 +61,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.netspy.yaml)")
 	rootCmd.PersistentFlags().Bool("verbose", false, "verbose output")
 	rootCmd.PersistentFlags().Bool("quiet", false, "quiet output")
+	rootCmd.PersistentFlags().BoolVar(&FullOutput, "full-output", false, "show full output without truncation (hostnames, banners, etc.)")
 	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "show version information")
 
 	// Flags an Viper binden
