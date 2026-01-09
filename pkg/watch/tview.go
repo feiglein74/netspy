@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"regexp"
 	"runtime/debug"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"netspy/pkg/crash"
+	"netspy/pkg/filter"
 	"netspy/pkg/scanner"
 
 	"github.com/gdamore/tcell/v2"
@@ -37,8 +36,9 @@ type TviewApp struct {
 	dropdownDisabled  bool // Verhindert sofortiges Wieder-Öffnen nach ESC
 	filterInputActive bool   // TRUE wenn Filter-Eingabe aktiv ist (für Keyboard-Routing)
 	suggestions       []string
-	filterText        string // Aktiver Filter-Text
-	filterError       string // Fehler bei Filter-Validierung
+	filterText        string         // Aktiver Filter-Text
+	filterError       string         // Fehler bei Filter-Validierung
+	filterObj         *filter.Filter // Wiederverwendbares Filter-Objekt
 	filterHistory     []string
 	historyIndex      int // -1 = neue Eingabe, 0+ = Historie durchblättern
 
@@ -322,25 +322,12 @@ func (w *TviewApp) setupKeyBindings() {
 			}
 		}
 
-		// Wenn Filter aktiv ist, die meisten Tasten durchlassen
-		// Double-check: filterInputActive UND tatsächlicher Fokus
-		if w.filterInputActive && w.app.GetFocus() == w.filterInput {
-			switch event.Key() {
-			case tcell.KeyEscape:
-				return event // An FilterInput weitergeben
-			case tcell.KeyEnter, tcell.KeyTab, tcell.KeyUp, tcell.KeyDown:
-				return event // Navigation im Filter
-			case tcell.KeyCtrlC, tcell.KeyCtrlV, tcell.KeyCtrlX, tcell.KeyCtrlA:
-				return event // Clipboard-Operationen
-			case tcell.KeyBackspace, tcell.KeyBackspace2, tcell.KeyDelete:
-				return event // Löschen
-			case tcell.KeyLeft, tcell.KeyRight, tcell.KeyHome, tcell.KeyEnd:
-				return event // Cursor-Navigation
-			case tcell.KeyRune:
-				return event // Normale Texteingabe
-			default:
-				return event // Alles andere auch durchlassen
-			}
+		// Wenn Filter-Input fokussiert ist (egal ob per Maus oder Tastatur)
+		// Alle Tasten an das Filter-Feld weiterleiten
+		if w.app.GetFocus() == w.filterInput {
+			// filterInputActive synchron halten (für andere Stellen im Code)
+			w.filterInputActive = true
+			return event // Alle Tasten an FilterInput weiterleiten
 		}
 
 		switch event.Key() {
@@ -1212,65 +1199,9 @@ func (w *TviewApp) hideDropdown() {
 }
 
 // validateFilter prüft ob ein Filter gültig ist und gibt ggf. einen Fehler zurück
-func validateFilter(filter string) string {
-	if filter == "" {
-		return ""
-	}
-
-	// Normalisiere Operatoren
-	normalized := normalizeFilterText(filter)
-
-	// Prüfe alle Teile (OR-Split, dann AND-Split)
-	orParts := strings.Split(normalized, "||")
-	for _, orPart := range orParts {
-		andParts := strings.Split(orPart, "&&")
-		for _, part := range andParts {
-			part = strings.TrimSpace(part)
-			if part == "" {
-				continue
-			}
-			// NOT-Prefix entfernen
-			if strings.HasPrefix(part, "!") {
-				part = strings.TrimSpace(part[1:])
-			}
-			if part == "" {
-				continue
-			}
-
-			// CIDR validieren (z.B. 10.0.113.0/28)
-			if strings.Contains(part, "/") {
-				_, _, err := net.ParseCIDR(part)
-				if err != nil {
-					return fmt.Sprintf("Invalid CIDR: %s", part)
-				}
-				continue
-			}
-
-			// IP-Bereich validieren (z.B. 10.0.113.11-13)
-			if isIPRangeFilter(part) {
-				// Zusätzliche Validierung: Bereich prüfen
-				lastDot := strings.LastIndex(part, ".")
-				rangePart := part[lastDot+1:]
-				rangeParts := strings.Split(rangePart, "-")
-				start, _ := strconv.Atoi(rangeParts[0])
-				end, _ := strconv.Atoi(rangeParts[1])
-				if start < 0 || start > 255 || end < 0 || end > 255 {
-					return fmt.Sprintf("Invalid IP range: %s (0-255)", part)
-				}
-				continue
-			}
-
-			// Wildcard-Pattern validieren
-			if strings.Contains(part, "*") {
-				regexPattern := wildcardToRegex(part)
-				_, err := regexp.Compile(regexPattern)
-				if err != nil {
-					return fmt.Sprintf("Invalid pattern: %s", part)
-				}
-			}
-		}
-	}
-	return ""
+// Nutzt das generische pkg/filter Package
+func validateFilter(filterExpr string) string {
+	return filter.ValidateString(filterExpr)
 }
 
 // applyFilter wendet den aktuellen Filter an
@@ -1324,428 +1255,45 @@ func (w *TviewApp) clearFilter() {
 }
 
 // normalizeFilterText ersetzt Wort-Operatoren durch Symbole
-// AND/and → &&, OR/or → ||, NOT/not → !
+// Wrapper für filter.NormalizeOperators
 func normalizeFilterText(text string) string {
-	// Groß/Kleinschreibung beachten für Wort-Grenzen
-	// Ersetze " AND " oder " and " durch " && "
-	result := text
-	for _, word := range []string{" AND ", " and ", " And "} {
-		result = strings.ReplaceAll(result, word, " && ")
-	}
-	for _, word := range []string{" OR ", " or ", " Or "} {
-		result = strings.ReplaceAll(result, word, " || ")
-	}
-	// NOT am Anfang oder nach Operator
-	for _, word := range []string{"NOT ", "not ", "Not "} {
-		result = strings.ReplaceAll(result, word, "!")
-	}
-	return result
+	return filter.NormalizeOperators(text)
 }
 
 // matchesFilter prüft ob ein Device zum aktuellen Filter passt
-// Unterstützt:
-// - Spalten-Filter: ip=, host=, mac=, vendor=, device=, status= (z.B. "vendor=Apple")
-// - Wildcards: * für beliebige Zeichen (z.B. "192.168.*" oder "*router*")
-// - AND-Verknüpfung: && oder AND (z.B. "apple && online")
-// - OR-Verknüpfung: || oder OR (z.B. "apple || samsung")
-// - NOT: ! oder NOT am Anfang (z.B. "!offline")
-// - Klammern: (vendor=Apple || vendor=Samsung) && status=online
-// Priorität: Klammern > NOT > AND > OR
+// Nutzt das generische pkg/filter Package
 func (w *TviewApp) matchesFilter(ipStr string, state *DeviceState) bool {
 	if w.filterText == "" {
 		return true
 	}
 
-	// Felder-Map für Spalten-Filter
+	// Filter-Objekt erstellen/aktualisieren wenn nötig
+	if w.filterObj == nil || w.filterObj.Expression != w.filterText {
+		w.filterObj = filter.New(w.filterText).
+			WithIPField("ip").
+			WithAliases(map[string]string{
+				"hostname": "host",
+				"h":        "host",
+				"m":        "mac",
+				"v":        "vendor",
+				"i":        "ip",
+				"s":        "status",
+				"dev":      "device",
+				"type":     "device",
+			})
+	}
+
+	// Felder-Map für den Filter
 	fields := map[string]string{
-		"ip":     strings.ToLower(ipStr),
-		"host":   strings.ToLower(state.Host.Hostname),
-		"mac":    strings.ToLower(state.Host.MAC),
-		"vendor": strings.ToLower(state.Host.Vendor),
-		"device": strings.ToLower(state.Host.DeviceType),
-		"status": strings.ToLower(state.Status),
+		"ip":     ipStr,
+		"host":   state.Host.Hostname,
+		"mac":    state.Host.MAC,
+		"vendor": state.Host.Vendor,
+		"device": state.Host.DeviceType,
+		"status": state.Status,
 	}
 
-	// Alle Felder für Suche ohne Präfix
-	allFields := []string{
-		fields["ip"],
-		fields["host"],
-		fields["mac"],
-		fields["vendor"],
-		fields["device"],
-		fields["status"],
-	}
-
-	// Wort-Operatoren zu Symbolen normalisieren
-	filterText := normalizeFilterText(w.filterText)
-
-	// Klammer-Ausdruck evaluieren
-	return evaluateFilterExpression(filterText, fields, allFields)
-}
-
-// evaluateFilterExpression evaluiert einen Filter-Ausdruck mit Klammern
-func evaluateFilterExpression(expr string, fields map[string]string, allFields []string) bool {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return true
-	}
-
-	// Klammern verarbeiten (von innen nach außen)
-	for strings.Contains(expr, "(") {
-		// Innerste Klammer finden
-		start := strings.LastIndex(expr, "(")
-		if start == -1 {
-			break
-		}
-		end := strings.Index(expr[start:], ")")
-		if end == -1 {
-			break // Ungültige Klammer
-		}
-		end += start
-
-		// Inhalt der Klammer evaluieren
-		inner := expr[start+1 : end]
-		result := evaluateFilterExpression(inner, fields, allFields)
-
-		// Ergebnis als Platzhalter einsetzen
-		placeholder := "__TRUE__"
-		if !result {
-			placeholder = "__FALSE__"
-		}
-		expr = expr[:start] + placeholder + expr[end+1:]
-	}
-
-	// OR hat niedrigste Priorität
-	if strings.Contains(expr, "||") {
-		orParts := strings.Split(expr, "||")
-		for _, orPart := range orParts {
-			orPart = strings.TrimSpace(orPart)
-			if orPart == "" {
-				continue
-			}
-			if evaluateAndExpression(orPart, fields, allFields) {
-				return true
-			}
-		}
-		return false
-	}
-
-	return evaluateAndExpression(expr, fields, allFields)
-}
-
-// evaluateAndExpression evaluiert einen AND-Ausdruck
-func evaluateAndExpression(expr string, fields map[string]string, allFields []string) bool {
-	if strings.Contains(expr, "&&") {
-		parts := strings.Split(expr, "&&")
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if part == "" {
-				continue
-			}
-			if !evaluateSingleTerm(part, fields, allFields) {
-				return false
-			}
-		}
-		return true
-	}
-	return evaluateSingleTerm(expr, fields, allFields)
-}
-
-// evaluateSingleTerm evaluiert einen einzelnen Filter-Term
-func evaluateSingleTerm(term string, fields map[string]string, allFields []string) bool {
-	term = strings.TrimSpace(term)
-
-	// Platzhalter von Klammer-Auswertung
-	if term == "__TRUE__" {
-		return true
-	}
-	if term == "__FALSE__" {
-		return false
-	}
-
-	// NOT-Operator
-	negated := false
-	if strings.HasPrefix(term, "!") {
-		negated = true
-		term = strings.TrimSpace(term[1:])
-	}
-
-	if term == "" {
-		return !negated
-	}
-
-	var matches bool
-
-	// Spalten-Filter prüfen (z.B. vendor=Apple)
-	if strings.Contains(term, "=") {
-		parts := strings.SplitN(term, "=", 2)
-		if len(parts) == 2 {
-			column := strings.ToLower(strings.TrimSpace(parts[0]))
-			value := strings.ToLower(strings.TrimSpace(parts[1]))
-
-			// Bekannte Spalten-Aliase
-			switch column {
-			case "hostname":
-				column = "host"
-			case "dev", "type":
-				column = "device"
-			case "v":
-				column = "vendor"
-			case "h":
-				column = "host"
-			case "m":
-				column = "mac"
-			case "i":
-				column = "ip"
-			case "s":
-				column = "status"
-			}
-
-			if fieldValue, ok := fields[column]; ok {
-				matches = matchesValue(value, fieldValue)
-			} else {
-				matches = false // Unbekannte Spalte
-			}
-		} else {
-			matches = false
-		}
-	} else {
-		// Kein Spalten-Präfix - in allen Feldern suchen
-		matches = matchesSingleFilter(term, allFields)
-	}
-
-	if negated {
-		return !matches
-	}
-	return matches
-}
-
-// matchesValue prüft ob ein Wert zum Filter passt (mit Wildcard-Support)
-func matchesValue(filter, value string) bool {
-	if filter == "" {
-		return true
-	}
-	if value == "" {
-		return false
-	}
-
-	// Wildcard-Support
-	if strings.Contains(filter, "*") {
-		pattern := "^" + strings.ReplaceAll(regexp.QuoteMeta(filter), "\\*", ".*") + "$"
-		matched, _ := regexp.MatchString(pattern, value)
-		return matched
-	}
-
-	// Substring-Match (nicht exakt, für Benutzerfreundlichkeit)
-	return strings.Contains(value, filter)
-}
-
-// matchesAndExpression prüft einen AND-Ausdruck (kann mehrere && enthalten)
-func matchesAndExpression(expr string, fields []string) bool {
-	// Bei && müssen ALLE Teile matchen
-	if strings.Contains(expr, "&&") {
-		parts := strings.Split(expr, "&&")
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if part == "" {
-				continue
-			}
-			if !matchesSingleFilter(part, fields) {
-				return false
-			}
-		}
-		return true
-	}
-
-	// Einzelner Filter
-	return matchesSingleFilter(expr, fields)
-}
-
-// matchesSingleFilter prüft einen einzelnen Filter-Term gegen alle Felder
-// Ohne Wildcard: Exakter Match auf ein Feld
-// Mit Wildcard (*): Pattern-Matching
-// Mit ! am Anfang: Negation (NOT)
-// IP-Bereich: 10.0.113.11-13 matcht .11, .12, .13
-// CIDR: 10.0.113.0/28 matcht alle IPs im Subnet
-func matchesSingleFilter(filter string, fields []string) bool {
-	filterLower := strings.ToLower(strings.TrimSpace(filter))
-	if filterLower == "" {
-		return true
-	}
-
-	// NOT-Operator: ! am Anfang
-	negated := false
-	if strings.HasPrefix(filterLower, "!") {
-		negated = true
-		filterLower = strings.TrimSpace(filterLower[1:])
-		if filterLower == "" {
-			return true
-		}
-	}
-
-	var matches bool
-
-	// IP-Feld extrahieren (erstes Feld ist immer die IP)
-	ipField := ""
-	if len(fields) > 0 {
-		ipField = fields[0]
-	}
-
-	// CIDR-Filter: z.B. 10.0.113.0/28
-	if strings.Contains(filterLower, "/") {
-		matches = matchesCIDR(filterLower, ipField)
-	} else if isIPRangeFilter(filterLower) {
-		// IP-Bereich-Filter: z.B. 10.0.113.11-13
-		matches = matchesIPRange(filterLower, ipField)
-	} else if strings.Contains(filterLower, "*") {
-		// Wildcard-Support: * wird zu Regex-Pattern
-		matches = matchesWildcard(filterLower, fields)
-	} else {
-		// Ohne Wildcard: Exakter Match auf ein Feld
-		matches = false
-		for _, field := range fields {
-			if field != "" && field == filterLower {
-				matches = true
-				break
-			}
-		}
-	}
-
-	// Bei Negation umkehren
-	if negated {
-		return !matches
-	}
-	return matches
-}
-
-// isIPRangeFilter prüft ob der Filter ein IP-Bereich ist (z.B. 10.0.113.11-13)
-func isIPRangeFilter(filter string) bool {
-	// Muss mindestens einen Punkt und einen Bindestrich enthalten
-	// Format: x.x.x.start-end
-	if !strings.Contains(filter, ".") || !strings.Contains(filter, "-") {
-		return false
-	}
-
-	// Letztes Oktett muss den Bereich enthalten
-	lastDot := strings.LastIndex(filter, ".")
-	if lastDot == -1 || lastDot >= len(filter)-1 {
-		return false
-	}
-
-	lastOctet := filter[lastDot+1:]
-	parts := strings.Split(lastOctet, "-")
-	if len(parts) != 2 {
-		return false
-	}
-
-	// Beide Teile müssen Zahlen sein
-	_, err1 := strconv.Atoi(parts[0])
-	_, err2 := strconv.Atoi(parts[1])
-	return err1 == nil && err2 == nil
-}
-
-// matchesIPRange prüft ob eine IP in einem Bereich liegt (z.B. 10.0.113.11-13)
-func matchesIPRange(filter string, ipField string) bool {
-	if ipField == "" {
-		return false
-	}
-
-	// Filter parsen: 10.0.113.11-13
-	lastDot := strings.LastIndex(filter, ".")
-	if lastDot == -1 {
-		return false
-	}
-
-	prefix := filter[:lastDot+1] // "10.0.113."
-	rangePart := filter[lastDot+1:]
-	parts := strings.Split(rangePart, "-")
-	if len(parts) != 2 {
-		return false
-	}
-
-	start, err1 := strconv.Atoi(parts[0])
-	end, err2 := strconv.Atoi(parts[1])
-	if err1 != nil || err2 != nil {
-		return false
-	}
-
-	// IP-Feld parsen
-	ipLastDot := strings.LastIndex(ipField, ".")
-	if ipLastDot == -1 {
-		return false
-	}
-
-	ipPrefix := ipField[:ipLastDot+1]
-	ipLastOctet := ipField[ipLastDot+1:]
-
-	// Prefix muss übereinstimmen
-	if ipPrefix != prefix {
-		return false
-	}
-
-	// Letztes Oktett der IP parsen
-	ipNum, err := strconv.Atoi(ipLastOctet)
-	if err != nil {
-		return false
-	}
-
-	// Prüfen ob im Bereich (start und end können vertauscht sein)
-	if start > end {
-		start, end = end, start
-	}
-
-	return ipNum >= start && ipNum <= end
-}
-
-// matchesCIDR prüft ob eine IP in einem CIDR-Bereich liegt (z.B. 10.0.113.0/28)
-func matchesCIDR(filter string, ipField string) bool {
-	if ipField == "" {
-		return false
-	}
-
-	// CIDR parsen
-	_, network, err := net.ParseCIDR(filter)
-	if err != nil {
-		return false
-	}
-
-	// IP parsen
-	ip := net.ParseIP(ipField)
-	if ip == nil {
-		return false
-	}
-
-	return network.Contains(ip)
-}
-
-// matchesWildcard prüft Wildcard-Pattern gegen Felder
-// * = beliebige Zeichen (auch keine)
-func matchesWildcard(pattern string, fields []string) bool {
-	// Pattern in Regex konvertieren:
-	// - * wird zu .*
-	// - Andere Regex-Sonderzeichen escapen
-	regexPattern := wildcardToRegex(pattern)
-
-	for _, field := range fields {
-		if field == "" {
-			continue
-		}
-		matched, _ := regexp.MatchString(regexPattern, field)
-		if matched {
-			return true
-		}
-	}
-	return false
-}
-
-// wildcardToRegex konvertiert ein Wildcard-Pattern zu Regex
-func wildcardToRegex(pattern string) string {
-	// Regex-Sonderzeichen escapen (außer *)
-	escaped := regexp.QuoteMeta(pattern)
-	// \* (escaped asterisk) zurück zu .* (regex any)
-	result := strings.ReplaceAll(escaped, `\*`, `.*`)
-	// Vollständiger Match (Anfang und Ende)
-	return "^" + result + "$"
+	return w.filterObj.Match(fields)
 }
 
 // IsLocalSubnet prüft ob das Subnet lokal ist (Wrapper für discovery.IsLocalSubnet)
