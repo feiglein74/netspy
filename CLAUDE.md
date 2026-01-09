@@ -141,6 +141,19 @@ ls test_*.go 2>/dev/null && echo "⚠️ Test-Files noch vorhanden!"
 
 NetSpy ist ein modernes Netzwerk-Discovery-Tool in Go, das bei der Überwachung von Netzwerkinfrastruktur hilft. Es bietet Echtzeit-Subnet-Scanning mit mehreren Discovery-Methoden (ICMP, ARP, hybrid) und schöner CLI-Ausgabe.
 
+### ⚠️ WICHTIG: Watch-Modus ist der Hauptzweck!
+
+**Der Watch-Modus (`cmd/watch.go`, `pkg/watch/`) ist der EINZIGE Grund warum dieses Projekt existiert!**
+
+- `scan` und andere Modi sind nur **Test-/Entwicklungshilfen**
+- Watch nutzt **tview** (TUI) - komplett andere Code-Pfade als `pkg/output/`
+- `pkg/output/` ist nur für CLI-Ausgabe der Scan-Modi (sekundär!)
+
+**Bei Bug-Fixes**: Nicht nur eine Stelle fixen - **ALLE Stellen suchen und fixen!**
+- `grep -r` über gesamtes Projekt
+- Watch (`pkg/watch/`) UND Scan (`pkg/output/`) prüfen
+- Nicht fragen "wo ist der Bug?" - einfach überall fixen!
+
 ## Entwicklungs-Befehle
 
 ### Bauen
