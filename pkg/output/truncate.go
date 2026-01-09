@@ -46,19 +46,11 @@ func Truncate(s string, maxLen int) string {
 	return s[:maxLen-1] + "…"
 }
 
-// TruncateMAC kürzt MAC-Adressen auf die letzten 3 Oktette wenn nötig
-// Zeigt nur bei aktivierter Truncation die gekürzte Version
-func TruncateMAC(mac string, maxLen int) string {
-	if !TruncateConfig.Enabled || maxLen <= 0 || len(mac) <= maxLen {
-		return mac
-	}
-
-	// MAC-Adressen: Zeige letzten Teil (z.B. "…c8:26:03")
-	// Dies ist ein Spezialfall da MAC-Format bekannt ist
-	if len(mac) == 17 { // Standard MAC: aa:bb:cc:dd:ee:ff
-		// Bei Kürzung: Zeige Präfix "…" + letzte 3 Oktette
-		return "…" + mac[9:] // "…dd:ee:ff" = 9 Zeichen
-	}
-
-	return Truncate(mac, maxLen)
+// TruncateMAC gibt MAC-Adressen IMMER vollständig zurück
+// MAC-Adressen sind immer 17 Zeichen - Kürzung macht keinen Sinn
+// (1 Zeichen sparen + "…" hinzufügen = gleiche Länge, aber Info verloren)
+func TruncateMAC(mac string, _ int) string {
+	// MAC-Adressen werden NIEMALS gekürzt
+	// Das maxLen-Argument wird ignoriert (für API-Kompatibilität behalten)
+	return mac
 }

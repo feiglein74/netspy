@@ -25,9 +25,9 @@
   - **TODO**: Alle `go func()` durch `crash.SafeGo()` ersetzen
   - Besonders prüfen: `cmd/watch.go`, `pkg/watch/*.go`, tview-Callbacks
 
-- [ ] **MAC-Adresse wird um 1 Zeichen abgeschnitten**
-  - Bug in `pkg/output/truncate.go` oder `table_responsive.go`
-  - MAC sollte immer vollständig sein (17 Zeichen: `aa:bb:cc:dd:ee:ff`)
+- [x] **MAC-Adresse wird um 1 Zeichen abgeschnitten** ✅
+  - Fix: `TruncateMAC()` gibt MAC jetzt IMMER vollständig zurück
+  - MAC-Adressen werden nie gekürzt (17 Zeichen, Kürzung sinnlos)
 
 ### 🔴 Cross-Platform Critical Issues (v0.2.0)
 - [ ] **Spinner-Fix auf Windows testen** (nach macOS-Fix)
