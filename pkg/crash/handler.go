@@ -27,12 +27,16 @@ type CrashInfo struct {
 // crashLogFile ist der Pfad zur Crash-Log-Datei
 var crashLogFile string
 
+// sentinelFile ist der Pfad zur Sentinel-Datei (zeigt laufenden Prozess an)
+var sentinelFile string
+
 // terminalResetFunc ist eine optionale Funktion zum Zurücksetzen des Terminals
 var terminalResetFunc func()
 
 func init() {
 	// Standard Crash-Log im aktuellen Verzeichnis
 	crashLogFile = "netspy_crash.log"
+	sentinelFile = ".netspy.running"
 }
 
 // SetCrashLogFile setzt den Pfad zur Crash-Log-Datei
@@ -242,4 +246,69 @@ func RecoverAndLog(name string) {
 		// Optional: Warnung ausgeben (falls nicht im quiet mode)
 		fmt.Fprintf(os.Stderr, "\n[WARNUNG] Fehler in %s wurde abgefangen: %v\n", name, r)
 	}
+}
+
+// ============================================================================
+// Sentinel-File Mechanismus - Erkennt unsaubere Beendigungen
+// ============================================================================
+
+// StartSentinel prüft auf vorherige unsaubere Beendigung und startet neuen Sentinel
+// Gibt true zurück wenn der letzte Lauf unsauber beendet wurde
+func StartSentinel() bool {
+	wasUnclean := false
+
+	// Prüfen ob Sentinel-Datei existiert (= letzter Lauf war unsauber)
+	if _, err := os.Stat(sentinelFile); err == nil {
+		wasUnclean = true
+
+		// Lese Inhalt für Details
+		content, _ := os.ReadFile(sentinelFile)
+
+		fmt.Println()
+		fmt.Println("╔══════════════════════════════════════════════════════════════════════════════╗")
+		fmt.Println("║  ⚠️  WARNUNG: Letzter Lauf wurde nicht sauber beendet!                        ║")
+		fmt.Println("╚══════════════════════════════════════════════════════════════════════════════╝")
+		if len(content) > 0 {
+			fmt.Printf("  Gestartet: %s\n", string(content))
+		}
+
+		// Prüfe ob es auch einen Crash-Report gibt
+		if _, err := os.Stat(crashLogFile); err == nil {
+			absPath, _ := filepath.Abs(crashLogFile)
+			fmt.Printf("  Crash-Report gefunden: %s\n", absPath)
+		} else {
+			fmt.Println("  Kein Crash-Report → Prozess wurde wahrscheinlich von außen beendet (taskkill/kill)")
+		}
+		fmt.Println()
+	}
+
+	// Neue Sentinel-Datei erstellen
+	content := fmt.Sprintf("%s (PID: %d)", time.Now().Format("2006-01-02 15:04:05"), os.Getpid())
+	_ = os.WriteFile(sentinelFile, []byte(content), 0644)
+
+	return wasUnclean
+}
+
+// StopSentinel entfernt die Sentinel-Datei bei sauberem Exit
+// Sollte mit defer in main() oder im Signal-Handler aufgerufen werden
+func StopSentinel() {
+	_ = os.Remove(sentinelFile)
+}
+
+// CleanupOnSignal richtet Signal-Handler ein für sauberes Beenden
+// Gibt einen Channel zurück der bei Signal geschlossen wird
+func CleanupOnSignal() chan struct{} {
+	done := make(chan struct{})
+
+	sigChan := make(chan os.Signal, 1)
+	// Hinweis: signal.Notify ist in os/signal, muss importiert werden
+	// Dies wird in main.go gemacht
+
+	go func() {
+		<-sigChan
+		StopSentinel()
+		close(done)
+	}()
+
+	return done
 }

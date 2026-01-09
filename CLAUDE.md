@@ -2,7 +2,14 @@
 
 Diese Datei bietet Anleitungen für Claude Code (claude.ai/code) bei der Arbeit mit Code in diesem Repository.
 
-**📋 Wichtig**: Siehe `PROJECT_RULES.md` für übergeordnete Projekt-Grundregeln (Sprache, Git-Commits, Dokumentation, etc.)
+## ⚠️ WICHTIG: Beim Session-Start IMMER lesen!
+
+**Vor dem Arbeiten an diesem Projekt MÜSSEN folgende Dateien gelesen werden:**
+
+1. **`PROJECT_RULES.md`** - Übergeordnete Projekt-Grundregeln (Sprache, Git-Commits, Dokumentation, Code-Änderungen)
+2. **`DESIGN-PRINCIPLES.md`** - Fundamentale Design-Entscheidungen (Vollständigkeit vor Kürze, Opt-in, Transparenz)
+
+Diese Regeln sind **verbindlich** und müssen bei jeder Arbeit am Projekt beachtet werden.
 
 ## Claude Code Präferenzen
 
@@ -279,4 +286,53 @@ Scan-Modi schließen sich gegenseitig aus und werden validiert.
 
 ### Design-Prinzip
 **KEINE neuen Zeilen nach initialem Tabellen-Draw** - Alles aktualisiert sich in-place für ein sauberes, Dashboard-artiges Erlebnis
-- to memorize
+
+---
+
+## 🔴 VERBINDLICHE PROJEKT-REGELN
+
+> Diese Regeln sind aus `PROJECT_RULES.md` und `DESIGN-PRINCIPLES.md` übernommen und MÜSSEN beachtet werden.
+
+### Sprache & Kommunikation
+- **Chat**: Du-Form (informell)
+- **Git-Commits**: Deutsch, Imperativ ("Füge Feature hinzu")
+- **Code-Kommentare**: Deutsch, sachlich/neutral
+- **Dokumentation**: Deutsch
+
+### Code-Änderungen
+- ✅ **MIT Auftrag**: Alle relevanten Dateien editieren
+- ❌ **OHNE Auftrag**: NICHT ungefragt "optimieren", refactoren, Kommentare ändern
+
+> **Merksatz**: "Auftrag erteilt = Dateien darfst du editieren. Kein Auftrag = Hände weg."
+
+### Design-Prinzipien (KRITISCH!)
+
+#### 1. Vollständigkeit vor Kürze
+- **Default = Alles zeigen**. Kürzungen nur auf explizite Anfrage.
+- `--full-output` Flag nutzen für vollständige Ausgabe
+
+#### 2. Opt-in statt Opt-out
+- Einschränkungen (Kürzung, Filterung) müssen EXPLIZIT aktiviert werden
+- ❌ FALSCH: `--full-output` (User muss volle Ausgabe fordern)
+- ✅ RICHTIG: `--truncate 80` (User muss Kürzung fordern)
+
+#### 3. Transparenz bei Modifikationen
+- Wenn Daten gekürzt werden, MUSS das sichtbar sein
+- Beispiel: `"hostname.local…[+15]"` zeigt dass 15 Zeichen fehlen
+
+#### 4. Sichere Defaults
+- ✅ Vollständige Ausgabe
+- ✅ Alle Host-Eigenschaften sichtbar
+- ❌ KEINE automatische Kürzung ohne Transparenz
+
+> **Merksatz**: "Der Default ist die Wahrheit, Einschränkungen sind explizit."
+
+### VOR jedem Commit
+1. **Tests ausführen**: `go test ./...` oder `ginkgo -r`
+2. **Code-Qualität prüfen**: `go vet ./...`
+3. **Alle Findings fixen** - keine Ausnahmen
+4. **Dann erst committen**
+
+### Windows-spezifisch
+- `py` statt `python` (vermeidet Store-Redirect)
+- Kein `>nul` bei OneDrive (nutze `/dev/null` in Git Bash)

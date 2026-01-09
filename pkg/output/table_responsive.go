@@ -37,14 +37,12 @@ func printNarrowHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			ipStr = ipStr[:15]
 		}
 
-		// Hostname (gekürzt)
+		// Hostname (mit Truncate-Funktion für Opt-in Kürzung)
 		hostname := host.Hostname
 		if hostname == "" {
 			hostname = "-"
 		}
-		if len(hostname) > 16 {
-			hostname = hostname[:13] + "…"
-		}
+		hostname = Truncate(hostname, 16)
 
 		// RTT
 		rtt := "-"
@@ -52,16 +50,12 @@ func printNarrowHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			rtt = fmt.Sprintf("%.0fms", float64(host.RTT.Microseconds())/1000.0)
 		}
 
-		// MAC (gekürzt - nur letzten Teil)
+		// MAC (mit TruncateMAC für Opt-in Kürzung)
 		mac := host.MAC
 		if mac == "" {
 			mac = "-"
-		} else if len(mac) > 15 {
-			// Zeige nur letzten Teil der MAC (z.B. "…c8:26:03:8c")
-			parts := strings.Split(mac, ":")
-			if len(parts) >= 3 {
-				mac = "…" + strings.Join(parts[len(parts)-3:], ":")
-			}
+		} else {
+			mac = TruncateMAC(mac, 15)
 		}
 
 		fmt.Printf("%-15s %-18s %-7s %-15s\n",
@@ -90,14 +84,12 @@ func printMediumHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			ipStr = ipStr + " [G]"
 		}
 
-		// Hostname
+		// Hostname (mit Truncate für Opt-in Kürzung)
 		hostname := host.Hostname
 		if hostname == "" {
 			hostname = "-"
 		}
-		if len(hostname) > 22 {
-			hostname = hostname[:19] + "…"
-		}
+		hostname = Truncate(hostname, 22)
 
 		// RTT
 		rtt := "-"
@@ -111,7 +103,7 @@ func printMediumHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			mac = "-"
 		}
 
-		// Device Type / Vendor
+		// Device Type / Vendor (mit Truncate für Opt-in Kürzung)
 		deviceInfo := host.DeviceType
 		if deviceInfo == "" || deviceInfo == "Unknown" {
 			deviceInfo = host.Vendor
@@ -119,9 +111,7 @@ func printMediumHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 		if deviceInfo == "" {
 			deviceInfo = "-"
 		}
-		if len(deviceInfo) > 16 {
-			deviceInfo = deviceInfo[:13] + "…"
-		}
+		deviceInfo = Truncate(deviceInfo, 16)
 
 		fmt.Printf("%-16s %-24s %-8s %-18s %-18s\n",
 			ipStr,
@@ -150,14 +140,12 @@ func printWideHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			ipStr = ipStr + " [G]"
 		}
 
-		// Hostname
+		// Hostname (mit Truncate für Opt-in Kürzung)
 		hostname := host.Hostname
 		if hostname == "" {
 			hostname = "-"
 		}
-		if len(hostname) > 28 {
-			hostname = hostname[:25] + "…"
-		}
+		hostname = Truncate(hostname, 28)
 
 		// RTT
 		rtt := "-"
@@ -171,7 +159,7 @@ func printWideHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 			mac = "-"
 		}
 
-		// Device Type / Vendor
+		// Device Type / Vendor (mit Truncate für Opt-in Kürzung)
 		deviceInfo := host.DeviceType
 		if deviceInfo == "" || deviceInfo == "Unknown" {
 			deviceInfo = host.Vendor
@@ -179,20 +167,16 @@ func printWideHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 		if deviceInfo == "" {
 			deviceInfo = "-"
 		}
-		if len(deviceInfo) > 18 {
-			deviceInfo = deviceInfo[:15] + "…"
-		}
+		deviceInfo = Truncate(deviceInfo, 18)
 
-		// HTTP Banner
+		// HTTP Banner (mit Truncate für Opt-in Kürzung)
 		httpBanner := host.HTTPBanner
 		if httpBanner == "" {
 			httpBanner = "-"
 		}
-		if len(httpBanner) > 23 {
-			httpBanner = httpBanner[:20] + "…"
-		}
+		httpBanner = Truncate(httpBanner, 23)
 
-		// Ports
+		// Ports (mit Truncate für Opt-in Kürzung)
 		ports := "-"
 		if len(host.Ports) > 0 {
 			portStrs := make([]string, len(host.Ports))
@@ -200,9 +184,7 @@ func printWideHybridTable(hosts []scanner.Host, termSize TerminalSize) error {
 				portStrs[i] = fmt.Sprintf("%d", p)
 			}
 			ports = strings.Join(portStrs, ",")
-			if len(ports) > 10 {
-				ports = ports[:10] + "…"
-			}
+			ports = Truncate(ports, 10)
 		}
 
 		fmt.Printf("%-20s %-30s %-8s %-18s %-20s %-25s %-12s\n",
@@ -244,9 +226,7 @@ func printNarrowPingTable(hosts []scanner.Host, termSize TerminalSize) error {
 		if hostname == "" {
 			hostname = "-"
 		}
-		if len(hostname) > 18 {
-			hostname = hostname[:15] + "…"
-		}
+		hostname = Truncate(hostname, 18)
 
 		rtt := "-"
 		if host.RTT > 0 {
@@ -275,9 +255,7 @@ func printWidePingTable(hosts []scanner.Host, termSize TerminalSize) error {
 		if hostname == "" {
 			hostname = "-"
 		}
-		if len(hostname) > 33 {
-			hostname = hostname[:30] + "…"
-		}
+		hostname = Truncate(hostname, 33)
 
 		rtt := "-"
 		if host.RTT > 0 {
@@ -320,18 +298,13 @@ func printNarrowARPTable(hosts []scanner.Host, termSize TerminalSize) error {
 		if hostname == "" {
 			hostname = "-"
 		}
-		if len(hostname) > 16 {
-			hostname = hostname[:13] + "…"
-		}
+		hostname = Truncate(hostname, 16)
 
 		mac := host.MAC
 		if mac == "" {
 			mac = "-"
-		} else if len(mac) > 15 {
-			parts := strings.Split(mac, ":")
-			if len(parts) >= 3 {
-				mac = "…" + strings.Join(parts[len(parts)-3:], ":")
-			}
+		} else {
+			mac = TruncateMAC(mac, 15)
 		}
 
 		fmt.Printf("%-15s %-18s %-15s\n", ipStr, hostname, mac)
@@ -357,9 +330,7 @@ func printMediumARPTable(hosts []scanner.Host, termSize TerminalSize) error {
 		if hostname == "" {
 			hostname = "-"
 		}
-		if len(hostname) > 23 {
-			hostname = hostname[:20] + "…"
-		}
+		hostname = Truncate(hostname, 23)
 
 		mac := host.MAC
 		if mac == "" {
@@ -373,9 +344,7 @@ func printMediumARPTable(hosts []scanner.Host, termSize TerminalSize) error {
 		if deviceInfo == "" {
 			deviceInfo = "-"
 		}
-		if len(deviceInfo) > 16 {
-			deviceInfo = deviceInfo[:13] + "…"
-		}
+		deviceInfo = Truncate(deviceInfo, 16)
 
 		fmt.Printf("%-20s %-25s %-18s %-18s\n",
 			ipStr, hostname, mac, deviceInfo)
@@ -401,9 +370,7 @@ func printWideARPTable(hosts []scanner.Host, termSize TerminalSize) error {
 		if hostname == "" {
 			hostname = "-"
 		}
-		if len(hostname) > 28 {
-			hostname = hostname[:25] + "…"
-		}
+		hostname = Truncate(hostname, 28)
 
 		mac := host.MAC
 		if mac == "" {
@@ -417,9 +384,7 @@ func printWideARPTable(hosts []scanner.Host, termSize TerminalSize) error {
 		if deviceInfo == "" {
 			deviceInfo = "-"
 		}
-		if len(deviceInfo) > 23 {
-			deviceInfo = deviceInfo[:20] + "…"
-		}
+		deviceInfo = Truncate(deviceInfo, 23)
 
 		fmt.Printf("%-20s %-30s %-18s %-25s\n",
 			ipStr, hostname, mac, deviceInfo)

@@ -56,3 +56,11 @@ TODO.internal.md
 .todo/
 notes/
 nul
+
+# Claude Code (projekt-spezifischer Kontext, nicht für andere relevant)
+.claude/
+CLAUDE.md
+
+# NetSpy Runtime-Dateien
+.netspy.running
+netspy_crash.log
