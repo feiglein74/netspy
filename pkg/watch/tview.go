@@ -344,9 +344,8 @@ func (w *TviewApp) setupKeyBindings() {
 		}
 
 		switch event.Key() {
-		case tcell.KeyEscape:
-			w.Stop()
-			return nil
+		// ESC beendet NICHT das Hauptprogramm (nur Unterfenster)
+		// Beenden nur mit 'q' oder Ctrl+C
 		case tcell.KeyRune:
 			switch event.Rune() {
 			case 'q', 'Q':
