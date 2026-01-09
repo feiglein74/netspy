@@ -274,7 +274,7 @@ func (w *TviewApp) setupTableHeader() {
 	columns := []colDef{
 		{"IP Address", 16, 0},  // IP + evtl. [G] [!]
 		{"Hostname", 20, 1},    // flexibel aber begrenzt
-		{"MAC", 17, 0},         // 17 Zeichen
+		{"MAC", 18, 0},         // 17 + 1 Leerzeichen
 		{"Vendor", 15, 1},      // flexibel aber begrenzt
 		{"Device", 12, 1},      // flexibel aber begrenzt
 		{"RTT", 7, 0},          // z.B. "99.9ms"
@@ -522,7 +522,7 @@ func (w *TviewApp) updateTable() {
 	columns := []colDef{
 		{16, 0, tview.AlignLeft},  // IP Address
 		{20, 1, tview.AlignLeft},  // Hostname
-		{17, 0, tview.AlignLeft},  // MAC
+		{18, 0, tview.AlignLeft},  // MAC (17 + 1 Leerzeichen)
 		{15, 1, tview.AlignLeft},  // Vendor
 		{12, 1, tview.AlignLeft},  // Device
 		{7, 0, tview.AlignRight},  // RTT
