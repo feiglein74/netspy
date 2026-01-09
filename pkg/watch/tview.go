@@ -1344,46 +1344,200 @@ func normalizeFilterText(text string) string {
 
 // matchesFilter prüft ob ein Device zum aktuellen Filter passt
 // Unterstützt:
+// - Spalten-Filter: ip=, host=, mac=, vendor=, device=, status= (z.B. "vendor=Apple")
 // - Wildcards: * für beliebige Zeichen (z.B. "192.168.*" oder "*router*")
-// - AND-Verknüpfung: && oder AND (z.B. "apple && online" oder "apple AND online")
-// - OR-Verknüpfung: || oder OR (z.B. "apple || samsung" oder "apple OR samsung")
-// - NOT: ! oder NOT am Anfang (z.B. "!offline" oder "NOT offline")
-// Priorität: || wird zuerst gesplittet (niedrigste Priorität), dann &&
+// - AND-Verknüpfung: && oder AND (z.B. "apple && online")
+// - OR-Verknüpfung: || oder OR (z.B. "apple || samsung")
+// - NOT: ! oder NOT am Anfang (z.B. "!offline")
+// - Klammern: (vendor=Apple || vendor=Samsung) && status=online
+// Priorität: Klammern > NOT > AND > OR
 func (w *TviewApp) matchesFilter(ipStr string, state *DeviceState) bool {
 	if w.filterText == "" {
 		return true
 	}
 
+	// Felder-Map für Spalten-Filter
+	fields := map[string]string{
+		"ip":     strings.ToLower(ipStr),
+		"host":   strings.ToLower(state.Host.Hostname),
+		"mac":    strings.ToLower(state.Host.MAC),
+		"vendor": strings.ToLower(state.Host.Vendor),
+		"device": strings.ToLower(state.Host.DeviceType),
+		"status": strings.ToLower(state.Status),
+	}
+
+	// Alle Felder für Suche ohne Präfix
+	allFields := []string{
+		fields["ip"],
+		fields["host"],
+		fields["mac"],
+		fields["vendor"],
+		fields["device"],
+		fields["status"],
+	}
+
 	// Wort-Operatoren zu Symbolen normalisieren
 	filterText := normalizeFilterText(w.filterText)
 
-	// Alle durchsuchbaren Felder sammeln
-	searchFields := []string{
-		strings.ToLower(ipStr),
-		strings.ToLower(state.Host.Hostname),
-		strings.ToLower(state.Host.MAC),
-		strings.ToLower(state.Host.Vendor),
-		strings.ToLower(state.Host.DeviceType),
-		strings.ToLower(state.Status), // "online" oder "offline"
+	// Klammer-Ausdruck evaluieren
+	return evaluateFilterExpression(filterText, fields, allFields)
+}
+
+// evaluateFilterExpression evaluiert einen Filter-Ausdruck mit Klammern
+func evaluateFilterExpression(expr string, fields map[string]string, allFields []string) bool {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return true
 	}
 
-	// OR hat niedrigste Priorität - mindestens ein Teil muss matchen
-	if strings.Contains(filterText, "||") {
-		orParts := strings.Split(filterText, "||")
+	// Klammern verarbeiten (von innen nach außen)
+	for strings.Contains(expr, "(") {
+		// Innerste Klammer finden
+		start := strings.LastIndex(expr, "(")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(expr[start:], ")")
+		if end == -1 {
+			break // Ungültige Klammer
+		}
+		end += start
+
+		// Inhalt der Klammer evaluieren
+		inner := expr[start+1 : end]
+		result := evaluateFilterExpression(inner, fields, allFields)
+
+		// Ergebnis als Platzhalter einsetzen
+		placeholder := "__TRUE__"
+		if !result {
+			placeholder = "__FALSE__"
+		}
+		expr = expr[:start] + placeholder + expr[end+1:]
+	}
+
+	// OR hat niedrigste Priorität
+	if strings.Contains(expr, "||") {
+		orParts := strings.Split(expr, "||")
 		for _, orPart := range orParts {
 			orPart = strings.TrimSpace(orPart)
 			if orPart == "" {
 				continue
 			}
-			if matchesAndExpression(orPart, searchFields) {
+			if evaluateAndExpression(orPart, fields, allFields) {
 				return true
 			}
 		}
 		return false
 	}
 
-	// Kein OR - als AND-Expression behandeln
-	return matchesAndExpression(filterText, searchFields)
+	return evaluateAndExpression(expr, fields, allFields)
+}
+
+// evaluateAndExpression evaluiert einen AND-Ausdruck
+func evaluateAndExpression(expr string, fields map[string]string, allFields []string) bool {
+	if strings.Contains(expr, "&&") {
+		parts := strings.Split(expr, "&&")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			if !evaluateSingleTerm(part, fields, allFields) {
+				return false
+			}
+		}
+		return true
+	}
+	return evaluateSingleTerm(expr, fields, allFields)
+}
+
+// evaluateSingleTerm evaluiert einen einzelnen Filter-Term
+func evaluateSingleTerm(term string, fields map[string]string, allFields []string) bool {
+	term = strings.TrimSpace(term)
+
+	// Platzhalter von Klammer-Auswertung
+	if term == "__TRUE__" {
+		return true
+	}
+	if term == "__FALSE__" {
+		return false
+	}
+
+	// NOT-Operator
+	negated := false
+	if strings.HasPrefix(term, "!") {
+		negated = true
+		term = strings.TrimSpace(term[1:])
+	}
+
+	if term == "" {
+		return !negated
+	}
+
+	var matches bool
+
+	// Spalten-Filter prüfen (z.B. vendor=Apple)
+	if strings.Contains(term, "=") {
+		parts := strings.SplitN(term, "=", 2)
+		if len(parts) == 2 {
+			column := strings.ToLower(strings.TrimSpace(parts[0]))
+			value := strings.ToLower(strings.TrimSpace(parts[1]))
+
+			// Bekannte Spalten-Aliase
+			switch column {
+			case "hostname":
+				column = "host"
+			case "dev", "type":
+				column = "device"
+			case "v":
+				column = "vendor"
+			case "h":
+				column = "host"
+			case "m":
+				column = "mac"
+			case "i":
+				column = "ip"
+			case "s":
+				column = "status"
+			}
+
+			if fieldValue, ok := fields[column]; ok {
+				matches = matchesValue(value, fieldValue)
+			} else {
+				matches = false // Unbekannte Spalte
+			}
+		} else {
+			matches = false
+		}
+	} else {
+		// Kein Spalten-Präfix - in allen Feldern suchen
+		matches = matchesSingleFilter(term, allFields)
+	}
+
+	if negated {
+		return !matches
+	}
+	return matches
+}
+
+// matchesValue prüft ob ein Wert zum Filter passt (mit Wildcard-Support)
+func matchesValue(filter, value string) bool {
+	if filter == "" {
+		return true
+	}
+	if value == "" {
+		return false
+	}
+
+	// Wildcard-Support
+	if strings.Contains(filter, "*") {
+		pattern := "^" + strings.ReplaceAll(regexp.QuoteMeta(filter), "\\*", ".*") + "$"
+		matched, _ := regexp.MatchString(pattern, value)
+		return matched
+	}
+
+	// Substring-Match (nicht exakt, für Benutzerfreundlichkeit)
+	return strings.Contains(value, filter)
 }
 
 // matchesAndExpression prüft einen AND-Ausdruck (kann mehrere && enthalten)
