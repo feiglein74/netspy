@@ -16,7 +16,8 @@ import (
 
 // pingHost sends an ICMP ping using the system ping command
 // Works on Windows, Linux, and macOS without admin rights
-func pingHost(ip string, timeout time.Duration) bool {
+// Returns success status and RTT duration
+func pingHost(ip string, timeout time.Duration) (bool, time.Duration) {
 	var cmd *exec.Cmd
 
 	switch runtime.GOOS {
@@ -43,9 +44,20 @@ func pingHost(ip string, timeout time.Duration) bool {
 		cmd = exec.Command("ping", "-c", "1", "-W", fmt.Sprintf("%d", timeoutSec), ip)
 	}
 
-	// Run silently - we only care about triggering ARP, not the result
-	_ = cmd.Run()
-	return true
+	start := time.Now()
+	err := cmd.Run()
+	rtt := time.Since(start)
+
+	if err != nil {
+		return false, 0
+	}
+	return true, rtt
+}
+
+// pingHostForARP sends an ICMP ping just to trigger ARP table population
+// Does not care about the result - only triggers network traffic
+func pingHostForARP(ip string, timeout time.Duration) {
+	pingHost(ip, timeout)
 }
 
 // PerformScanQuiet performs a scan based on the selected mode without output
@@ -58,6 +70,8 @@ func PerformScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, m
 		hosts, err = PerformHybridScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
 	case "arp":
 		hosts, err = PerformARPScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
+	case "icmp":
+		hosts, err = PerformICMPScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
 	case "fast", "thorough", "conservative":
 		hosts, err = PerformNormalScan(network, mode, activeThreads, threadConfig)
 	default:
@@ -115,27 +129,14 @@ func PerformHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThrea
 	// Grund: HTTP title detection (z.B. "Hue") hat höhere Priorität
 	// SSDP wird später im Background-DNS-Lookup als letzter Fallback verwendet
 
-	// Fallback zu TCP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
+	// Fallback zu ICMP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
+	// ICMP ist besser als TCP für fremde Netzwerke, da viele Hosts keine offenen TCP-Ports haben
 	if len(finalHosts) == 0 {
-		// Generate all IPs in network
-		ips := discovery.GenerateIPsFromCIDR(netCIDR)
-
-		// Scanner configuration (dynamic based on network size)
-		config := scanner.Config{
-			Concurrency: threadConfig.Scan,
-			Timeout:     500 * time.Millisecond,
-			Fast:        false,
-			Thorough:    false,
-			Quiet:       true,
-		}
-
-		s := scanner.New(config)
-		tcpHosts, err := s.ScanHosts(ips, activeThreads)
+		icmpHosts, err := PerformICMPScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
 		if err != nil {
 			return nil, err
 		}
-
-		finalHosts = tcpHosts
+		finalHosts = icmpHosts
 	}
 
 	// Skip RTT measurement in watch mode - we'll get RTT from reachability checks
@@ -161,29 +162,71 @@ func PerformARPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads 
 		hosts = ReadCurrentARPTableQuiet(netCIDR)
 	}
 
-	// Fallback zu TCP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
+	// Fallback zu ICMP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
 	if len(hosts) == 0 {
-		// Generate all IPs in network
-		ips := discovery.GenerateIPsFromCIDR(netCIDR)
-
-		// Scanner configuration (dynamic based on network size)
-		config := scanner.Config{
-			Concurrency: threadConfig.Scan,
-			Timeout:     500 * time.Millisecond,
-			Fast:        false,
-			Thorough:    false,
-			Quiet:       true,
-		}
-
-		s := scanner.New(config)
-		tcpHosts, err := s.ScanHosts(ips, activeThreads)
+		icmpHosts, err := PerformICMPScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
 		if err != nil {
 			return nil, err
 		}
-
-		hosts = tcpHosts
+		hosts = icmpHosts
 	}
 
+	return hosts, nil
+}
+
+// PerformICMPScanQuiet performs ICMP-based scan without output
+// This is the best mode for remote networks where ARP doesn't work
+func PerformICMPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
+	ips := discovery.GenerateIPsFromCIDR(netCIDR)
+
+	var hosts []scanner.Host
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Use configurable concurrency for ICMP scans
+	concurrency := threadConfig.Scan
+	if concurrency == 0 {
+		concurrency = 50 // Default for ICMP
+	}
+	semaphore := make(chan struct{}, concurrency)
+
+	// Longer timeout for ICMP (remote networks may have higher latency)
+	pingTimeout := 1000 * time.Millisecond
+
+	for _, ip := range ips {
+		select {
+		case <-ctx.Done():
+			return hosts, nil
+		default:
+		}
+
+		wg.Add(1)
+		semaphore <- struct{}{}
+
+		go func(targetIP net.IP) {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+
+			atomic.AddInt32(activeThreads, 1)
+			defer atomic.AddInt32(activeThreads, -1)
+
+			// Perform ICMP ping
+			success, rtt := pingHost(targetIP.String(), pingTimeout)
+			if success {
+				host := scanner.Host{
+					IP:     targetIP,
+					RTT:    rtt,
+					Online: true,
+				}
+
+				mu.Lock()
+				hosts = append(hosts, host)
+				mu.Unlock()
+			}
+		}(ip)
+	}
+
+	wg.Wait()
 	return hosts, nil
 }
 
@@ -292,7 +335,8 @@ func PopulateARPTableQuiet(ctx context.Context, network *net.IPNet) error {
 			defer func() { <-semaphore }()
 
 			// Use ICMP ping via system command (works without admin rights)
-			pingHost(targetIP.String(), 50*time.Millisecond)
+			// Only triggers ARP, result is ignored
+			pingHostForARP(targetIP.String(), 50*time.Millisecond)
 		}(ip)
 	}
 

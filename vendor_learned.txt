@@ -37,3 +37,7 @@ F0:B6:1E = Intel Corporate
 BC:7E:8B = Samsung Electronics Co.,Ltd
 94:89:78 = Apple, Inc.
 84:3A:5B = Inventec(Chongqing)
+40:B0:34 = Hewlett Packard
+00:93:37 = Intel Corporate
+10:52:1C = Espressif Inc.
+04:92:26 = ASUSTek COMPUTER INC.
