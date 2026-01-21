@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"net"
+	"os/exec"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,12 +38,14 @@ Scan modes:
   thorough:     Comprehensive scan (may have false positives)
   arp:          ARP-based scan (most accurate for local networks)
   hybrid:       ARP discovery + ping/port details (best accuracy + details)
+  icmp:         ICMP ping scan (best for remote networks without open ports)
 
 Examples:
   netspy scan 192.168.1.0/24                      # Conservative scan (default)
   netspy scan 192.168.1.0/24 --mode arp           # ARP scan only
   netspy scan 192.168.1.0/24 --mode hybrid        # ARP + ping details (recommended!)
-  netspy scan 192.168.1.0/24 --mode hybrid --ports 22,80,443  # ARP + specific ports`,
+  netspy scan 192.168.1.0/24 --mode hybrid --ports 22,80,443  # ARP + specific ports
+  netspy scan 10.10.1.0/24 --mode icmp            # ICMP ping (remote networks)`,
 	Args: cobra.ExactArgs(1),
 	RunE: runScan,
 }
@@ -54,7 +58,7 @@ func init() {
 	scanCmd.Flags().DurationVarP(&timeout, "timeout", "t", 0, "Timeout per host")
 	scanCmd.Flags().StringVarP(&format, "format", "f", "table", "Output format (table, json, csv)")
 	scanCmd.Flags().IntSliceVarP(&ports, "ports", "p", []int{}, "Specific ports to scan")
-	scanCmd.Flags().StringVar(&scanMode, "mode", "conservative", "Scan mode (conservative, fast, thorough, arp, hybrid)")
+	scanCmd.Flags().StringVar(&scanMode, "mode", "conservative", "Scan mode (conservative, fast, thorough, arp, hybrid, icmp)")
 }
 
 // isQuiet prüft ob quiet-Modus aktiviert ist
@@ -72,9 +76,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 		"thorough":     true,
 		"arp":          true,
 		"hybrid":       true,
+		"icmp":         true,
 	}
 	if !validModes[scanMode] {
-		return fmt.Errorf("invalid scan mode: %s (valid: conservative, fast, thorough, arp, hybrid)", scanMode)
+		return fmt.Errorf("invalid scan mode: %s (valid: conservative, fast, thorough, arp, hybrid, icmp)", scanMode)
 	}
 
 	// Hybrid-Scanning verwenden falls gewünscht
@@ -85,6 +90,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 	// ARP-Scanning verwenden falls gewünscht
 	if scanMode == "arp" {
 		return runARPScan(network)
+	}
+
+	// ICMP-Scanning verwenden falls gewünscht
+	if scanMode == "icmp" {
+		return runICMPScan(network)
 	}
 
 	// Netzwerk-Eingabe für normale Scans validieren
@@ -174,38 +184,19 @@ func runHybridScan(network string) error {
 		}
 	}
 
-	// Fallback zu TCP-Scanning wenn keine ARP-Hosts gefunden wurden
+	// Fallback zu ICMP-Scanning wenn keine ARP-Hosts gefunden wurden
+	// ICMP ist besser als TCP für fremde Netzwerke, da viele Hosts keine offenen TCP-Ports haben
 	if len(arpHosts) == 0 {
 		if !quiet {
 			if isLocal {
-				color.Yellow("[INFO] No hosts found via ARP, falling back to TCP scan\n")
+				color.Yellow("[INFO] No hosts found via ARP, falling back to ICMP scan\n")
 			} else {
-				color.Cyan("Step 1: TCP-based host discovery (remote subnet)\n")
+				color.Cyan("Step 1: ICMP-based host discovery (remote subnet)\n")
 			}
 		}
 
-		// Parse network für TCP-Scan
-		hosts, err := parseNetworkInput(network)
-		if err != nil {
-			return fmt.Errorf("invalid network specification: %v", err)
-		}
-
-		// Create scanner configuration (conservative mode for accuracy)
-		config := createScanConfig()
-		s := scanner.New(config)
-
-		if !quiet {
-			color.White("Scanning %d hosts with TCP ping...\n", len(hosts))
-		}
-
-		// Scan durchführen
-		results, err := s.ScanHosts(hosts, nil)
-		if err != nil {
-			return fmt.Errorf("scan failed: %v", err)
-		}
-
-		// Ergebnisse ausgeben
-		return output.PrintResults(results, format)
+		// Use ICMP scan instead of TCP
+		return runICMPScan(network)
 	}
 
 	// Step 1.5: SSDP/UPnP Discovery für zusätzliche Device-Infos
@@ -305,37 +296,18 @@ func runARPScan(network string) error {
 		}
 	}
 
-	// Fallback zu TCP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
+	// Fallback zu ICMP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
 	if len(finalHosts) == 0 {
 		if !quiet {
 			if isLocal {
-				color.Yellow("[INFO] No hosts found via ARP, falling back to TCP scan\n")
+				color.Yellow("[INFO] No hosts found via ARP, falling back to ICMP scan\n")
 			} else {
-				color.Cyan("Step 1: TCP-based host discovery (remote subnet)\n")
+				color.Cyan("Step 1: ICMP-based host discovery (remote subnet)\n")
 			}
 		}
 
-		// Parse network für TCP-Scan
-		hosts, err := parseNetworkInput(network)
-		if err != nil {
-			return fmt.Errorf("invalid network specification: %v", err)
-		}
-
-		// Create scanner configuration (conservative mode for accuracy)
-		config := createScanConfig()
-		s := scanner.New(config)
-
-		if !quiet {
-			color.White("Scanning %d hosts with TCP ping...\n", len(hosts))
-		}
-
-		// Scan durchführen
-		results, err := s.ScanHosts(hosts, nil)
-		if err != nil {
-			return fmt.Errorf("scan failed: %v", err)
-		}
-
-		finalHosts = results
+		// Use ICMP scan instead of TCP
+		return runICMPScan(network)
 	}
 
 	// Gateway-Flags setzen (heuristische Erkennung)
@@ -343,6 +315,130 @@ func runARPScan(network string) error {
 
 	// Ergebnisse ausgeben
 	return output.PrintResults(finalHosts, format)
+}
+
+func runICMPScan(network string) error {
+	quiet := isQuiet()
+
+	// Parse network
+	_, netCIDR, err := net.ParseCIDR(network)
+	if err != nil {
+		return fmt.Errorf("invalid CIDR: %v", err)
+	}
+
+	// Generate all IPs in the network
+	ips := discovery.GenerateIPsFromCIDR(netCIDR)
+
+	if !quiet {
+		color.Cyan("ICMP scan: Using system ping command\n")
+		color.White("Strategy: ICMP echo request (best for remote networks without open TCP ports)\n")
+		color.Cyan("Scanning %d hosts...\n\n", len(ips))
+	}
+
+	var hosts []scanner.Host
+	var mutex sync.Mutex
+	var wg sync.WaitGroup
+
+	// Concurrency settings
+	concurrencyLimit := concurrent
+	if concurrencyLimit == 0 {
+		concurrencyLimit = 50 // Default for ICMP
+	}
+	semaphore := make(chan struct{}, concurrencyLimit)
+
+	// Timeout settings
+	pingTimeout := timeout
+	if pingTimeout == 0 {
+		pingTimeout = 1000 * time.Millisecond
+	}
+
+	completed := int64(0)
+	start := time.Now()
+
+	for _, ip := range ips {
+		wg.Add(1)
+		go func(targetIP net.IP) {
+			defer wg.Done()
+
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			// Perform ICMP ping using system command
+			success, rtt := icmpPing(targetIP.String(), pingTimeout)
+			if success {
+				host := scanner.Host{
+					IP:     targetIP,
+					RTT:    rtt,
+					Online: true,
+				}
+
+				mutex.Lock()
+				hosts = append(hosts, host)
+				mutex.Unlock()
+			}
+
+			// Progress tracking
+			if !quiet {
+				done := atomic.AddInt64(&completed, 1)
+				if done%50 == 0 || done == int64(len(ips)) {
+					elapsed := time.Since(start)
+					rate := float64(done) / elapsed.Seconds()
+					color.White("   Progress: %d/%d (%.0f/sec)\n", done, len(ips), rate)
+				}
+			}
+		}(ip)
+	}
+
+	wg.Wait()
+
+	if !quiet {
+		color.Green("\n[OK] ICMP scan completed: %d hosts found\n\n", len(hosts))
+	}
+
+	// Gateway-Flags setzen (heuristische Erkennung)
+	scanner.SetGatewayFlags(hosts, netCIDR)
+
+	// Ergebnisse ausgeben
+	return output.PrintResults(hosts, format)
+}
+
+// icmpPing performs an ICMP ping using the system ping command
+// Works on Windows, Linux, and macOS without admin rights
+func icmpPing(ip string, timeout time.Duration) (bool, time.Duration) {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "windows":
+		// Windows: -n count, -w timeout in milliseconds
+		timeoutMs := int(timeout.Milliseconds())
+		if timeoutMs < 1 {
+			timeoutMs = 1
+		}
+		cmd = exec.Command("ping", "-n", "1", "-w", fmt.Sprintf("%d", timeoutMs), ip)
+	case "darwin":
+		// macOS: -c count, -W timeout in milliseconds
+		timeoutMs := int(timeout.Milliseconds())
+		if timeoutMs < 1 {
+			timeoutMs = 1
+		}
+		cmd = exec.Command("ping", "-c", "1", "-W", fmt.Sprintf("%d", timeoutMs), ip)
+	default:
+		// Linux: -c count, -W timeout in seconds (minimum 1)
+		timeoutSec := int(timeout.Seconds())
+		if timeoutSec < 1 {
+			timeoutSec = 1
+		}
+		cmd = exec.Command("ping", "-c", "1", "-W", fmt.Sprintf("%d", timeoutSec), ip)
+	}
+
+	startTime := time.Now()
+	err := cmd.Run()
+	rtt := time.Since(startTime)
+
+	if err != nil {
+		return false, 0
+	}
+	return true, rtt
 }
 
 func enhanceHostsWithDetails(arpHosts []scanner.Host, ssdpDevices map[string]discovery.SSDPDevice) []scanner.Host {

@@ -31,8 +31,9 @@ Examples:
   netspy watch                                     # Auto-detect and select network
   netspy watch 192.168.1.0/24                      # Monitor with default 60s interval
   netspy watch 192.168.1.0/24 --interval 30s       # Check every 30 seconds
-  netspy watch 192.168.1.0/24 --mode hybrid        # Use hybrid scanning mode
-  netspy watch 192.168.1.0/24 --mode arp           # Use ARP scanning mode`,
+  netspy watch 192.168.1.0/24 --mode hybrid        # Use hybrid scanning mode (local networks)
+  netspy watch 192.168.1.0/24 --mode arp           # Use ARP scanning mode (local networks)
+  netspy watch 10.10.1.0/24 --mode icmp            # Use ICMP ping (best for remote networks)`,
 	Args: cobra.RangeArgs(0, 1),
 	RunE: runWatch,
 }
@@ -42,7 +43,7 @@ func init() {
 
 	// Flags für watch-Befehl hinzufügen
 	watchCmd.Flags().DurationVar(&watchInterval, "interval", 60*time.Second, "Scan interval")
-	watchCmd.Flags().StringVar(&watchMode, "mode", "hybrid", "Scan mode (hybrid, arp, fast, thorough, conservative)")
+	watchCmd.Flags().StringVar(&watchMode, "mode", "hybrid", "Scan mode (hybrid, arp, icmp, fast, thorough, conservative)")
 	watchCmd.Flags().IntSliceVarP(&ports, "ports", "p", []int{}, "Specific ports to scan")
 	watchCmd.Flags().IntVar(&maxThreads, "max-threads", 0, "Maximum concurrent threads (0 = auto-calculate based on network size)")
 }
