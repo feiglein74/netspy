@@ -41,3 +41,4 @@ BC:7E:8B = Samsung Electronics Co.,Ltd
 00:93:37 = Intel Corporate
 10:52:1C = Espressif Inc.
 04:92:26 = ASUSTek COMPUTER INC.
+58:47:CA = IEEE Registration Authority
