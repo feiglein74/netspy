@@ -50,11 +50,18 @@ jobs:
         run: |
           go build -ldflags="-s -w -X netspy/cmd.Version=${{ github.ref_name }}" -o netspy-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
 
+      - name: Create ZIP archive
+        run: |
+          mkdir -p dist
+          cp netspy-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} dist/
+          cp vendor_learned.txt dist/
+          cd dist && zip ../netspy-${{ matrix.os }}-${{ matrix.arch }}.zip *
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: netspy-${{ matrix.os }}-${{ matrix.arch }}
-          path: netspy-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          path: netspy-${{ matrix.os }}-${{ matrix.arch }}.zip
 
   release:
     name: Create Release
@@ -69,8 +76,8 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir release
-          # Verschiebe alle Binaries ins Release-Verzeichnis
-          find artifacts -type f -name "netspy-*" -exec mv {} release/ \;
+          # Verschiebe alle ZIP-Dateien ins Release-Verzeichnis
+          find artifacts -type f -name "*.zip" -exec mv {} release/ \;
           # Zeige was wir haben
           ls -la release/
 
