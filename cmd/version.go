@@ -7,7 +7,8 @@ import (
 )
 
 // Version enthält die aktuelle Version von NetSpy
-const Version = "0.1.0"
+// Wird beim Kompilieren via ldflags gesetzt
+var Version = "0.1.0"
 
 // BuildDate wird beim Kompilieren gesetzt (optional, via ldflags)
 var BuildDate string = "unbekannt"
