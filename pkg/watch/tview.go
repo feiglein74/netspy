@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"netspy/pkg/crash"
@@ -41,6 +42,28 @@ type TviewApp struct {
 	filterObj         *filter.Filter // Wiederverwendbares Filter-Objekt
 	filterHistory     []string
 	historyIndex      int // -1 = neue Eingabe, 0+ = Historie durchblättern
+
+	// Header-Steuerung (editierbarer Netzbereich + Modus)
+	networkInput *tview.InputField
+	modeDropDown *tview.DropDown
+	intervalView *tview.TextView
+	targetError  string // Fehler bei Netzbereich-Eingabe
+	maxThreads   int    // gemerkt für Thread-Neuberechnung bei Netz-Wechsel
+
+	// Ziel-Synchronisation: schützt network/netCIDR/mode/threadConfig beim
+	// Wechsel zur Laufzeit (UI-Goroutine schreibt, Scan-Goroutine liest)
+	targetMu sync.RWMutex
+	rescanCh chan struct{} // weckt scanLoop für sofortigen Neuscan
+
+	// Abbrechbarer laufender Scan: ein Netz-/Mode-Wechsel cancelt ihn sofort,
+	// damit man nicht im Scan eines großen Netzes (z.B. /16) gefangen bleibt
+	scanCancel   context.CancelFunc
+	scanCancelMu sync.Mutex
+
+	// Scan-Status für Live-Rückmeldung (Scan-Goroutine schreibt, UI liest)
+	scanning     atomic.Bool  // TRUE während ein Scan läuft
+	scanHostsNum atomic.Int32 // Anzahl der im aktuellen Scan abgefragten Hosts
+	spinnerFrame int          // Animations-Frame (nur UI-Goroutine)
 
 	// State
 	deviceStates map[string]*DeviceState
@@ -94,6 +117,8 @@ func NewTviewApp(network string, netCIDR *net.IPNet, mode string, interval time.
 		mode:         mode,
 		isLocal:      isLocal,
 		threadConfig: threadConfig,
+		maxThreads:   maxThreads,
+		rescanCh:     make(chan struct{}, 1),
 		ctx:          ctx,
 		cancel:       cancel,
 	}
@@ -169,13 +194,63 @@ func (w *TviewApp) setupUI() {
 			10, 0, true). // Max 10 Zeilen hoch
 		AddItem(nil, 0, 1, false) // Rest des Bildschirms leer
 
-	// Statistics Box (links oben) - wie im Netflow-Tool
+	// Header-Steuerelemente: editierbarer Netzbereich + Modus-Dropdown + Intervall
+	w.networkInput = tview.NewInputField().
+		SetLabel("Network: ").
+		SetText(w.network).
+		SetFieldWidth(20).
+		SetLabelColor(tcell.ColorYellow).
+		SetFieldTextColor(tcell.ColorWhite).
+		SetFieldBackgroundColor(tcell.ColorDarkBlue)
+	w.networkInput.SetFocusFunc(func() { w.filterInputActive = false })
+
+	modeOptions := []string{"hybrid", "arp", "icmp", "fast", "thorough", "conservative"}
+	w.modeDropDown = tview.NewDropDown().
+		SetLabel("Mode: ").
+		SetOptions(modeOptions, nil).
+		SetLabelColor(tcell.ColorYellow).
+		SetFieldTextColor(tcell.ColorWhite).
+		SetFieldBackgroundColor(tcell.ColorDarkBlue)
+	modeIdx := 0
+	for i, m := range modeOptions {
+		if m == w.mode {
+			modeIdx = i
+			break
+		}
+	}
+	// SetCurrentOption VOR SetSelectedFunc -> löst beim Init keinen Handler aus
+	w.modeDropDown.SetCurrentOption(modeIdx)
+	w.modeDropDown.SetSelectedFunc(func(text string, index int) {
+		w.applyModeChange(text)
+	})
+	w.modeDropDown.SetFocusFunc(func() { w.filterInputActive = false })
+	w.setupHeaderControlKeys()
+
+	// Intervall-Anzeige (read-only)
+	w.intervalView = tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignLeft)
+
+	// Numerische Statistik (innerhalb der Statistics-Box)
 	w.headerView = tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignLeft)
-	w.headerView.SetBorder(true).
+
+	// Steuerzeile: Network + Mode + Interval nebeneinander
+	controlsRow := tview.NewFlex().
+		SetDirection(tview.FlexColumn).
+		AddItem(w.networkInput, 30, 0, true).
+		AddItem(w.modeDropDown, 24, 0, true).
+		AddItem(w.intervalView, 0, 1, false)
+
+	// Statistics-Box: Steuerzeile (1 Zeile) + numerische Stats (Rest)
+	statsBox := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(controlsRow, 1, 0, true).
+		AddItem(w.headerView, 0, 1, false)
+	statsBox.SetBorder(true).
 		SetBorderColor(colorBorder).
-		SetTitle(" Statistics ").
+		SetTitle(" Statistics (Tab: edit) ").
 		SetTitleColor(colorHeader).
 		SetTitleAlign(tview.AlignCenter)
 	w.updateHeader()
@@ -244,8 +319,8 @@ func (w *TviewApp) setupUI() {
 	// Oberer Bereich: Statistics (breit) + Scan & Sort (schmaler) nebeneinander
 	topRow := tview.NewFlex().
 		SetDirection(tview.FlexColumn).
-		AddItem(w.headerView, 0, 2, false).  // Statistics breit
-		AddItem(w.infoView, 0, 1, false)     // Scan & Sort schmaler
+		AddItem(statsBox, 0, 2, false).  // Statistics (mit Steuerzeile) breit
+		AddItem(w.infoView, 0, 1, false) // Scan & Sort schmaler
 
 	// Haupt-Layout (ohne Footer - Controls sind in "Scan & Sort")
 	w.flex = tview.NewFlex().
@@ -322,15 +397,29 @@ func (w *TviewApp) setupKeyBindings() {
 			}
 		}
 
-		// Wenn Filter-Input fokussiert ist (egal ob per Maus oder Tastatur)
-		// Alle Tasten an das Filter-Feld weiterleiten
-		if w.app.GetFocus() == w.filterInput {
-			// filterInputActive synchron halten (für andere Stellen im Code)
-			w.filterInputActive = true
-			return event // Alle Tasten an FilterInput weiterleiten
+		// Editierbare Widgets (Filter, Netzbereich, Modus) bekommen alle Tasten
+		// direkt - keine globalen Shortcuts, damit Tippen/Navigation funktioniert
+		focus := w.app.GetFocus()
+		if focus != w.table {
+			if focus == w.filterInput {
+				w.filterInputActive = true
+			}
+			return event
 		}
 
+		// Ab hier: Fokus liegt auf der Tabelle -> globale Shortcuts aktiv
+		w.filterInputActive = false
+
 		switch event.Key() {
+		case tcell.KeyTab:
+			// Tab: Fokus zur Steuerzeile (Netzbereich editieren)
+			w.app.SetFocus(w.networkInput)
+			return nil
+		case tcell.KeyBacktab:
+			// Shift+Tab: rückwärts zum Filter
+			w.filterInputActive = true
+			w.app.SetFocus(w.filterInput)
+			return nil
 		// ESC beendet NICHT das Hauptprogramm (nur Unterfenster)
 		// Beenden nur mit 'q' oder Ctrl+C
 		case tcell.KeyRune:
@@ -417,18 +506,29 @@ func (w *TviewApp) updateHeader() {
 	totalDevices := len(w.deviceStates)
 	w.statesMu.RUnlock()
 
-	networkDisplay := w.network
+	// Intervall + Remote-Hinweis (Netzbereich/Modus stehen in den Eingabefeldern
+	// und werden hier NICHT gesetzt, um laufende Eingaben nicht zu überschreiben)
+	remoteHint := ""
 	if !w.isLocal {
-		networkDisplay += " [gray](remote)[aqua]"
+		remoteHint = "  [gray](remote)[white]"
+	}
+	w.intervalView.SetText(fmt.Sprintf("[yellow]Interval:[white] %v%s", w.interval, remoteHint))
+
+	// Status-Feld: Countdown bis zum nächsten Scan ODER animierte Live-Anzeige
+	// während gerade gescannt/gepingt wird (wichtig bei großen Netzen wie /16,
+	// damit man sieht, dass das Tool arbeitet und nicht hängt)
+	statusField := fmt.Sprintf("[yellow]Next:[white] %s", FormatDuration(w.nextScanIn))
+	if w.scanning.Load() {
+		spinner := []string{"|", "/", "-", "\\"}
+		w.spinnerFrame = (w.spinnerFrame + 1) % len(spinner)
+		statusField = fmt.Sprintf("[aqua]%s pinge %d Hosts…[white]", spinner[w.spinnerFrame], w.scanHostsNum.Load())
 	}
 
-	// Mehrzeilige Statistics wie im Netflow-Tool
-	text := fmt.Sprintf("[yellow]Network:[white] %s  [yellow]Mode:[white] %s  [yellow]Interval:[white] %v\n"+
-		"[yellow]Devices:[white] %d ([green]↑%d[white] [red]↓%d[white])  [yellow]Flaps:[white] %d  [yellow]Scan:[white] %s\n"+
-		"[yellow]Threads:[white] %d  [yellow]Scan #[white]%d  [yellow]Next:[white] %s",
-		networkDisplay, w.mode, w.interval,
+	// Numerische Statistik (2 Zeilen)
+	text := fmt.Sprintf("[yellow]Devices:[white] %d ([green]↑%d[white] [red]↓%d[white])  [yellow]Flaps:[white] %d  [yellow]Scan:[white] %s\n"+
+		"[yellow]Threads:[white] %d  [yellow]Scan #[white]%d  %s",
 		totalDevices, onlineCount, offlineCount, totalFlaps, FormatDuration(w.scanDuration),
-		w.activeThreads, w.scanCount, FormatDuration(w.nextScanIn))
+		w.activeThreads, w.scanCount, statusField)
 	w.headerView.SetText(text)
 }
 
@@ -463,7 +563,13 @@ func (w *TviewApp) updateInfo() {
 
 	// Sortierung und Shortcuts (Filter ist oben im Input-Feld sichtbar)
 	var text string
-	if w.filterError != "" {
+	if w.targetError != "" {
+		// Netzbereich-Eingabefehler anzeigen
+		text = fmt.Sprintf("[yellow]Sort:[white] %s %s\n"+
+			"[red]Network Error:[white] %s\n"+
+			"[gray]Enter[white]=apply [gray]Esc[white]=cancel",
+			sortName, sortDir, w.targetError)
+	} else if w.filterError != "" {
 		// Fehler anzeigen statt Shortcuts
 		text = fmt.Sprintf("[yellow]Sort:[white] %s %s\n"+
 			"[red]Filter Error:[white] %s\n"+
@@ -476,6 +582,170 @@ func (w *TviewApp) updateInfo() {
 			sortName, sortDir)
 	}
 	w.infoView.SetText(text)
+}
+
+// setupHeaderControlKeys verdrahtet die Tastatur-Navigation für das
+// Netzbereich-Feld und das Modus-Dropdown (Tab-Rotation, Enter/Esc)
+func (w *TviewApp) setupHeaderControlKeys() {
+	w.networkInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEnter:
+			w.applyNetworkChange(w.networkInput.GetText())
+			return nil
+		case tcell.KeyEscape:
+			// Eingabe verwerfen, aktuellen Wert wiederherstellen
+			w.networkInput.SetText(w.network)
+			w.targetError = ""
+			w.updateInfo()
+			w.app.SetFocus(w.table)
+			return nil
+		case tcell.KeyTab:
+			w.app.SetFocus(w.modeDropDown)
+			return nil
+		case tcell.KeyBacktab:
+			w.app.SetFocus(w.table)
+			return nil
+		}
+		return event
+	})
+
+	w.modeDropDown.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Bei geöffneter Liste normale Navigation/Auswahl zulassen
+		if w.modeDropDown.IsOpen() {
+			return event
+		}
+		switch event.Key() {
+		case tcell.KeyTab:
+			w.filterInputActive = true
+			w.app.SetFocus(w.filterInput)
+			return nil
+		case tcell.KeyBacktab:
+			w.app.SetFocus(w.networkInput)
+			return nil
+		}
+		return event
+	})
+}
+
+// applyNetworkChange übernimmt einen zur Laufzeit eingegebenen Netzbereich
+func (w *TviewApp) applyNetworkChange(input string) {
+	netCIDR, normalized, err := parseNetworkInput(input)
+	if err != nil {
+		// Fehler anzeigen, Fokus bleibt zur Korrektur im Feld
+		w.targetError = err.Error()
+		w.updateInfo()
+		return
+	}
+
+	// Thread-Konfiguration und Lokal-Status für das neue Netz berechnen
+	threadConfig := CalculateThreads(netCIDR, w.maxThreads)
+	isLocal, _ := IsLocalSubnet(netCIDR)
+
+	// Ziel thread-sicher tauschen (Scan-Goroutine liest unter RLock)
+	w.targetMu.Lock()
+	w.network = normalized
+	w.netCIDR = netCIDR
+	w.threadConfig = threadConfig
+	w.targetMu.Unlock()
+	w.isLocal = isLocal // nur Anzeige, UI-Goroutine
+
+	// Geräte-Retention: alles behalten, dessen IP im neuen Bereich liegt,
+	// den Rest verwerfen. Deckt beide Fälle ab:
+	//   - komplett anderes Netz  -> keine IP im Bereich -> Liste leer
+	//   - Bereich größer/kleiner -> passende Geräte bleiben erhalten
+	w.statesMu.Lock()
+	for ip := range w.deviceStates {
+		parsed := net.ParseIP(ip)
+		if parsed == nil || !netCIDR.Contains(parsed) {
+			delete(w.deviceStates, ip)
+		}
+	}
+	w.statesMu.Unlock()
+
+	w.targetError = ""
+	w.networkInput.SetText(normalized)
+	w.app.SetFocus(w.table)
+	w.triggerRescan()
+
+	w.updateHeader()
+	w.updateInfo()
+	w.updateTable()
+}
+
+// applyModeChange übernimmt einen zur Laufzeit gewählten Scan-Modus.
+// Die Geräteliste bleibt erhalten (gleiches Netz, nur andere Methode).
+func (w *TviewApp) applyModeChange(mode string) {
+	w.targetMu.Lock()
+	changed := w.mode != mode
+	w.mode = mode
+	w.targetMu.Unlock()
+
+	if changed {
+		w.triggerRescan()
+	}
+	w.updateHeader()
+}
+
+// triggerRescan bricht den laufenden Scan ab und weckt die scanLoop für einen
+// sofortigen Neuscan (nicht blockierend)
+func (w *TviewApp) triggerRescan() {
+	w.cancelCurrentScan() // laufenden Scan abbrechen -> neuer startet sofort
+	select {
+	case w.rescanCh <- struct{}{}:
+	default:
+	}
+}
+
+// setScanCancel hinterlegt die Cancel-Funktion des aktuell laufenden Scans
+func (w *TviewApp) setScanCancel(cancel context.CancelFunc) {
+	w.scanCancelMu.Lock()
+	w.scanCancel = cancel
+	w.scanCancelMu.Unlock()
+}
+
+// cancelCurrentScan bricht den aktuell laufenden Scan ab (falls einer läuft)
+func (w *TviewApp) cancelCurrentScan() {
+	w.scanCancelMu.Lock()
+	if w.scanCancel != nil {
+		w.scanCancel()
+	}
+	w.scanCancelMu.Unlock()
+}
+
+// parseNetworkInput parst eine Netzbereich-Eingabe. Akzeptiert CIDR
+// (z.B. 192.168.1.0/24) und reine IPs (z.B. 192.168.1.5 -> /24).
+// Gibt das geparste Netz und die kanonische CIDR-Form zurück.
+func parseNetworkInput(input string) (*net.IPNet, string, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return nil, "", fmt.Errorf("leere Eingabe")
+	}
+	// Reine IP ohne Maske -> /24 annehmen
+	if !strings.Contains(input, "/") {
+		if net.ParseIP(input) != nil {
+			input += "/24"
+		}
+	}
+	_, netCIDR, err := net.ParseCIDR(input)
+	if err != nil {
+		return nil, "", fmt.Errorf("ungültiges Netz: %s", input)
+	}
+	return netCIDR, netCIDR.String(), nil
+}
+
+// countHosts liefert die Anzahl nutzbarer Hosts in einem Netzbereich
+// (entspricht der Anzahl der im Scan abgefragten IPs, ohne Netz-/Broadcast)
+func countHosts(netCIDR *net.IPNet) int {
+	if netCIDR == nil {
+		return 0
+	}
+	ones, bits := netCIDR.Mask.Size()
+	hostBits := bits - ones
+	if hostBits <= 1 {
+		// /31, /32 (bzw. IPv6-Äquivalente): keine abgezogenen Adressen
+		return 1 << hostBits
+	}
+	return (1 << hostBits) - 2 // Netz- und Broadcast-Adresse abziehen
 }
 
 // updateTable aktualisiert die Host-Tabelle
@@ -717,11 +987,17 @@ SORTIERUNG:
   u = Sort by Uptime
   f = Sort by Flaps
 
+NETZBEREICH / MODUS:
+  Tab = Fokus: Tabelle → Network → Mode → Filter
+  Network-Feld: CIDR oder IP tippen, Enter = anwenden
+                (bare IP → /24), Esc = abbrechen
+  Mode-Dropdown: Enter öffnet, ↑↓ wählt, Enter bestätigt
+
 NAVIGATION:
   ↑/↓ = Scroll
   PgUp/PgDn = Page
   Enter = Host Details + Port Scan
-  q/ESC = Quit
+  q = Quit
   ? = This help
 
 SYMBOLE:
@@ -781,6 +1057,11 @@ func (w *TviewApp) scanLoop() {
 		select {
 		case <-w.ctx.Done():
 			return
+		case <-w.rescanCh:
+			// Netzbereich/Modus wurde gewechselt -> sofort neu scannen
+			// und Intervall-Timer zurücksetzen
+			w.performScan()
+			ticker.Reset(w.interval)
 		case <-ticker.C:
 			w.performScan()
 		}
@@ -791,11 +1072,33 @@ func (w *TviewApp) scanLoop() {
 func (w *TviewApp) performScan() {
 	scanStart := time.Now()
 
-	// Scan durchführen
-	hosts := PerformScanQuiet(w.ctx, w.network, w.netCIDR, w.mode, &w.activeThreads, w.threadConfig)
+	// Ziel thread-sicher schnappschießen (kann zur Laufzeit gewechselt werden)
+	w.targetMu.RLock()
+	network := w.network
+	netCIDR := w.netCIDR
+	mode := w.mode
+	threadConfig := w.threadConfig
+	w.targetMu.RUnlock()
 
-	// Check if cancelled
-	if w.ctx.Err() != nil {
+	// Abbrechbarer Scan-Context: ein Netz-/Mode-Wechsel cancelt den laufenden
+	// Scan sofort, statt auf dessen Ende zu warten (wichtig bei großen Netzen)
+	scanCtx, scanCancel := context.WithCancel(w.ctx)
+	w.setScanCancel(scanCancel)
+	defer scanCancel()
+
+	// Live-Status: Scan läuft (für animierte Header-Rückmeldung).
+	// Der countdownLoop rendert den Header sekündlich weiter, daher ist
+	// der Spinner auch während eines langen, blockierenden Scans sichtbar.
+	w.scanHostsNum.Store(int32(countHosts(netCIDR)))
+	w.scanning.Store(true)
+	defer w.scanning.Store(false)
+
+	// Scan durchführen
+	hosts := PerformScanQuiet(scanCtx, network, netCIDR, mode, &w.activeThreads, threadConfig)
+
+	// Abgebrochen (Wechsel) oder App beendet -> Ergebnis verwerfen,
+	// der folgende Neuscan liefert frische Daten für das neue Ziel
+	if scanCtx.Err() != nil || w.ctx.Err() != nil {
 		return
 	}
 
@@ -969,7 +1272,7 @@ func (w *TviewApp) setupFilterInput() {
 			}
 			return nil
 		case tcell.KeyTab:
-			// Tab wählt aus Dropdown
+			// Tab wählt aus Dropdown - sonst Fokus weiter zur Tabelle
 			if w.dropdownVisible && w.dropdown.GetItemCount() > 0 {
 				idx := w.dropdown.GetCurrentItem()
 				if idx >= 0 && idx < len(w.suggestions) {
@@ -978,6 +1281,16 @@ func (w *TviewApp) setupFilterInput() {
 				w.hideDropdown()
 				return nil
 			}
+			w.filterInputActive = false
+			w.hideDropdown()
+			w.app.SetFocus(w.table)
+			return nil
+		case tcell.KeyBacktab:
+			// Shift+Tab: rückwärts zum Modus-Dropdown
+			w.filterInputActive = false
+			w.hideDropdown()
+			w.app.SetFocus(w.modeDropDown)
+			return nil
 		case tcell.KeyEnter:
 			// Wenn Dropdown sichtbar, erst ausgewählten Eintrag übernehmen
 			if w.dropdownVisible && w.dropdown.GetItemCount() > 0 {
