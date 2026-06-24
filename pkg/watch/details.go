@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"netspy/pkg/crash"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -316,6 +318,7 @@ func (m *HostDetailsModal) startPortScan() {
 
 	// Scan in Goroutine
 	go func() {
+		defer crash.RecoverAndLog("watch.details.portScan")
 		results := m.scanPorts(ports)
 
 		m.app.QueueUpdateDraw(func() {
@@ -380,6 +383,7 @@ func (m *HostDetailsModal) scanPorts(ports []string) []PortScanResult {
 	for idx, port := range ports {
 		wg.Add(1)
 		go func(p string, index int) {
+			defer crash.RecoverAndLog("watch.scanSinglePort")
 			defer wg.Done()
 
 			result := m.scanSinglePort(p)

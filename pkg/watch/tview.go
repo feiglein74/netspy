@@ -820,6 +820,7 @@ func (w *TviewApp) performScan() {
 
 	// Background DNS Lookups starten
 	go func() {
+		defer crash.RecoverAndLog("watch.performScan.dns")
 		w.statesMu.Lock()
 		PerformInitialDNSLookups(w.ctx, w.deviceStates)
 		w.statesMu.Unlock()

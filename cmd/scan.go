@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"netspy/pkg/crash"
 	"netspy/pkg/discovery"
 	"netspy/pkg/output"
 	"netspy/pkg/scanner"
@@ -358,6 +359,7 @@ func runICMPScan(network string) error {
 	for _, ip := range ips {
 		wg.Add(1)
 		go func(targetIP net.IP) {
+			defer crash.RecoverAndLog("scan.icmpPing")
 			defer wg.Done()
 
 			semaphore <- struct{}{}
@@ -452,6 +454,7 @@ func enhanceHostsWithDetails(arpHosts []scanner.Host, ssdpDevices map[string]dis
 	for _, host := range arpHosts {
 		wg.Add(1)
 		go func(h scanner.Host) {
+			defer crash.RecoverAndLog("scan.enhanceHost")
 			defer wg.Done()
 
 			semaphore <- struct{}{}
@@ -545,6 +548,7 @@ func scanSpecificPorts(ip net.IP, portList []int) []int {
 	for _, port := range portList {
 		wg.Add(1)
 		go func(p int) {
+			defer crash.RecoverAndLog("scan.scanSpecificPorts")
 			defer wg.Done()
 			if conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip.String(), p), 300*time.Millisecond); err == nil {
 				_ = conn.Close() // Ignore close error
@@ -605,6 +609,7 @@ func populateARPTable(network *net.IPNet) error {
 	for _, ip := range ips {
 		wg.Add(1)
 		go func(targetIP net.IP) {
+			defer crash.RecoverAndLog("scan.populateARP")
 			defer wg.Done()
 
 			semaphore <- struct{}{}

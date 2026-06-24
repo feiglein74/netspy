@@ -71,7 +71,7 @@ func init() {
 
 // getVersion gibt die aktuelle Version zurück
 func getVersion() string {
-	return "0.1.0"
+	return "0.1.1"
 }
 
 // initConfig liest Konfig-Datei und ENV-Variablen ein falls gesetzt

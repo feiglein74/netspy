@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"netspy/pkg/crash"
 	"netspy/pkg/discovery"
 )
 
@@ -89,6 +90,7 @@ func (s *Scanner) ScanHosts(ips []net.IP, activeThreads *int32) ([]Host, error) 
 		wg.Add(1)
 
 		go func(targetIP net.IP) {
+			defer crash.RecoverAndLog("scanner.scanHost")
 			defer wg.Done()
 
 			semaphore <- struct{}{}
@@ -186,6 +188,7 @@ func (s *Scanner) scanPorts(ip net.IP, ports []int) []int {
 	for _, port := range ports {
 		wg.Add(1)
 		go func(p int) {
+			defer crash.RecoverAndLog("scanner.scanPorts")
 			defer wg.Done()
 			if conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip.String(), p), s.config.Timeout/2); err == nil {
 				_ = conn.Close() // Ignore close error

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"netspy/pkg/crash"
 )
 
 // LearnedVendors speichert dynamisch gelernte MAC-Vendors
@@ -134,6 +136,7 @@ func LookupAndLearnVendor(mac string) {
 
 	// Perform lookup asynchronously
 	go func() {
+		defer crash.RecoverAndLog("discovery.vendorLookup")
 		defer func() {
 			lookupMux.Lock()
 			delete(lookupInProgress, oui)

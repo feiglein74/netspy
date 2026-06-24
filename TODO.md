@@ -19,11 +19,12 @@
   - Beim Start: Warnung wenn letzter Lauf unsauber beendet wurde
   - Unterscheidet: Crash (mit Log) vs. Kill (ohne Log)
 
-- [ ] **Goroutine-Panics abfangen** (KRITISCH)
-  - `pkg/crash/handler.go` fängt NUR Main-Thread-Panics
-  - **Problem**: Goroutine-Panics werden nicht erfasst!
-  - **TODO**: Alle `go func()` durch `crash.SafeGo()` ersetzen
-  - Besonders prüfen: `cmd/watch.go`, `pkg/watch/*.go`, tview-Callbacks
+- [x] **Goroutine-Panics abfangen** (KRITISCH) ✅
+  - Alle anwendungsrelevanten `go func()` abgesichert
+  - **Worker-Goroutinen** (Scan-Pools): `defer crash.RecoverAndLog(...)` → Panic loggen + weitermachen
+  - **Dauerschleifen** (`scanLoop`, `countdownLoop`): `crash.SafeGo()` → loggen + beenden
+  - Abgedeckt: `pkg/watch/*`, `pkg/scanner`, `pkg/discovery`, `cmd/scan.go`
+  - Bewusst ausgenommen: Signal-Handler in `main.go` / `crash/handler.go` (trivial, kein Panic-Risiko)
 
 - [x] **MAC-Adresse wird um 1 Zeichen abgeschnitten** ✅
   - Fix: `TruncateMAC()` gibt MAC jetzt IMMER vollständig zurück

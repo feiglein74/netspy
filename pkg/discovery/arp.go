@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"netspy/pkg/crash"
 )
 
 // ARPScanner führt ARP-basierte Host-Discovery durch
@@ -292,6 +294,7 @@ func (a *ARPScanner) RefreshARPTable(network *net.IPNet) error {
 	// Ping IPs quickly to populate ARP table
 	for _, ip := range ips {
 		go func(targetIP net.IP) {
+			defer crash.RecoverAndLog("discovery.RefreshARPTable")
 			// Very short ping just to trigger ARP
 			conn, err := net.DialTimeout("tcp", net.JoinHostPort(targetIP.String(), "80"), 100*time.Millisecond)
 			if err == nil {

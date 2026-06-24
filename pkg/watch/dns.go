@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"netspy/pkg/crash"
 	"netspy/pkg/discovery"
 )
 
@@ -40,6 +41,7 @@ func PerformInitialDNSLookups(ctx context.Context, deviceStates map[string]*Devi
 		}
 		wg.Add(1)
 		go func(ip string, s *DeviceState) {
+			defer crash.RecoverAndLog("watch.initialDNS")
 			defer wg.Done()
 			select {
 			case <-ctx.Done():
@@ -81,6 +83,7 @@ func PerformBackgroundDNSLookups(ctx context.Context, deviceStates map[string]*D
 		}
 		wg.Add(1)
 		go func(ip string, s *DeviceState) {
+			defer crash.RecoverAndLog("watch.backgroundDNS")
 			defer wg.Done()
 			select {
 			case <-ctx.Done():

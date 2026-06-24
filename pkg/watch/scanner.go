@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"netspy/pkg/crash"
 	"netspy/pkg/discovery"
 	"netspy/pkg/scanner"
 )
@@ -204,6 +205,7 @@ func PerformICMPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads
 		semaphore <- struct{}{}
 
 		go func(targetIP net.IP) {
+			defer crash.RecoverAndLog("watch.scanICMP")
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
@@ -331,6 +333,7 @@ func PopulateARPTableQuiet(ctx context.Context, network *net.IPNet) error {
 		semaphore <- struct{}{}
 
 		go func(targetIP net.IP) {
+			defer crash.RecoverAndLog("watch.populateARP")
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
@@ -425,6 +428,7 @@ func PerformQuickReachabilityCheck(ctx context.Context, deviceStates map[string]
 
 		wg.Add(1)
 		go func(ip string, s *DeviceState) {
+			defer crash.RecoverAndLog("watch.enhanceDetails")
 			defer wg.Done()
 
 			select {
