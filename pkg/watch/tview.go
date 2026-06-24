@@ -61,8 +61,9 @@ type TviewApp struct {
 	scanCancelMu sync.Mutex
 
 	// Scan-Status für Live-Rückmeldung (Scan-Goroutine schreibt, UI liest)
-	scanning     atomic.Bool  // TRUE während ein Scan läuft
-	scanHostsNum atomic.Int32 // Anzahl der im aktuellen Scan abgefragten Hosts
+	scanning     atomic.Bool // TRUE während ein Scan läuft
+	scanHostsNum atomic.Int32 // Gesamtanzahl der im aktuellen Scan abgefragten Hosts
+	scanProgress int32        // bereits abgefragte Hosts (atomic, via &w.scanProgress)
 	spinnerFrame int          // Animations-Frame (nur UI-Goroutine)
 
 	// State
@@ -521,7 +522,16 @@ func (w *TviewApp) updateHeader() {
 	if w.scanning.Load() {
 		spinner := []string{"|", "/", "-", "\\"}
 		w.spinnerFrame = (w.spinnerFrame + 1) % len(spinner)
-		statusField = fmt.Sprintf("[aqua]%s pinge %d Hosts…[white]", spinner[w.spinnerFrame], w.scanHostsNum.Load())
+		total := w.scanHostsNum.Load()
+		done := atomic.LoadInt32(&w.scanProgress)
+		if done > total {
+			done = total // Clamp: hybrid kann (selten) Populate + ICMP-Fallback pingen
+		}
+		pct := 0
+		if total > 0 {
+			pct = int(done * 100 / total)
+		}
+		statusField = fmt.Sprintf("[aqua]%s pinge %d / %d (%d%%)[white]", spinner[w.spinnerFrame], done, total, pct)
 	}
 
 	// Numerische Statistik (2 Zeilen)
@@ -1090,11 +1100,12 @@ func (w *TviewApp) performScan() {
 	// Der countdownLoop rendert den Header sekündlich weiter, daher ist
 	// der Spinner auch während eines langen, blockierenden Scans sichtbar.
 	w.scanHostsNum.Store(int32(countHosts(netCIDR)))
+	atomic.StoreInt32(&w.scanProgress, 0)
 	w.scanning.Store(true)
 	defer w.scanning.Store(false)
 
 	// Scan durchführen
-	hosts := PerformScanQuiet(scanCtx, network, netCIDR, mode, &w.activeThreads, threadConfig)
+	hosts := PerformScanQuiet(scanCtx, network, netCIDR, mode, &w.activeThreads, &w.scanProgress, threadConfig)
 
 	// Abgebrochen (Wechsel) oder App beendet -> Ergebnis verwerfen,
 	// der folgende Neuscan liefert frische Daten für das neue Ziel

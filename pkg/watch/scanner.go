@@ -62,17 +62,17 @@ func pingHostForARP(ip string, timeout time.Duration) {
 }
 
 // PerformScanQuiet performs a scan based on the selected mode without output
-func PerformScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, mode string, activeThreads *int32, threadConfig ThreadConfig) []scanner.Host {
+func PerformScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, mode string, activeThreads *int32, progress *int32, threadConfig ThreadConfig) []scanner.Host {
 	var hosts []scanner.Host
 	var err error
 
 	switch mode {
 	case "hybrid":
-		hosts, err = PerformHybridScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
+		hosts, err = PerformHybridScanQuiet(ctx, netCIDR, activeThreads, progress, threadConfig)
 	case "arp":
-		hosts, err = PerformARPScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
+		hosts, err = PerformARPScanQuiet(ctx, netCIDR, activeThreads, progress, threadConfig)
 	case "icmp":
-		hosts, err = PerformICMPScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
+		hosts, err = PerformICMPScanQuiet(ctx, netCIDR, activeThreads, progress, threadConfig)
 	case "fast", "thorough", "conservative":
 		hosts, err = PerformNormalScan(network, mode, activeThreads, threadConfig)
 	default:
@@ -90,7 +90,7 @@ func PerformScanQuiet(ctx context.Context, network string, netCIDR *net.IPNet, m
 }
 
 // PerformHybridScanQuiet performs hybrid scan (ARP + details) without output
-func PerformHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
+func PerformHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, progress *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
 	// Prüfe ob das Ziel-Netzwerk lokal oder fremd ist
 	isLocal, _ := discovery.IsLocalSubnet(netCIDR)
 
@@ -105,7 +105,7 @@ func PerformHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThrea
 		allHosts = append(allHosts, existingHosts...)
 
 		// Populate ARP table
-		if err := PopulateARPTableQuiet(ctx, netCIDR); err != nil {
+		if err := PopulateARPTableQuiet(ctx, netCIDR, progress); err != nil {
 			return allHosts, err
 		}
 
@@ -133,7 +133,7 @@ func PerformHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThrea
 	// Fallback zu ICMP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
 	// ICMP ist besser als TCP für fremde Netzwerke, da viele Hosts keine offenen TCP-Ports haben
 	if len(finalHosts) == 0 {
-		icmpHosts, err := PerformICMPScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
+		icmpHosts, err := PerformICMPScanQuiet(ctx, netCIDR, activeThreads, progress, threadConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +146,7 @@ func PerformHybridScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThrea
 }
 
 // PerformARPScanQuiet performs ARP-based scan without output
-func PerformARPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
+func PerformARPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, progress *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
 	// Prüfe ob das Ziel-Netzwerk lokal oder fremd ist
 	isLocal, _ := discovery.IsLocalSubnet(netCIDR)
 
@@ -155,7 +155,7 @@ func PerformARPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads 
 	// Nur ARP versuchen wenn lokales Netzwerk
 	if isLocal {
 		// Populate ARP table
-		if err := PopulateARPTableQuiet(ctx, netCIDR); err != nil {
+		if err := PopulateARPTableQuiet(ctx, netCIDR, progress); err != nil {
 			return nil, err
 		}
 
@@ -165,7 +165,7 @@ func PerformARPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads 
 
 	// Fallback zu ICMP-Scanning wenn keine ARP-Hosts gefunden (fremdes Subnet oder ARP fehlgeschlagen)
 	if len(hosts) == 0 {
-		icmpHosts, err := PerformICMPScanQuiet(ctx, netCIDR, activeThreads, threadConfig)
+		icmpHosts, err := PerformICMPScanQuiet(ctx, netCIDR, activeThreads, progress, threadConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -177,7 +177,7 @@ func PerformARPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads 
 
 // PerformICMPScanQuiet performs ICMP-based scan without output
 // This is the best mode for remote networks where ARP doesn't work
-func PerformICMPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
+func PerformICMPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads *int32, progress *int32, threadConfig ThreadConfig) ([]scanner.Host, error) {
 	ips := discovery.GenerateIPsFromCIDR(netCIDR)
 
 	var hosts []scanner.Host
@@ -214,6 +214,9 @@ func PerformICMPScanQuiet(ctx context.Context, netCIDR *net.IPNet, activeThreads
 
 			// Perform ICMP ping
 			success, rtt := pingHost(targetIP.String(), pingTimeout)
+			if progress != nil {
+				atomic.AddInt32(progress, 1)
+			}
 			if success {
 				host := scanner.Host{
 					IP:     targetIP,
@@ -316,7 +319,7 @@ func ReadCurrentARPTableQuiet(network *net.IPNet) []scanner.Host {
 
 // PopulateARPTableQuiet populates ARP table by pinging all IPs without output
 // Uses ICMP ping (system command) for better device detection
-func PopulateARPTableQuiet(ctx context.Context, network *net.IPNet) error {
+func PopulateARPTableQuiet(ctx context.Context, network *net.IPNet, progress *int32) error {
 	ips := discovery.GenerateIPsFromCIDR(network)
 
 	var wg sync.WaitGroup
@@ -340,6 +343,9 @@ func PopulateARPTableQuiet(ctx context.Context, network *net.IPNet) error {
 			// Use ICMP ping via system command (works without admin rights)
 			// Only triggers ARP, result is ignored
 			pingHostForARP(targetIP.String(), 50*time.Millisecond)
+			if progress != nil {
+				atomic.AddInt32(progress, 1)
+			}
 		}(ip)
 	}
 
