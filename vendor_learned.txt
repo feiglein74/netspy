@@ -42,3 +42,5 @@ BC:7E:8B = Samsung Electronics Co.,Ltd
 10:52:1C = Espressif Inc.
 04:92:26 = ASUSTek COMPUTER INC.
 58:47:CA = IEEE Registration Authority
+54:EF:44 = Lumi United Technology Co
+5C:52:1E = Nintendo Co.,Ltd
