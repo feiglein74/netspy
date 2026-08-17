@@ -2,41 +2,65 @@ package discovery
 
 import "strings"
 
-// GetMACVendor gibt den Vendor-Namen für eine gegebene MAC-Adresse zurück OUI
+// GetMACVendor gibt den Vendor-Namen für eine gegebene MAC-Adresse zurück
+//
+// Die vollständige MAC wird ausschließlich für den lokalen Registry-Lookup
+// verwendet. Nach außen geht höchstens die OUI, also die ersten drei Oktette.
 func GetMACVendor(mac string) string {
-	// Normalize MAC address format
-	mac = normalizeMACForLookup(mac)
-	if len(mac) < 8 {
+	macHex := normalizeMACHex(mac)
+	if macHex == "" {
 		return ""
 	}
 
-	// Try learned vendors first (priority), then builtin
-	vendor := GetLearnedVendor(mac)
-	if vendor != "" {
+	// 1. IEEE-Registry: Longest-Prefix-Match über MA-S, MA-M und MA-L.
+	// Erkennt auch unterteilte Blöcke, bei denen die OUI allein nicht reicht.
+	if vendor := lookupRegistryVendor(macHex); vendor != "" {
 		return vendor
 	}
 
-	// If unknown, trigger async lookup to learn for next time
-	LookupAndLearnVendor(mac)
+	oui := formatOUI(macHex)
+
+	// 2. Gelernte Vendors haben Vorrang, danach die eingebaute Tabelle
+	if vendor := GetLearnedVendor(oui); vendor != "" {
+		return vendor
+	}
+
+	// 3. Unbekannt: Nachschlagen für den nächsten Lauf anstoßen
+	LookupAndLearnVendor(oui)
 
 	return ""
 }
 
-// normalizeMACForLookup converts MAC address to standard format AA:BB:CC:DD:EE:FF
-func normalizeMACForLookup(mac string) string {
-	// Remove all separators (colons, dashes, dots)
+// normalizeMACHex entfernt alle Trennzeichen und liefert die MAC als
+// Hex-Zeichenkette in Großbuchstaben, zum Beispiel "5847CA7710EE"
+func normalizeMACHex(mac string) string {
 	mac = strings.ReplaceAll(mac, ":", "")
 	mac = strings.ReplaceAll(mac, "-", "")
 	mac = strings.ReplaceAll(mac, ".", "")
 
-	// Ensure we have at least 6 characters (3 octets for OUI)
+	// Mindestens 6 Zeichen nötig, das entspricht drei Oktetten
 	if len(mac) < 6 {
 		return ""
 	}
 
-	// Insert colons to create AA:BB:CC format
-	// Take first 6 hex chars and format as AA:BB:CC
-	return strings.ToUpper(mac[0:2] + ":" + mac[2:4] + ":" + mac[4:6])
+	// Nur Hex-Zeichen zulassen, sonst würde eine ungültige Eingabe
+	// einen unnötigen API-Lookup auslösen
+	for _, r := range mac {
+		isDigit := r >= '0' && r <= '9'
+		isHexUpper := r >= 'A' && r <= 'F'
+		isHexLower := r >= 'a' && r <= 'f'
+
+		if !isDigit && !isHexUpper && !isHexLower {
+			return ""
+		}
+	}
+
+	return strings.ToUpper(mac)
+}
+
+// formatOUI formatiert die ersten drei Oktette als "AA:BB:CC"
+func formatOUI(macHex string) string {
+	return macHex[0:2] + ":" + macHex[2:4] + ":" + macHex[4:6]
 }
 
 // ouiDatabase contains MAC OUI to vendor mappings

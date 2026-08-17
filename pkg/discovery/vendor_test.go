@@ -18,8 +18,10 @@ var _ = Describe("MAC Vendor Detection", func() {
 
 			It("should identify Espressif devices", func() {
 				// Espressif OUI: 60:01:94
+				// Die IEEE-Registry liefert "Espressif Inc.", die eingebaute
+				// Tabelle "Espressif" - beide Schreibweisen sind gültig
 				vendor := discovery.GetMACVendor("60:01:94:aa:bb:cc")
-				Expect(vendor).To(Equal("Espressif"))
+				Expect(vendor).To(ContainSubstring("Espressif"))
 			})
 
 			It("should handle MAC addresses with dashes", func() {

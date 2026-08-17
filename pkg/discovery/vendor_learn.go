@@ -79,7 +79,9 @@ func loadLearnedVendors() error {
 		oui := strings.TrimSpace(parts[0])
 		vendor := strings.TrimSpace(parts[1])
 
-		if oui != "" && vendor != "" {
+		// Platzhalter der Registrierungsstellen überspringen, sie würden
+		// den korrekten Registry-Treffer überschatten
+		if oui != "" && vendor != "" && !isRegistrySentinel(vendor) {
 			learnedVendorsMux.Lock()
 			learnedVendors[oui] = vendor
 			learnedVendorsMux.Unlock()
@@ -156,10 +158,33 @@ func LookupAndLearnVendor(mac string) {
 		}()
 
 		vendor := queryMACVendorAPI(mac)
-		if vendor != "" {
-			saveLearnedVendor(oui, vendor)
+		if vendor != "" && !isRegistrySentinel(vendor) {
+			_ = saveLearnedVendor(oui, vendor)
 		}
 	}()
+}
+
+// isRegistrySentinel erkennt Platzhalter-Namen der Registrierungsstellen.
+//
+// Solche Namen stehen für einen unterteilten Block und benennen keinen
+// Hersteller. Sie dürfen nicht gelernt werden, da ein gelernter Eintrag
+// Vorrang hat und den korrekten Registry-Treffer dauerhaft überschatten
+// würde. Die Auflösung übernimmt in diesen Fällen die IEEE-Registry.
+func isRegistrySentinel(vendor string) bool {
+	normalized := strings.ToLower(vendor)
+
+	sentinels := []string{
+		"ieee registration authority",
+		"private",
+	}
+
+	for _, sentinel := range sentinels {
+		if strings.Contains(normalized, sentinel) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // queryMACVendorAPI fragt api.macvendors.com nach dem Vendor

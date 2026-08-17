@@ -99,4 +99,8 @@ func initLearnedVendors() {
 	// Versuche die Learned-Vendors-Datei zu laden
 	// Fehler werden ignoriert, da die Datei beim ersten Start nicht existiert
 	_ = discovery.InitLearnedVendors()
+
+	// IEEE-Registry aus dem lokalen Cache laden, Aktualisierung läuft
+	// im Hintergrund und blockiert den Start nicht
+	discovery.InitVendorRegistry()
 }
