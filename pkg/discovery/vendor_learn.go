@@ -23,6 +23,18 @@ var (
 	lookupMux          sync.Mutex
 )
 
+// Rate-Limiting für api.macvendors.com: Der kostenlose Tarif erlaubt etwa
+// eine Anfrage pro Sekunde. Das Semaphor mit Kapazität 1 serialisiert die
+// parallel gestarteten Lookup-Goroutinen, vendorAPILastCall hält zusätzlich
+// den Mindestabstand zwischen zwei Anfragen ein.
+var (
+	vendorAPISem      = make(chan struct{}, 1)
+	vendorAPILastCall time.Time
+)
+
+// vendorAPIMinInterval ist der Mindestabstand zwischen zwei API-Anfragen
+const vendorAPIMinInterval = time.Second
+
 // InitLearnedVendors initialisiert die Learned-Vendors-Datei
 func InitLearnedVendors() error {
 	// Finde das Executable-Verzeichnis
@@ -152,6 +164,19 @@ func LookupAndLearnVendor(mac string) {
 
 // queryMACVendorAPI fragt api.macvendors.com nach dem Vendor
 func queryMACVendorAPI(mac string) string {
+	// Semaphor belegen: Nur eine Anfrage gleichzeitig
+	vendorAPISem <- struct{}{}
+	defer func() {
+		// Zeitpunkt des Aufrufs merken, danach Semaphor freigeben
+		vendorAPILastCall = time.Now()
+		<-vendorAPISem
+	}()
+
+	// Mindestabstand zur vorherigen Anfrage abwarten
+	if wait := vendorAPIMinInterval - time.Since(vendorAPILastCall); wait > 0 {
+		time.Sleep(wait)
+	}
+
 	// API: https://api.macvendors.com/{mac}
 	url := fmt.Sprintf("https://api.macvendors.com/%s", mac)
 
