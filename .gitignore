@@ -64,3 +64,7 @@ CLAUDE.md
 # NetSpy Runtime-Dateien
 .netspy.running
 netspy_crash.log
+
+# Scan-Exporte und vhs-Aufnahme-Binary
+scan_result*.csv
+.vhsbin/
