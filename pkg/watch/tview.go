@@ -1104,8 +1104,13 @@ func (w *TviewApp) performScan() {
 	w.scanning.Store(true)
 	defer w.scanning.Store(false)
 
-	// Scan durchführen
-	hosts := PerformScanQuiet(scanCtx, network, netCIDR, mode, &w.activeThreads, &w.scanProgress, threadConfig)
+	// Scan durchführen (Demo-Modus liefert fiktive Hosts für Screenshots/GIFs)
+	var hosts []scanner.Host
+	if mode == "demo" {
+		hosts = PerformDemoScan(scanCtx, &w.scanProgress, w.scanCount+1)
+	} else {
+		hosts = PerformScanQuiet(scanCtx, network, netCIDR, mode, &w.activeThreads, &w.scanProgress, threadConfig)
+	}
 
 	// Abgebrochen (Wechsel) oder App beendet -> Ergebnis verwerfen,
 	// der folgende Neuscan liefert frische Daten für das neue Ziel
