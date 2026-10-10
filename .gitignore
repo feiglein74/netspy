@@ -35,7 +35,7 @@ vendor/
 Thumbs.db
 
 # NetSpy specific
-netspy
+/netspy
 netspy.exe
 dist/
 *.tar.gz
