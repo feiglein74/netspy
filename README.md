@@ -1,5 +1,7 @@
 # NetSpy
 
+[![License](https://img.shields.io/github/license/feiglein74/netspy)](LICENSE) ![Go](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555) [![Release](https://img.shields.io/github/v/release/feiglein74/netspy)](https://github.com/feiglein74/netspy/releases/latest)
+
 **Network scanner and live LAN monitor for the terminal.** NetSpy finds every device in a subnet (ARP, ICMP or TCP scan), resolves hostnames via DNS, mDNS/Bonjour, NetBIOS and LLMNR, looks up the MAC vendor and guesses the device type — then keeps watching: a live TUI dashboard tracks uptime, outages and flapping devices. Single binary for Windows, Linux and macOS, no install, no admin rights needed.
 
 ![NetSpy watch mode: live device table with vendor, device type, RTT, uptime and flap counter](docs/demo.gif)
