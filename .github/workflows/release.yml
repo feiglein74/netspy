@@ -50,18 +50,54 @@ jobs:
         run: |
           go build -ldflags="-s -w -X netspy/cmd.Version=${{ github.ref_name }}" -o netspy-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
 
+      # SBOM (CycloneDX) pro Zielplattform - Build-Constraints über GOOS/GOARCH,
+      # da sich die eingebundenen Module je Plattform unterscheiden
+      - name: Generate SBOM
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          GOOS= GOARCH= go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.12.0
+          "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -licenses -assert-licenses \
+            -output netspy-${{ matrix.os }}-${{ matrix.arch }}.cdx.json -main . .
+
+      # Lizenz- und NOTICE-Texte aller Module, die tatsächlich in der Binary stecken
+      - name: Collect third-party licenses
+        run: |
+          out=THIRD_PARTY_LICENSES.txt
+          echo "Lizenzen der in netspy-${{ matrix.os }}-${{ matrix.arch }} enthaltenen Fremdpakete" > "$out"
+          echo "Übersicht und Datenquellen: https://github.com/feiglein74/netspy/blob/main/THIRD_PARTY.md" >> "$out"
+          go version -m netspy-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} | awk '$1=="dep"{print $2, $3}' | while read -r mod ver; do
+            dir=$(go list -m -f '{{.Dir}}' "$mod")
+            printf '\n\n==================================================================\n%s %s\n==================================================================\n' "$mod" "$ver" >> "$out"
+            found=0
+            for f in "$dir"/LICENSE* "$dir"/LICENCE* "$dir"/COPYING* "$dir"/NOTICE*; do
+              [ -f "$f" ] || continue
+              printf '\n--- %s ---\n\n' "$(basename "$f")" >> "$out"
+              cat "$f" >> "$out"
+              found=1
+            done
+            if [ "$found" -eq 0 ]; then
+              echo "FEHLER: Keine Lizenzdatei für $mod gefunden" >&2
+              exit 1
+            fi
+          done
+
       - name: Create ZIP archive
         run: |
           mkdir -p dist
           cp netspy-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} dist/
-          cp vendor_learned.txt dist/
+          cp vendor_learned.txt LICENSE THIRD_PARTY_LICENSES.txt dist/
+          cp netspy-${{ matrix.os }}-${{ matrix.arch }}.cdx.json dist/
           cd dist && zip ../netspy-${{ matrix.os }}-${{ matrix.arch }}.zip *
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: netspy-${{ matrix.os }}-${{ matrix.arch }}
-          path: netspy-${{ matrix.os }}-${{ matrix.arch }}.zip
+          path: |
+            netspy-${{ matrix.os }}-${{ matrix.arch }}.zip
+            netspy-${{ matrix.os }}-${{ matrix.arch }}.cdx.json
 
   release:
     name: Create Release
@@ -76,8 +112,8 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir release
-          # Verschiebe alle ZIP-Dateien ins Release-Verzeichnis
-          find artifacts -type f -name "*.zip" -exec mv {} release/ \;
+          # Verschiebe alle ZIP-Dateien und SBOMs ins Release-Verzeichnis
+          find artifacts -type f \( -name "*.zip" -o -name "*.cdx.json" \) -exec mv {} release/ \;
           # Zeige was wir haben
           ls -la release/
 

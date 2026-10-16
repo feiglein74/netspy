@@ -1,6 +1,6 @@
 # NetSpy
 
-[![License](https://img.shields.io/github/license/feiglein74/netspy)](LICENSE) ![Go](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555) [![Release](https://img.shields.io/github/v/release/feiglein74/netspy)](https://github.com/feiglein74/netspy/releases/latest)
+[![License](https://img.shields.io/github/license/feiglein74/netspy)](LICENSE) ![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&logoColor=white) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-555) [![Release](https://img.shields.io/github/v/release/feiglein74/netspy)](https://github.com/feiglein74/netspy/releases/latest)
 
 **Network scanner and live LAN monitor for the terminal.** NetSpy finds every device in a subnet (ARP, ICMP or TCP scan), resolves hostnames via DNS, mDNS/Bonjour, NetBIOS and LLMNR, looks up the MAC vendor and guesses the device type — then keeps watching: a live TUI dashboard tracks uptime, outages and flapping devices. Single binary for Windows, Linux and macOS, no install, no admin rights needed.
 
@@ -31,7 +31,7 @@ unzip netspy-linux-amd64.zip && chmod +x netspy-linux-amd64
 ./netspy-linux-amd64 watch 192.168.1.0/24
 ```
 
-Build from source (Go 1.24+): `git clone https://github.com/feiglein74/netspy && cd netspy && go build -o netspy`
+Build from source (Go 1.26+): `git clone https://github.com/feiglein74/netspy && cd netspy && go build -o netspy`
 
 ## What it does
 
@@ -43,6 +43,8 @@ Build from source (Go 1.24+): `git clone https://github.com/feiglein74/netspy &&
 - **Scan mode:** table, JSON or CSV output for scripting
 
 Keys in watch mode: `/` filter · `c` clear filter · `i h m v d r u f` sort · `Enter` host details · `Tab` edit network/mode · `?` help · `q` quit
+
+**Built on:** [tview](https://github.com/rivo/tview), [tcell](https://github.com/gdamore/tcell), [Cobra](https://github.com/spf13/cobra), [Viper](https://github.com/spf13/viper) and more — see [THIRD_PARTY.md](THIRD_PARTY.md) for every package with its license. Each release ships a CycloneDX SBOM (`*.cdx.json`) and the full license texts.
 
 > Detailed documentation below is in German.
 
@@ -75,7 +77,7 @@ Fertige Binaries für Windows, Linux und macOS (jeweils amd64 und arm64) gibt es
 
 ### Voraussetzungen
 
-- Für den Build aus den Quellen: Go 1.24 oder höher
+- Für den Build aus den Quellen: Go 1.26 oder höher
 - Terminal-Fenster: Mindestens 80 Spalten x 15 Zeilen für Watch-Modus (VT100 Standard)
 
 ### Build
@@ -320,6 +322,17 @@ Siehe [TODO.md](TODO.md) für geplante Features und Verbesserungen.
 ## Lizenz
 
 MIT – siehe [LICENSE](LICENSE)
+
+## Fremdpakete & SBOM
+
+NetSpy nutzt Open-Source-Pakete, unter anderem [tview](https://github.com/rivo/tview),
+[tcell](https://github.com/gdamore/tcell), [Cobra](https://github.com/spf13/cobra),
+[Viper](https://github.com/spf13/viper) und [fatih/color](https://github.com/fatih/color),
+sowie die öffentlichen MAC-Register der IEEE und die API von macvendors.com.
+
+- **[THIRD_PARTY.md](THIRD_PARTY.md)** – alle Module der Binary mit Version, Lizenz und Zweck, dazu Test-Pakete, Datenquellen und Werkzeuge
+- **SBOM** – jedes Release enthält pro Plattform eine CycloneDX-SBOM (`netspy-<os>-<arch>.cdx.json`), als eigenes Asset und im ZIP
+- **Lizenztexte** – jedes Release-ZIP enthält `THIRD_PARTY_LICENSES.txt` mit allen Lizenz- und NOTICE-Texten
 
 ## Autor
 
