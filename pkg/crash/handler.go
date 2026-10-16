@@ -182,7 +182,7 @@ func printCrashMessage(info CrashInfo) {
 	fmt.Printf("  → %s\n", absPath)
 	fmt.Println()
 	fmt.Println("  Bitte melden Sie diesen Fehler unter:")
-	fmt.Println("  → https://github.com/lfricker/netspy/issues")
+	fmt.Println("  → https://github.com/feiglein74/netspy/issues")
 	fmt.Println()
 }
 

@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"netspy/pkg/crash"
 	"netspy/pkg/discovery"
 	"netspy/pkg/output"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -39,7 +41,8 @@ Features:
 		// Wenn --version Flag gesetzt ist, Version anzeigen
 		if showVersion {
 			fmt.Printf("NetSpy v%s\n", getVersion())
-			os.Exit(0)
+			// return statt os.Exit, damit deferred Cleanup (Sentinel) in main läuft
+			return
 		}
 		// Sonst Standard-Hilfe anzeigen
 		_ = cmd.Help() // Ignore error - just displaying help
@@ -50,6 +53,8 @@ Features:
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
+		// os.Exit überspringt deferred Cleanup in main - Sentinel daher hier entfernen
+		crash.StopSentinel()
 		os.Exit(1)
 	}
 }
@@ -69,9 +74,10 @@ func init() {
 	_ = viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
 }
 
-// getVersion gibt die aktuelle Version zurück
+// getVersion gibt die aktuelle Version ohne führendes "v" zurück
+// (Release-Builds setzen Version per ldflags auf den Git-Tag, z.B. "v0.2.0")
 func getVersion() string {
-	return "0.1.1"
+	return strings.TrimPrefix(Version, "v")
 }
 
 // initConfig liest Konfig-Datei und ENV-Variablen ein falls gesetzt

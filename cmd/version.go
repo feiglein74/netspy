@@ -8,7 +8,7 @@ import (
 
 // Version enthält die aktuelle Version von NetSpy
 // Wird beim Kompilieren via ldflags gesetzt
-var Version = "0.1.1"
+var Version = "0.2.0"
 
 // BuildDate wird beim Kompilieren gesetzt (optional, via ldflags)
 var BuildDate string = "unbekannt"
@@ -22,7 +22,7 @@ var versionCmd = &cobra.Command{
 	Short: "Zeigt die Version von NetSpy an",
 	Long:  `Gibt Versionsinformationen über NetSpy aus, einschließlich Version, Build-Datum und Git-Commit.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("NetSpy v%s\n", Version)
+		fmt.Printf("NetSpy v%s\n", getVersion())
 		if BuildDate != "unbekannt" {
 			fmt.Printf("Build-Datum: %s\n", BuildDate)
 		}
