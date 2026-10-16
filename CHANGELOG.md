@@ -7,129 +7,110 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
-### Added
-- **Bubbletea UI für watch-Modus** - Moderne Terminal-UI mit Charmbracelet Bubbletea Framework (optional)
-  - Scrollbares Device-Liste (↑/↓, PgUp/PgDn, Home/End) für große Netzwerke (>20 Devices)
-  - Live-Suche mit `/` zum Filtern nach IP, Hostname, MAC oder Vendor
-  - Responsive Layout mit automatischem Resize
-  - Live Countdown-Timer mit sekündlichen Updates
-  - Alt-Screen-Buffer für sauberes Exit ohne Terminal-Scrollen
-- `--ui` Flag für `watch` Command: `legacy` (default) oder `bubbletea`
-- Cross-Platform Keyboard-Handling durch Bubbletea (Windows, macOS, Linux)
-- **Responsive Layouts für alle Terminal-Breiten** (narrow/medium/wide)
-  - Dynamische Spaltenbreiten basierend auf Terminal-Größe
-  - DeviceType und RTT Spalten im Wide-Layout
-  - Optimierte Darstellung für verschiedene Breakpoints
+## [0.2.0] - 2026-10-16
 
-### Changed
-- **Legacy-UI ist Standard** - Stabile, erprobte ANSI-Tabellen-Ansicht als Default
-- Bubbletea UI optional verfügbar via `--ui bubbletea` (experimentell)
-- Mouse-Support in Bubbletea deaktiviert aufgrund von Stabilitätsproblemen
+### Added
+- **Hersteller-Auflösung über die lokale IEEE-Registry** - Longest-Prefix-Match über MA-S (36 Bit), MA-M (28 Bit) und MA-L (24 Bit)
+  - Unterteilte MAC-Blöcke werden jetzt korrekt aufgelöst (vorher "IEEE Registration Authority", z.B. bei 58:47:CA)
+  - Registry-Dateien werden in `~/.netspy/registry` zwischengespeichert, Aktualisierung läuft im Hintergrund
+  - Datenschutz: Es werden nur die vollständigen öffentlichen Listen geladen, nie einzelne MAC-Adressen abgefragt
+- **Demo-Modus für Watch** - `netspy watch 192.0.2.0/24 --mode demo` zeigt fiktive Geräte aus dem Dokumentationsnetz (RFC 5737), ohne Pakete ins reale Netz zu senden
+  - Simuliert neue Geräte, ein flappendes Gerät und eine Privacy-MAC
+  - `docs/demo.tape` (vhs) und `docs/demo.gif` für README/Screenshots
+- **SBOM im Release** - Jedes Release enthält pro Plattform eine Software Bill of Materials im CycloneDX-Format (`netspy-<os>-<arch>.cdx.json`), als eigenes Asset und im ZIP
+- **Lizenztexte im Release** - Jedes ZIP enthält `LICENSE` und `THIRD_PARTY_LICENSES.txt` mit allen Lizenz- und NOTICE-Texten der enthaltenen Module
+- **Fremdpakete dokumentiert** - `THIRD_PARTY.md` listet alle Module der Binary mit Version, Lizenz und Zweck sowie Test-Pakete, Datenquellen und Werkzeuge
 
 ### Fixed
-- Windows Terminal Compatibility verbessert durch Bubbletea Framework
-- Flickering Issues auf Windows durch Bubbletea v1.3.10 Fixes
-- Scrolling funktioniert jetzt auch bei großen Netzwerken (254+ Devices)
-- **DNS-Hostname-Flickering eliminiert** - Thread-Safe Message-Pattern implementiert
-- **Responsive Layout-Rendering** - Vollständige Unterstützung für alle drei Breakpoints
+- Vendor-API-Lookups (macvendors.com) auf eine Anfrage pro Sekunde begrenzt - parallele Anfragen wurden vorher teilweise mit HTTP 429 abgewiesen und still verworfen
+- `netspy --version` zeigte fest "0.1.1" statt der tatsächlichen Version
+- `netspy version` zeigte bei Release-Builds ein doppeltes "v" (z.B. "vv0.1.2")
+- Falsche Warnung "Letzter Lauf wurde nicht sauber beendet" nach `netspy --version` oder einem fehlerhaften Befehl - die Sentinel-Datei wurde in diesen Fällen nicht entfernt
+- Crash-Meldung verwies auf ein falsches Repository für Fehlerberichte
 
-- Ginkgo/Gomega BDD Testing Framework (50 Specs in 11 Test-Dateien)
-- Plattformspezifische Tests (Windows, macOS, Linux) mit Build-Tags
-- Netzwerk-Auto-Detection für Watch-Command
-- Unified Scan Mode Flags (--mode statt separate Flags)
-
-### Changed (cont.)
-- Deutsche Code-Kommentare in allen Dateien
-- CLAUDE.md auf Deutsch übersetzt
-- Ausführungspräferenz auf kompilierte Binary geändert
-
-### Fixed (cont.)
-- Spinner-Ausgabe auf macOS korrigiert (ANSI-Escape-Codes statt Carriage Return)
+### Changed
+- **Go 1.26 oder höher** für den Build aus den Quellen erforderlich (vorher 1.24), bedingt durch aktualisierte `golang.org/x`-Pakete. Release-Binaries sind nicht betroffen
+- README um englischen Kopf (Quickstart, Features) und Badges ergänzt, veraltete Angaben korrigiert
+- Binary und leere `scan_result.csv` nicht mehr im Repo, Binaries kommen ausschließlich über Releases
+- Release-Workflow liest die Go-Version aus `go.mod`
 
 ### Dependencies
-- Added `github.com/charmbracelet/bubbletea` v1.3.10
-- Added `github.com/charmbracelet/lipgloss` v1.1.0
+- `github.com/gdamore/tcell/v2` 2.13.0 → 2.13.10
+- `github.com/spf13/cobra` 1.9.1 → 1.10.2
+- `github.com/spf13/viper` 1.20.1 → 1.21.0
+- `github.com/fatih/color` 1.18.0 → 1.19.0
+- `golang.org/x/term` 0.37.0 → 0.47.0
+- `github.com/onsi/ginkgo/v2` 2.27.2 → 2.33.1 (nur Tests)
+- `github.com/onsi/gomega` 1.38.2 → 1.44.0 (nur Tests)
+- Indirekte Abhängigkeiten entsprechend aktualisiert
 
-## [0.1.0] - Initial Release
+## [0.1.2] - 2026-07-15
+
+### Added
+- **Netzbereich und Scan-Modus zur Laufzeit wechselbar** - Editierbares Network-Feld und Modus-Dropdown im Watch-Header (per `Tab` erreichbar)
+  - Akzeptiert CIDR und einzelne IP (wird zu /24)
+  - Beim Netzwechsel bleiben nur Geräte im neuen Bereich erhalten
+  - Laufender Scan wird beim Wechsel sofort abgebrochen
+- **Echter Scan-Fortschritt in der Statuszeile** - z.B. `pinge 12340 / 65534 (19%)`
+
+### Fixed
+- **Goroutine-Panics abgefangen (Crash-Hardening)** - Worker-Goroutinen und Background-Helfer (DNS, Port-Scan, Vendor-Lookup) loggen Panics und laufen weiter, statt die Watch-Session zu beenden
+
+## [0.1.1] - 2026-02-07
+
+### Added
+- Release-ZIPs enthalten zusätzlich `vendor_learned.txt` (gelernte MAC-Hersteller)
+
+## [0.1.0] - 2026-02-07
+
+Erstes öffentliches Release.
 
 ### Features
 
 #### Kern-Funktionalität
-- **Hybrid Network Discovery** - Kombination aus ARP + TCP-Ping für höchste Genauigkeit
-- **Statischer Watch-Modus** - Live-Updates ohne Scrollen mittels ANSI-Cursor-Steuerung
-- **Mehrere Scan-Modi** - Conservative, Fast, Thorough, ARP, Hybrid
-- **Plattformübergreifend** - Windows, macOS, Linux Support mit plattformspezifischem ARP-Parsing
+- **Watch-Modus als TUI (tview)** - Live-Dashboard mit Uptime, Downtime, Flap-Zähler und RTT
+- **Mehrere Scan-Modi** - Conservative, Fast, Thorough, ARP, Hybrid, ICMP
+- **ICMP-Modus für remote Netzwerke** - Nutzt das System-`ping`, keine Raw-Sockets, keine Admin-Rechte
+- **Plattformübergreifend** - Windows, macOS, Linux mit plattformspezifischem ARP-Parsing und Gateway-Erkennung
 
 #### Discovery & Detection
 - **Intelligente Gerätetyp-Erkennung** - Heuristische Analyse für Router, Smartphones, IoT, etc.
 - **Multi-Protokoll Hostname-Auflösung**:
-  - DNS (Standard)
+  - DNS (Standard, inkl. DNS-Cache-Vorbefüllung)
   - mDNS/Bonjour (Apple/IoT-Geräte)
   - NetBIOS (Windows-Hosts, RFC 1002)
   - LLMNR (Windows Link-Local)
-- **MAC-Vendor-Datenbank** - 976+ OUI-Einträge für Hersteller-Identifikation
-- **Gateway-Erkennung** - Automatische Markierung des Default-Gateways (G-Indikator)
-- **HTTP Banner Grabbing** - Web-Server-Identifikation
+  - HTTP-Titel (z.B. Philips Hue)
+- **SSDP/UPnP Discovery** - Bessere Erkennung von Medien- und IoT-Geräten
+- **MAC-Vendor-Erkennung** - Eingebaute OUI-Datenbank plus selbstlernendes System (`vendor_learned.txt`, Lookup über macvendors.com)
+- **Gateway-Erkennung** - Automatische Markierung des Default-Gateways
+- **Erkennung lokal administrierter (Privacy-)MACs**
 
-#### Monitoring & Tracking
-- **Uptime/Downtime-Tracking** - Kontinuierliche Verfügbarkeit über Zeit
-- **Flapping-Detection** - Zähler für instabile Netzwerkverbindungen
-- **RTT-Messung** - Response-Time mit Multi-Port-Fallback (80, 443, 22, 445, 135)
-- **Reachability-Checks** - Periodische Erreichbarkeitsprüfung während Countdown
-- **Background DNS-Lookups** - Asynchrone Hostname-Auflösung
-
-#### UI/UX
-- **Statische Tabellen-Ansicht** - In-Place-Updates ohne Scrollen
-- **Farbcodierung** - Visuelle Indikatoren für:
-  - Online/Offline-Status (🟢/🔴)
-  - Lokal administrierte MAC-Adressen (gelb)
-  - Flapping-Warnungen (gelb)
-- **ANSI-Cursor-Steuerung** - Flicker-freie Table-Redraws
-- **Graceful Shutdown** - Sauberer Exit mit Ctrl+C
+#### Watch-Modus (TUI)
+- Sortierung nach jeder Spalte (`i h m v d r u f`) mit stabiler Sekundärsortierung nach IP
+- Filter (`/`) mit Spalten-Syntax und Klammern, z.B. `vendor=apple`
+- Host-Details (`Enter`) mit Port-Scan auf Abruf und DNS-Konsistenz-Check
+- Hilfe-Overlay (`?`), Markierung neuer Hosts, Zebra-Streifen
+- Plattformspezifische Farbanpassungen für macOS/Windows/Linux
 
 #### Output & Formate
 - **Mehrere Ausgabe-Formate** - Table (Standard), JSON, CSV
 - **Quiet-Flag** - Reduzierte Ausgabe für Scripting/Piping
-- **Zeitstempel** - First Seen, Last Seen, Status-Änderungen
+- **Shell-Completion** - bash, zsh, fish, PowerShell
+
+#### Robustheit
+- **Crash-Handler** - Panics werden in eine Log-Datei geschrieben
+- **Sentinel-Datei** - Erkennt beim Start, ob der letzte Lauf unsauber beendet wurde (Crash vs. Kill)
 
 ### Technische Details
+- **Cobra CLI-Framework** und **Viper** für Konfiguration (`$HOME/.netspy.yaml`)
+- **Concurrent Scanning** - Worker-Pool mit Semaphore-Pattern, konfigurierbare Concurrency
+- **BDD Testing** - Ginkgo + Gomega, plattformspezifische Tests über Build-Tags
+- **GitHub Actions Release-Workflow** - ZIPs für Windows, Linux, macOS (amd64, arm64)
 
-#### Architektur
-- **Cobra CLI-Framework** - Strukturierte Command-Hierarchie
-- **Viper Configuration** - Flexible Config-Datei-Support
-- **Concurrent Scanning** - Worker-Pool mit Semaphore-Pattern
-- **Plattformspezifisches ARP-Parsing** - Separate Implementierungen für Windows/macOS/Linux
-
-#### Performance
-- **Konfigurierbare Concurrency** - Standard: 40 (conservative), 100 (fast), 20 (thorough)
-- **Hybrid-Modus Optimierung** - Separate Limits für ARP-Population (50) und Enhancement (20)
-- **Atomare Counter** - Thread-safe Fortschritts-Tracking
-- **Timeout-Management** - Konfigurierbare Timeouts pro Host
-
-#### Code-Qualität
-- **BDD Testing** - Ginkgo + Gomega Test-Framework
-- **Plattformspezifische Tests** - Build-Tags für OS-spezifische Features
-- **Deutsche Dokumentation** - Kommentare und Docs auf Deutsch
-- **Strukturierte Architektur** - Separation of Concerns (cmd/pkg)
-
-### Bekannte Probleme
-
-- 2 von 50 Tests schlagen aktuell fehl (siehe TODO.md):
-  - `IsLikelyGateway` - Gateway-Heuristik für /8 Netzwerke (.0.0.254)
-  - `IsLikelyGateway` - Edge Case (IP außerhalb Netzwerk)
-- Tabellen-Redraw bei wachsender Tabelle (Flaps-Spalte)
-- Einige IoT-Geräte antworten nicht auf mDNS/LLMNR
+### Bekannte Einschränkungen
 - Kein IPv6-Support
-- Kein ICMP-Ping (erfordert Admin-Rechte)
-
-### Abhängigkeiten
-
-- Go 1.21+
-- github.com/spf13/cobra
-- github.com/spf13/viper
-- github.com/fatih/color
-- github.com/onsi/ginkgo/v2
-- github.com/onsi/gomega
+- Einige IoT-Geräte antworten nicht auf mDNS/LLMNR
 
 ---
 
@@ -140,5 +121,8 @@ Dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/):
 - **MINOR** - Neue Funktionen (rückwärtskompatibel)
 - **PATCH** - Bugfixes (rückwärtskompatibel)
 
-[Unreleased]: https://github.com/yourusername/netspy/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/yourusername/netspy/releases/tag/v0.1.0
+[Unreleased]: https://github.com/feiglein74/netspy/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/feiglein74/netspy/compare/v0.1.2...v0.2.0
+[0.1.2]: https://github.com/feiglein74/netspy/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/feiglein74/netspy/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/feiglein74/netspy/releases/tag/v0.1.0
