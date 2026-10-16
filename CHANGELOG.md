@@ -7,6 +7,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Fixed
+- **Netze größer als /24 wurden nur teilweise gescannt** - Die Zählung der Host-Adressen sprang nach `.255` auf `.0.1` zurück. Bei einem /23 wurden die Adressen des ersten /24-Blocks doppelt gescannt, die des zweiten nie; bei einem /16 nur 256 von 65.534 Adressen
+- Completion-Befehl meldet Schreibfehler, Banner-Grabbing kann nicht mehr ohne Timeout hängen, Fehler beim Kopieren in die Zwischenablage werden vollständig gemeldet
+
 ## [0.2.0] - 2026-10-16
 
 ### Added

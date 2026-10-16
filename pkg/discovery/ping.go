@@ -147,15 +147,7 @@ func GenerateIPsFromCIDR(network *net.IPNet) []net.IP {
 	_ = maxHosts // Compiler-Warnung vermeiden
 
 	for i := 1; i < numHosts-1; i++ {
-		currentIP := make(net.IP, len(ip))
-		copy(currentIP, ip)
-
-		for j := len(currentIP) - 1; j >= 0; j-- {
-			currentIP[j] += byte(i >> (8 * (len(currentIP) - 1 - j)))
-			if currentIP[j] != 0 {
-				break
-			}
-		}
+		currentIP := incrementIP(ip, i)
 
 		if network.Contains(currentIP) {
 			ips = append(ips, currentIP)

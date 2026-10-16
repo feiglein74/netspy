@@ -66,6 +66,43 @@ var _ = Describe("Ping", func() {
 			})
 		})
 
+		Context("with subnets larger than /24", func() {
+			// Regression: Bis 0.2.0 sprang die Zählung nach .255 auf .0.1 zurück,
+			// Adressen ab dem zweiten /24-Block wurden nie gescannt
+			It("should generate 510 unique host IPs for /23", func() {
+				_, network, _ := net.ParseCIDR("10.0.0.0/23")
+				ips := discovery.GenerateIPsFromCIDR(network)
+
+				Expect(ips).To(HaveLen(510))
+				Expect(ips[0].String()).To(Equal("10.0.0.1"))
+				Expect(ips[254].String()).To(Equal("10.0.0.255"))
+				Expect(ips[255].String()).To(Equal("10.0.1.0"))
+				Expect(ips[256].String()).To(Equal("10.0.1.1"))
+				Expect(ips[509].String()).To(Equal("10.0.1.254"))
+
+				seen := make(map[string]bool, len(ips))
+				for _, ip := range ips {
+					seen[ip.String()] = true
+				}
+				Expect(seen).To(HaveLen(510))
+			})
+
+			It("should generate 65534 unique host IPs for /16", func() {
+				_, network, _ := net.ParseCIDR("172.16.0.0/16")
+				ips := discovery.GenerateIPsFromCIDR(network)
+
+				Expect(ips).To(HaveLen(65534))
+				Expect(ips[0].String()).To(Equal("172.16.0.1"))
+				Expect(ips[65533].String()).To(Equal("172.16.255.254"))
+
+				seen := make(map[string]bool, len(ips))
+				for _, ip := range ips {
+					seen[ip.String()] = true
+				}
+				Expect(seen).To(HaveLen(65534))
+			})
+		})
+
 		Context("with single host /32", func() {
 			It("should generate single IP", func() {
 				_, network, _ := net.ParseCIDR("192.168.1.1/32")
