@@ -236,4 +236,12 @@ Noch offen, welche Bereiche hier landen und welche Tests bekommen, siehe TODO.md
 
 ## Regelstand
 
-Prüfung gegen defaults.md v2.0.0 läuft (2026-10-16), noch nicht abgeschlossen.
+Geprüft gegen: defaults.md v2.0.0 (2026-10-16)
+
+Noch nicht umgesetzt (steht in TODO.md):
+- Testlücken in `pkg/watch`, `pkg/output`, `pkg/crash`, `cmd` - Tests schreiben oder hier begründen
+- Doku-Konsolidierung (ältere Plattform- und Migrationsnotizen)
+- Commit-Stil: englische Präfixe (`feat:`, `fix:` …) mit deutscher Beschreibung, Entscheidung offen
+
+Abweichend von den Defaults:
+- `.gitattributes`: `*.go` mit `eol=lf`, sonst meldet `gofmt` unter Windows jede Datei
