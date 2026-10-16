@@ -1,0 +1,37 @@
+# Default: Auto-Erkennung (Git entscheidet)
+* text=auto
+
+# Explizit Text (immer LF im Repo, native Zeilenenden beim Checkout)
+# Go-Quellen immer LF, auch im Windows-Checkout: gofmt erwartet LF und meldet
+# CRLF-Dateien sonst alle als unformatiert
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+
+*.md text
+*.txt text
+*.json text
+*.yml text
+*.yaml text
+*.xml text
+*.html text
+*.css text
+*.js text
+*.ts text
+*.py text
+*.ps1 text
+*.tape text
+*.sh text eol=lf
+*.bash text eol=lf
+Makefile text eol=lf
+
+# Explizit Binär (keine Konvertierung)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.exe binary
+*.dll binary

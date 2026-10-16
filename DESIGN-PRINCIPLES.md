@@ -184,4 +184,4 @@ Die folgenden Stellen im Code verstoßen aktuell noch gegen diese Prinzipien:
 - `pkg/output/table_responsive.go` - Automatische Hostname-Kürzung
 - `pkg/discovery/vendor_learn.go:177-202` - Automatische Vendor-Kürzung
 
-Siehe `TODO.md` → "Projektregeln-Compliance" für den Behebungsplan.
+Siehe `TODO.md` → "Design-Prinzipien im Code" für den Behebungsplan.

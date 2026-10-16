@@ -8,7 +8,7 @@ Willkommen zur NetSpy-Dokumentation. Hier findest du alle technischen Dokumente 
 - [../README.md](../README.md) - Projekt-Hauptdokumentation, Installation, Usage
 - [../CHANGELOG.md](../CHANGELOG.md) - Versionshistorie und Release-Notes
 - [../TODO.md](../TODO.md) - Geplante Features, Bugfixes, Roadmap
-- [../CLAUDE.md](../CLAUDE.md) - Claude Code Präferenzen und Entwicklungs-Workflow
+- [../DEVELOPMENT.md](../DEVELOPMENT.md) - Entwicklung, Tests, Stolperfallen
 
 ## 🖥️ Cross-Platform Dokumentation
 

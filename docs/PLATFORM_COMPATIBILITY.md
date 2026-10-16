@@ -125,7 +125,7 @@ Alle Cross-Platform Analysen und Referenzen:
 - [README.md](../README.md) - Projekt-Hauptdokumentation
 - [CHANGELOG.md](../CHANGELOG.md) - Versionshistorie
 - [TODO.md](../TODO.md) - Geplante Features und Bugfixes
-- [CLAUDE.md](../CLAUDE.md) - Claude Code Präferenzen
+- [DEVELOPMENT.md](../DEVELOPMENT.md) - Entwicklung, Tests, Stolperfallen
 
 ## 🔄 Wartung dieses Dokuments
 

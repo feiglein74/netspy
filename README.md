@@ -240,6 +240,8 @@ netspy/
 
 ## Entwicklung
 
+Setup, Architektur, Release-Ablauf und Stolperfallen: siehe [DEVELOPMENT.md](DEVELOPMENT.md).
+
 ### Tests ausführen
 
 ```bash

@@ -102,6 +102,25 @@ Erstes öffentliches Release.
 - **Crash-Handler** - Panics werden in eine Log-Datei geschrieben
 - **Sentinel-Datei** - Erkennt beim Start, ob der letzte Lauf unsauber beendet wurde (Crash vs. Kill)
 
+#### Weitere Details (aus der früheren TODO-Liste übernommen)
+- **Heuristische Gateway-Erkennung** für entfernte Netzwerke (`.1` / `.254` in /8, /16, /24), kombiniert mit lokaler Erkennung in `IsLikelyGateway()`, mit Cache
+- **Plattformspezifische Gateway-Erkennung** - Windows `route print`, macOS `route -n get default`, Linux `ip route` / `route -n`
+- **Automatischer Fallback für fremde Subnetze** - ARP/Hybrid erkennen remote Netze und weichen auf TCP aus, mit Hinweis auf die verwendete Strategie
+- **Responsive Tabellen im Scan-Modus** - 3 Layouts (< 100, 100-139, ≥ 140 Spalten)
+- **`--full-output`** und zentrale Kürzung (`pkg/output/truncate.go`) mit sichtbarem Hinweis `[+N]` auf versteckte Zeichen; Unicode-Ellipsis `…` statt `...`
+- **Netzwerk-Auto-Erkennung** für `watch` ohne CIDR-Angabe
+- **Einheitliches `--mode`-Flag** statt separater Flags je Scan-Modus
+- **RTT-Messung** mit Multi-Port-Fallback für Geräte ohne Standarddienste
+- **OS-Erkennung** anhand offener Ports (Windows, Linux, Server)
+- **NetBIOS-Fallback** bei Background-DNS-Lookups
+- **MAC-Vendor-Datenbank** mit 976+ OUI-Einträgen
+
+#### Fixed
+- MAC-Adressen werden nie mehr gekürzt (`TruncateMAC()` gibt immer alle 17 Zeichen zurück)
+- Spinner-Ausgabe auf macOS (ANSI-Escape-Codes statt Carriage Return)
+- Hostname-Flackern durch Caching der Auflösung behoben
+- Spaltenausrichtung von Header und Datenzeilen
+
 ### Technische Details
 - **Cobra CLI-Framework** und **Viper** für Konfiguration (`$HOME/.netspy.yaml`)
 - **Concurrent Scanning** - Worker-Pool mit Semaphore-Pattern, konfigurierbare Concurrency
