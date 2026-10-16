@@ -436,7 +436,7 @@ func (m *HostDetailsModal) scanSinglePort(port string) PortScanResult {
 		}
 		return result
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	result.Status = "open"
 	result.RTT = time.Since(start)
@@ -469,7 +469,10 @@ func (m *HostDetailsModal) pingICMP() (time.Duration, bool) {
 
 // grabBanner versucht ein Banner vom Service zu lesen
 func (m *HostDetailsModal) grabBanner(conn net.Conn, port string) string {
-	conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	// Ohne Deadline könnte Read unbegrenzt blockieren - dann lieber kein Banner
+	if err := conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
+		return ""
+	}
 
 	buf := make([]byte, 256)
 	n, err := conn.Read(buf)

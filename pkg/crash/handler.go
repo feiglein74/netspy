@@ -94,7 +94,7 @@ func resetTerminal() {
 	if terminalResetFunc != nil {
 		// Sicher ausführen - könnte selbst paniken
 		func() {
-			defer func() { recover() }()
+			defer func() { _ = recover() }()
 			terminalResetFunc()
 		}()
 	}

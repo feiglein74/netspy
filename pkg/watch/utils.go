@@ -202,7 +202,10 @@ func CopyScreenToClipboard(screenBuffer *bytes.Buffer, screenBufferMux *sync.Mut
 		return fmt.Errorf("fehler beim Schreiben in die Zwischenablage: %v", err)
 	}
 
-	stdin.Close()
+	// Close signalisiert dem Clipboard-Tool das Ende der Eingabe
+	if err := stdin.Close(); err != nil {
+		return fmt.Errorf("fehler beim Schließen der stdin-Pipe: %v", err)
+	}
 
 	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("fehler beim Warten auf Clipboard-Tool: %v", err)
