@@ -212,7 +212,7 @@ func (m *HostDetailsModal) updateDetails() {
 	var sb strings.Builder
 
 	// IP
-	sb.WriteString(fmt.Sprintf("[yellow]IP:[white]        %s\n", m.ipStr))
+	fmt.Fprintf(&sb, "[yellow]IP:[white]        %s\n", m.ipStr)
 
 	// Hostname
 	hostname := "-"
@@ -223,21 +223,21 @@ func (m *HostDetailsModal) updateDetails() {
 			hostnameSource = fmt.Sprintf(" [gray](%s)[white]", m.state.Host.HostnameSource)
 		}
 	}
-	sb.WriteString(fmt.Sprintf("[yellow]Hostname:[white]  %s%s\n", hostname, hostnameSource))
+	fmt.Fprintf(&sb, "[yellow]Hostname:[white]  %s%s\n", hostname, hostnameSource)
 
 	// DNS Konsistenz-Check NUR wenn Hostname aus Forward-Cache kam
 	// Bei Reverse-DNS (Source="dns") ist kein Check nötig - das IST bereits der Reverse
 	if m.state.Host.Hostname != "" && m.state.Host.HostnameSource == "dns-cache" {
 		reverseNames, consistent, err := m.checkDNSConsistency()
 		if err != nil {
-			sb.WriteString(fmt.Sprintf("[yellow]DNS Check:[white] [gray]Reverse failed[white] (%s)\n", err.Error()))
+			fmt.Fprintf(&sb, "[yellow]DNS Check:[white] [gray]Reverse failed[white] (%s)\n", err.Error())
 		} else if !consistent {
 			// Inkonsistenz gefunden! Forward (Cache) stimmt nicht mit Reverse überein
 			reverseStr := "(keine)"
 			if len(reverseNames) > 0 {
 				reverseStr = strings.Join(reverseNames, ", ")
 			}
-			sb.WriteString(fmt.Sprintf("[yellow]DNS Check:[white] [red]⚠ MISMATCH[white] Reverse: %s\n", reverseStr))
+			fmt.Fprintf(&sb, "[yellow]DNS Check:[white] [red]⚠ MISMATCH[white] Reverse: %s\n", reverseStr)
 		} else {
 			sb.WriteString("[yellow]DNS Check:[white] [green]✓ OK[white] (Forward = Reverse)\n")
 		}
@@ -251,21 +251,21 @@ func (m *HostDetailsModal) updateDetails() {
 			mac += " [yellow](randomized)[white]"
 		}
 	}
-	sb.WriteString(fmt.Sprintf("[yellow]MAC:[white]       %s\n", mac))
+	fmt.Fprintf(&sb, "[yellow]MAC:[white]       %s\n", mac)
 
 	// Vendor
 	vendor := "-"
 	if m.state.Host.Vendor != "" {
 		vendor = m.state.Host.Vendor
 	}
-	sb.WriteString(fmt.Sprintf("[yellow]Vendor:[white]    %s\n", vendor))
+	fmt.Fprintf(&sb, "[yellow]Vendor:[white]    %s\n", vendor)
 
 	// Device Type
 	deviceType := "-"
 	if m.state.Host.DeviceType != "" && m.state.Host.DeviceType != "Unknown" {
 		deviceType = m.state.Host.DeviceType
 	}
-	sb.WriteString(fmt.Sprintf("[yellow]Device:[white]    %s\n", deviceType))
+	fmt.Fprintf(&sb, "[yellow]Device:[white]    %s\n", deviceType)
 
 	// Status
 	statusColor := "[green]"
@@ -273,20 +273,20 @@ func (m *HostDetailsModal) updateDetails() {
 		statusColor = "[red]"
 	}
 	duration := time.Since(m.state.StatusSince)
-	sb.WriteString(fmt.Sprintf("[yellow]Status:[white]    %s%s[white] (seit %s)\n", statusColor, m.state.Status, FormatDuration(duration)))
+	fmt.Fprintf(&sb, "[yellow]Status:[white]    %s%s[white] (seit %s)\n", statusColor, m.state.Status, FormatDuration(duration))
 
 	// RTT
 	rtt := "-"
 	if m.state.Host.RTT > 0 {
 		rtt = fmt.Sprintf("%.2fms", float64(m.state.Host.RTT.Microseconds())/1000.0)
 	}
-	sb.WriteString(fmt.Sprintf("[yellow]RTT:[white]       %s\n", rtt))
+	fmt.Fprintf(&sb, "[yellow]RTT:[white]       %s\n", rtt)
 
 	// Flaps
-	sb.WriteString(fmt.Sprintf("[yellow]Flaps:[white]     %d\n", m.state.FlapCount))
+	fmt.Fprintf(&sb, "[yellow]Flaps:[white]     %d\n", m.state.FlapCount)
 
 	// First Seen
-	sb.WriteString(fmt.Sprintf("[yellow]First:[white]     %s\n", m.state.FirstSeen.Format("15:04:05")))
+	fmt.Fprintf(&sb, "[yellow]First:[white]     %s\n", m.state.FirstSeen.Format("15:04:05"))
 
 	// Gateway
 	if m.state.Host.IsGateway {
@@ -562,10 +562,11 @@ func (m *HostDetailsModal) updatePortsTable() {
 		// Status-Farbe
 		statusColor := tcell.ColorRed
 		statusSymbol := "✗"
-		if result.Status == "open" {
+		switch result.Status {
+		case "open":
 			statusColor = tcell.ColorGreen
 			statusSymbol = "✓"
-		} else if result.Status == "filtered" {
+		case "filtered":
 			statusColor = tcell.ColorYellow
 			statusSymbol = "?"
 		}

@@ -91,7 +91,7 @@ func readDarwinDNSCache(cache map[string]string) {
 	}
 
 	lines := strings.Split(string(output), "\n")
-	var currentName, currentIP string
+	var currentName string
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -99,7 +99,7 @@ func readDarwinDNSCache(cache map[string]string) {
 		if strings.HasPrefix(line, "name:") {
 			currentName = strings.TrimSpace(strings.TrimPrefix(line, "name:"))
 		} else if strings.HasPrefix(line, "ip_address:") {
-			currentIP = strings.TrimSpace(strings.TrimPrefix(line, "ip_address:"))
+			currentIP := strings.TrimSpace(strings.TrimPrefix(line, "ip_address:"))
 
 			// Store mapping when we have both
 			if currentName != "" && currentIP != "" {
@@ -112,7 +112,6 @@ func readDarwinDNSCache(cache map[string]string) {
 		// Reset on empty line (new entry)
 		if line == "" {
 			currentName = ""
-			currentIP = ""
 		}
 	}
 }
