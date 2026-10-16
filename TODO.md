@@ -1,8 +1,8 @@
 # NetSpy TODO
 
-Zuletzt: Defaults v2.0.0 eingebunden (DEVELOPMENT.md, .gitattributes, Regeldateien entfernt)
+Zuletzt: golangci-lint v2 als Linter eingeführt, alle Findings behoben (0 auf Windows/Linux/macOS); Release 0.2.1 mit Scanner-Fix für Netze > /24
 In Arbeit: –
-Als Nächstes: Lint-Setup (staticcheck aktualisieren, golangci-lint entscheiden)
+Als Nächstes: Testlücken schließen oder begründen
 
 > **Hinweis:** Dies ist die öffentliche TODO-Liste für GitHub.
 > Interne/private TODOs gehören in `TODO.private.md` (wird nicht committed).
@@ -10,13 +10,6 @@ Als Nächstes: Lint-Setup (staticcheck aktualisieren, golangci-lint entscheiden)
 
 ## Aus der Defaults-Prüfung (2026-10-16)
 
-- [ ] **staticcheck aktualisieren und Findings abarbeiten**
-  - Installiertes staticcheck läuft mit Go 1.27 nicht ("export data version 5 is greater than maximum supported version 2")
-  - Bis dahin wird vor Commits nur `go vet` geprüft
-- [ ] **Lint-Setup entscheiden**
-  - `.golangci.yml` ist vorhanden (errcheck, govet, staticcheck, gosec, misspell …), golangci-lint aber nicht installiert
-  - Entweder golangci-lint als Standard (dann installieren, in DEVELOPMENT.md eintragen, ggf. in CI)
-    oder staticcheck + go vet (dann `.golangci.yml` entfernen)
 - [ ] **Testlücken schließen oder begründen**
   - Ohne Tests: `pkg/watch`, `pkg/output`, `pkg/crash`, `cmd`
   - Je Bereich: Tests schreiben oder in DEVELOPMENT.md → "Bewusst nicht getestet" mit Begründung
@@ -37,7 +30,8 @@ Als Nächstes: Lint-Setup (staticcheck aktualisieren, golangci-lint entscheiden)
 
 - [ ] **Code Coverage Reporting** (Ziel: > 80 %)
 - [ ] **gofmt Pre-Commit Hook**
-- [ ] **Tests in CI** - GitHub-Actions-Workflow für `go test` / `go vet` bei Push und PR
+- [ ] **Tests in CI** - GitHub-Actions-Workflow für `go test`, `go vet` und `golangci-lint` bei Push und PR
+  (golangci-lint dort für alle drei Plattformen, siehe DEVELOPMENT.md → Tests & Linting)
   (Release-Builds für alle Plattformen gibt es bereits, siehe `.github/workflows/release.yml`)
 
 ## Konfiguration

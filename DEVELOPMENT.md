@@ -15,8 +15,9 @@ Zweck und Nutzung stehen in der [README](README.md), das *Warum* in den
 - **Go 1.26 oder höher** (Mindestversion durch die `golang.org/x`-Pakete vorgegeben, siehe `go.mod`)
 - Optional: [Ginkgo-CLI](https://onsi.github.io/ginkgo/) für ausführlichere Testausgabe:
   `go install github.com/onsi/ginkgo/v2/ginkgo@latest`
-- Optional: [staticcheck](https://staticcheck.dev/): `go install honnef.co/go/tools/cmd/staticcheck@latest`
-  (muss zur installierten Go-Version passen, siehe Stolperfallen)
+- [golangci-lint](https://golangci-lint.run/) v2 (enthält staticcheck, errcheck, gosec, misspell …):
+  `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`
+  (muss mit der installierten Go-Version gebaut sein, siehe Stolperfallen)
 - Für die SBOM: [cyclonedx-gomod](https://github.com/CycloneDX/cyclonedx-gomod) (nur für Releases, läuft im Workflow)
 
 ```bash
@@ -35,8 +36,19 @@ Gefahrlos testen ohne echtes Netz: `netspy watch 192.0.2.0/24 --mode demo` (fikt
 ```bash
 go test ./...               # alle Tests (Exit-Code ≠ 0 bei Fehlern)
 go vet ./...                # Code-Qualität
-staticcheck ./...           # zusätzliche Analyse (siehe TODO.md: Lint-Setup)
+golangci-lint run ./...     # Linting nach .golangci.yml (Exit-Code ≠ 0 bei Findings)
 ```
+
+Plattformspezifischer Code (`*_windows.go`, `*_linux.go`, `*_darwin.go`) wird nur für das
+eigene OS geprüft. Vor Änderungen daran auch die anderen prüfen:
+
+```bash
+GOOS=linux golangci-lint run ./...
+GOOS=darwin golangci-lint run ./...
+```
+
+`.golangci.yml`: Ausschlüsse stehen mit Begründung in der Datei. `_ = f()` gilt als bewusstes
+Ignorieren eines Fehlers; einzelne Ausnahmen per `//nolint:<linter> // <Grund>`.
 
 Ausführlicher mit Ginkgo:
 
@@ -175,6 +187,9 @@ blockieren. Das betrifft `go build` (der Linker schreibt nach TEMP) und `go test
   Zwischenstufen landen sonst weiter in TEMP.
 - Auch heruntergeladene Release-Binaries lassen sich in TEMP nicht starten oder kopieren,
   dort ebenfalls direkt ins ausgenommene Verzeichnis entpacken.
+- Go-Tools (`go install`) können auch in `~/go/bin` blockiert werden, teils erst Minuten nach
+  der Installation ("Permission denied"). Abhilfe: `GOBIN=<ausgenommen>/bin go install …`
+  und das Tool mit vollem Pfad aufrufen.
 
 ### `os.Exit` überspringt den Sentinel-Cleanup
 `main.go` legt beim Start `.netspy.running` an (im aktuellen Verzeichnis) und entfernt die
@@ -201,10 +216,16 @@ wait $NETSPY_PID 2>/dev/null || true
 Eingeschränkte ANSI-Unterstützung, für den Watch-Modus nicht empfohlen. Windows Terminal,
 PowerShell und cmd.exe funktionieren.
 
-### staticcheck passt nicht zur Go-Version
-Ein staticcheck, das mit einer älteren Go-Version gebaut wurde, bricht mit
-`export data version N is greater than maximum supported version` ab. Abhilfe:
-`go install honnef.co/go/tools/cmd/staticcheck@latest` mit der aktuellen Go-Version.
+### Linter passt nicht zur Go-Version
+Ein Linter (golangci-lint, staticcheck), der mit einer älteren Go-Version gebaut wurde, bricht
+mit `export data version N is greater than maximum supported version` ab. Abhilfe: nach einem
+Go-Update neu installieren (`go install …`), damit er mit der aktuellen Go-Version gebaut wird.
+
+### golangci-lint v2: alte Config-Schlüssel
+v2 kennt `linters-settings` und `issues.exclude-rules` nicht mehr (jetzt `linters.settings`
+und `linters.exclusions.rules`). Nach Änderungen an `.golangci.yml`: `golangci-lint config verify`.
+misspell nicht mit `locale: US` betreiben, sonst gelten deutsche Wörter wie "Analyse" als
+britisches Englisch.
 
 ## Bewusst nicht getestet
 

@@ -7,6 +7,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Changed
+- Code nach golangci-lint bereinigt (staticcheck, ineffassign), keine Verhaltensänderung
+- DEVELOPMENT.md: golangci-lint als Linter, Prüfung für alle Plattformen per `GOOS`
+
 ## [0.2.1] - 2026-10-16
 
 ### Fixed
