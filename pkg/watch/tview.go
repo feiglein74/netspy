@@ -1099,7 +1099,7 @@ func (w *TviewApp) performScan() {
 	// Live-Status: Scan läuft (für animierte Header-Rückmeldung).
 	// Der countdownLoop rendert den Header sekündlich weiter, daher ist
 	// der Spinner auch während eines langen, blockierenden Scans sichtbar.
-	w.scanHostsNum.Store(int32(countHosts(netCIDR)))
+	w.scanHostsNum.Store(int32(countHosts(netCIDR))) //nolint:gosec // Überlauf erst ab /0, so große Netze sind nicht scanbar
 	atomic.StoreInt32(&w.scanProgress, 0)
 	w.scanning.Store(true)
 	defer w.scanning.Store(false)

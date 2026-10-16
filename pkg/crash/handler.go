@@ -109,7 +109,7 @@ func resetTerminal() {
 // logCrash schreibt Crash-Informationen in die Log-Datei
 func logCrash(info CrashInfo) {
 	// Versuche Log-Datei zu öffnen/erstellen
-	f, err := os.OpenFile(crashLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(crashLogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		// Kann nicht loggen, ignorieren
 		return
@@ -284,7 +284,7 @@ func StartSentinel() bool {
 
 	// Neue Sentinel-Datei erstellen
 	content := fmt.Sprintf("%s (PID: %d)", time.Now().Format("2006-01-02 15:04:05"), os.Getpid())
-	_ = os.WriteFile(sentinelFile, []byte(content), 0644)
+	_ = os.WriteFile(sentinelFile, []byte(content), 0600)
 
 	return wasUnclean
 }

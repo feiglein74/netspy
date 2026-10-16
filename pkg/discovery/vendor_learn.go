@@ -274,13 +274,13 @@ func saveLearnedVendor(oui, vendor string) error {
 # Sie können diese Datei manuell bearbeiten
 
 `
-		if err := os.WriteFile(learnedVendorsFile, []byte(header), 0644); err != nil {
+		if err := os.WriteFile(learnedVendorsFile, []byte(header), 0600); err != nil {
 			return err
 		}
 	}
 
 	// Append neuen Eintrag
-	file, err := os.OpenFile(learnedVendorsFile, os.O_APPEND|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(learnedVendorsFile, os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
