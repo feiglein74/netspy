@@ -1,5 +1,5 @@
-# golangci-lint configuration for NetSpy
-version: 2
+# golangci-lint configuration for NetSpy (golangci-lint v2)
+version: "2"
 
 run:
   timeout: 5m
@@ -21,28 +21,32 @@ linters:
     - unconvert
     # unparam disabled - produces false positives for future-proofed error returns
 
+  settings:
+    errcheck:
+      # Explizites "_ = ..." ist bewusstes Ignorieren und wird nicht gemeldet
+      check-blank: false
+
+    misspell:
+      # Keine locale setzen: "US" meldet zusätzlich deutsche Wörter wie "Analyse" als britisches Englisch
+      # Deutsche Kommentare: korrekte deutsche Wörter, die misspell für englische Tippfehler hält
+      ignore-rules:
+        - flexibel
+        - konfiguration
+        - mechanismus
+
+    gosec:
+      excludes:
+        - G204  # Subprocess with variable (needed for network commands)
+        - G304  # File path from variable (needed for config)
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+
 formatters:
   enable:
     - gofmt
     - goimports
-
-linters-settings:
-  errcheck:
-    check-blank: true
-
-  gosec:
-    excludes:
-      - G204  # Subprocess with variable (needed for network commands)
-      - G304  # File path from variable (needed for config)
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosec
-    # populateARPTable functions return error for future extensibility
-    - text: "result 0 \\(error\\) is always nil"
-      linters:
-        - unparam
-      source: "func populate.*ARPTable"
