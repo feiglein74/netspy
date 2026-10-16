@@ -589,10 +589,10 @@ func (m *HostDetailsModal) Show() {
 	modal := tview.NewFlex().
 		AddItem(nil, 0, 1, false). // 10% links
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).    // 10% oben
-			AddItem(m.flex, 0, 8, true).  // 80% Inhalt (flexibel!)
-			AddItem(nil, 0, 1, false),    // 10% unten
-			0, 8, true).                  // 80% Breite (flexibel!)
+			AddItem(nil, 0, 1, false).   // 10% oben
+			AddItem(m.flex, 0, 8, true). // 80% Inhalt (flexibel!)
+			AddItem(nil, 0, 1, false),   // 10% unten
+						0, 8, true). // 80% Breite (flexibel!)
 		AddItem(nil, 0, 1, false) // 10% rechts
 
 	m.pages.AddPage("hostdetails", modal, true, true)

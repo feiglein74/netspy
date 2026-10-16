@@ -35,7 +35,7 @@ type TviewApp struct {
 	dropdownFlex      *tview.Flex // Container für Dropdown-Positionierung
 	dropdownVisible   bool
 	dropdownDisabled  bool // Verhindert sofortiges Wieder-Öffnen nach ESC
-	filterInputActive bool   // TRUE wenn Filter-Eingabe aktiv ist (für Keyboard-Routing)
+	filterInputActive bool // TRUE wenn Filter-Eingabe aktiv ist (für Keyboard-Routing)
 	suggestions       []string
 	filterText        string         // Aktiver Filter-Text
 	filterError       string         // Fehler bei Filter-Validierung
@@ -61,7 +61,7 @@ type TviewApp struct {
 	scanCancelMu sync.Mutex
 
 	// Scan-Status für Live-Rückmeldung (Scan-Goroutine schreibt, UI liest)
-	scanning     atomic.Bool // TRUE während ein Scan läuft
+	scanning     atomic.Bool  // TRUE während ein Scan läuft
 	scanHostsNum atomic.Int32 // Gesamtanzahl der im aktuellen Scan abgefragten Hosts
 	scanProgress int32        // bereits abgefragte Hosts (atomic, via &w.scanProgress)
 	spinnerFrame int          // Animations-Frame (nur UI-Goroutine)
@@ -192,7 +192,7 @@ func (w *TviewApp) setupUI() {
 		AddItem(tview.NewFlex().
 			AddItem(w.dropdown, 40, 0, true). // Dropdown links, 40 Zeichen breit
 			AddItem(nil, 0, 1, false),        // Rest leer
-			10, 0, true). // Max 10 Zeilen hoch
+						10, 0, true). // Max 10 Zeilen hoch
 		AddItem(nil, 0, 1, false) // Rest des Bildschirms leer
 
 	// Header-Steuerelemente: editierbarer Netzbereich + Modus-Dropdown + Intervall
@@ -326,9 +326,9 @@ func (w *TviewApp) setupUI() {
 	// Haupt-Layout (ohne Footer - Controls sind in "Scan & Sort")
 	w.flex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(w.filterInput, 3, 0, false).    // Filter oben (3 Zeilen: 1 Text + 2 Border)
-		AddItem(topRow, 5, 0, false).           // Header+Info (5 Zeilen: 3 Text + 2 Border)
-		AddItem(w.table, 0, 1, true)            // Tabelle bekommt restlichen Platz
+		AddItem(w.filterInput, 3, 0, false). // Filter oben (3 Zeilen: 1 Text + 2 Border)
+		AddItem(topRow, 5, 0, false).        // Header+Info (5 Zeilen: 3 Text + 2 Border)
+		AddItem(w.table, 0, 1, true)         // Tabelle bekommt restlichen Platz
 
 	// Pages für Modal-Handling
 	w.pages = tview.NewPages().
@@ -348,14 +348,14 @@ func (w *TviewApp) setupTableHeader() {
 	}
 
 	columns := []colDef{
-		{"IP Address", 16, 0},  // IP + evtl. [G] [!]
-		{"Hostname", 20, 1},    // flexibel aber begrenzt
-		{"MAC", 18, 0},         // 17 + 1 Leerzeichen
-		{"Vendor", 15, 1},      // flexibel aber begrenzt
-		{"Device", 12, 1},      // flexibel aber begrenzt
-		{"RTT", 7, 0},          // z.B. "99.9ms"
-		{"Up", 7, 0},           // z.B. "00m00s" (6 + 1 Padding)
-		{"Fl", 3, 0},           // z.B. "99"
+		{"IP Address", 16, 0}, // IP + evtl. [G] [!]
+		{"Hostname", 20, 1},   // flexibel aber begrenzt
+		{"MAC", 18, 0},        // 17 + 1 Leerzeichen
+		{"Vendor", 15, 1},     // flexibel aber begrenzt
+		{"Device", 12, 1},     // flexibel aber begrenzt
+		{"RTT", 7, 0},         // z.B. "99.9ms"
+		{"Up", 7, 0},          // z.B. "00m00s" (6 + 1 Padding)
+		{"Fl", 3, 0},          // z.B. "99"
 	}
 
 	for col, def := range columns {
@@ -786,14 +786,14 @@ func (w *TviewApp) updateTable() {
 		align     int // tview.AlignLeft = 0, tview.AlignRight = 2
 	}
 	columns := []colDef{
-		{16, 0, tview.AlignLeft},  // IP Address
-		{20, 1, tview.AlignLeft},  // Hostname
-		{18, 0, tview.AlignLeft},  // MAC (17 + 1 Leerzeichen)
-		{15, 1, tview.AlignLeft},  // Vendor
-		{12, 1, tview.AlignLeft},  // Device
-		{7, 0, tview.AlignRight},  // RTT
-		{7, 0, tview.AlignRight},  // Up
-		{3, 0, tview.AlignRight},  // Fl
+		{16, 0, tview.AlignLeft}, // IP Address
+		{20, 1, tview.AlignLeft}, // Hostname
+		{18, 0, tview.AlignLeft}, // MAC (17 + 1 Leerzeichen)
+		{15, 1, tview.AlignLeft}, // Vendor
+		{12, 1, tview.AlignLeft}, // Device
+		{7, 0, tview.AlignRight}, // RTT
+		{7, 0, tview.AlignRight}, // Up
+		{3, 0, tview.AlignRight}, // Fl
 	}
 
 	// Zeilen hinzufügen

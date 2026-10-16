@@ -14,15 +14,15 @@ import (
 
 // DeviceState verfolgt den Zustand eines entdeckten Geräts über die Zeit
 type DeviceState struct {
-	Host                scanner.Host
-	FirstSeen           time.Time
-	FirstSeenScan       int           // Scan number when first detected (for "new" indicator)
-	LastSeen            time.Time
-	Status              string        // "online" or "offline"
-	StatusSince         time.Time     // When current status started
-	FlapCount           int           // Number of times status has changed (flapping counter)
-	TotalOfflineTime    time.Duration // Accumulated time spent offline (for continuous uptime calculation)
-	LastHostnameLookup  time.Time     // When we last tried to resolve hostname (for retry mechanism)
+	Host               scanner.Host
+	FirstSeen          time.Time
+	FirstSeenScan      int // Scan number when first detected (for "new" indicator)
+	LastSeen           time.Time
+	Status             string        // "online" or "offline"
+	StatusSince        time.Time     // When current status started
+	FlapCount          int           // Number of times status has changed (flapping counter)
+	TotalOfflineTime   time.Duration // Accumulated time spent offline (for continuous uptime calculation)
+	LastHostnameLookup time.Time     // When we last tried to resolve hostname (for retry mechanism)
 }
 
 // ThreadConfig holds thread count configuration for different operations
