@@ -7,9 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-16
+
 ### Fixed
 - **Netze größer als /24 wurden nur teilweise gescannt** - Die Zählung der Host-Adressen sprang nach `.255` auf `.0.1` zurück. Bei einem /23 wurden die Adressen des ersten /24-Blocks doppelt gescannt, die des zweiten nie; bei einem /16 nur 256 von 65.534 Adressen
 - Completion-Befehl meldet Schreibfehler, Banner-Grabbing kann nicht mehr ohne Timeout hängen, Fehler beim Kopieren in die Zwischenablage werden vollständig gemeldet
+
+### Changed
+- Crash-Log, Sentinel-Datei und `vendor_learned.txt` werden nur für den eigenen Nutzer lesbar angelegt (0600), der Registry-Ordner mit 0750 (Linux/macOS)
+- Linting mit golangci-lint v2, die Konfiguration war für v2 ungültig und wurde neu aufgesetzt
 
 ## [0.2.0] - 2026-10-16
 
@@ -144,7 +150,8 @@ Dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/):
 - **MINOR** - Neue Funktionen (rückwärtskompatibel)
 - **PATCH** - Bugfixes (rückwärtskompatibel)
 
-[Unreleased]: https://github.com/feiglein74/netspy/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/feiglein74/netspy/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/feiglein74/netspy/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/feiglein74/netspy/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/feiglein74/netspy/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/feiglein74/netspy/compare/v0.1.0...v0.1.1
