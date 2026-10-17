@@ -8,6 +8,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Fixed
+- **Einzelne IP auf der Kommandozeile wurde abgelehnt** - `netspy scan 192.0.2.5` brach mit "invalid CIDR" ab, ebenso `watch`. Jetzt scannt `scan` mit einer einzelnen IP genau diesen Host, `watch` beobachtet ihr /24 (wie das Netzfeld in der TUI)
 - **Watch mit kleinem `--max-threads` blieb hängen** - Bei `--max-threads 1` bis `4` wurde mindestens eine Thread-Art auf 0 abgerundet. Bei 1 lief der Scan gar nicht, bis 4 wurden Hostnamen nie aufgelöst. Jetzt bekommt jede Art mindestens einen Thread
 - **Gekürzte Spalten im Scan-Modus nannten in `[+N]` eine zu kleine Zahl** versteckter Zeichen, und Umlaute konnten mitten im Zeichen abgeschnitten werden. Es wird jetzt in Zeichen statt in Bytes gezählt
 - **CSV-Ausgabe verschob Spalten**, wenn ein Feld ein Komma enthielt (z.B. Hersteller "Apple, Inc."). Felder werden jetzt nach RFC 4180 in Anführungszeichen gesetzt

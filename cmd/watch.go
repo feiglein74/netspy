@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	"net"
 	"time"
 
 	"netspy/pkg/watch"
@@ -62,11 +60,12 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		network = args[0]
 	}
 
-	// Netzwerk parsen
-	_, netCIDR, err := net.ParseCIDR(network)
+	// Netzwerk parsen (einzelne IP = ihr /24, wie im Netzfeld der TUI)
+	netCIDR, err := parseTargetNetwork(network, 24)
 	if err != nil {
-		return fmt.Errorf("invalid CIDR: %v", err)
+		return err
 	}
+	network = netCIDR.String()
 
 	// tview App erstellen und starten
 	app := watch.NewTviewApp(network, netCIDR, watchMode, watchInterval, maxThreads)

@@ -5,6 +5,7 @@ import (
 	"net"
 	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -98,17 +99,12 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return runICMPScan(network)
 	}
 
-	// Netzwerk-Eingabe für normale Scans validieren
-	hosts, err := parseNetworkInput(network)
+	// Netzwerk-Eingabe für normale Scans validieren (einzelne IP = genau dieser Host)
+	netCIDR, err := parseTargetNetwork(network, 32)
 	if err != nil {
-		return fmt.Errorf("invalid network specification: %v", err)
+		return err
 	}
-
-	// Parse CIDR für Gateway-Erkennung
-	_, netCIDR, err := net.ParseCIDR(network)
-	if err != nil {
-		return fmt.Errorf("invalid CIDR: %v", err)
-	}
+	hosts := discovery.GenerateIPsFromCIDR(netCIDR)
 
 	// Create scanner configuration
 	config := createScanConfig()
@@ -137,9 +133,9 @@ func runHybridScan(network string) error {
 	quiet := isQuiet()
 
 	// Parse network
-	_, netCIDR, err := net.ParseCIDR(network)
+	netCIDR, err := parseTargetNetwork(network, 32)
 	if err != nil {
-		return fmt.Errorf("invalid CIDR: %v", err)
+		return err
 	}
 
 	// Prüfe ob das Ziel-Netzwerk lokal oder fremd ist
@@ -240,9 +236,9 @@ func runARPScan(network string) error {
 	quiet := isQuiet()
 
 	// Parse network
-	_, netCIDR, err := net.ParseCIDR(network)
+	netCIDR, err := parseTargetNetwork(network, 32)
 	if err != nil {
-		return fmt.Errorf("invalid CIDR: %v", err)
+		return err
 	}
 
 	// Prüfe ob das Ziel-Netzwerk lokal oder fremd ist
@@ -322,9 +318,9 @@ func runICMPScan(network string) error {
 	quiet := isQuiet()
 
 	// Parse network
-	_, netCIDR, err := net.ParseCIDR(network)
+	netCIDR, err := parseTargetNetwork(network, 32)
 	if err != nil {
-		return fmt.Errorf("invalid CIDR: %v", err)
+		return err
 	}
 
 	// Generate all IPs in the network
@@ -689,16 +685,20 @@ func createScanConfig() scanner.Config {
 	return config
 }
 
-func parseNetworkInput(input string) ([]net.IP, error) {
-	// Try to parse as CIDR
+// parseTargetNetwork liest ein Netz als CIDR oder einzelne IP.
+// Eine einzelne IPv4 wird zum Netz mit singleIPBits Präfixlänge (scan: /32 = genau
+// dieser Host, watch: /24 wie im Netzfeld der TUI), eine einzelne IPv6 zu /128.
+func parseTargetNetwork(input string, singleIPBits int) (*net.IPNet, error) {
+	input = strings.TrimSpace(input)
 	if _, network, err := net.ParseCIDR(input); err == nil {
-		return discovery.GenerateIPsFromCIDR(network), nil
+		return network, nil
 	}
-
-	// Try to parse as single IP
 	if ip := net.ParseIP(input); ip != nil {
-		return []net.IP{ip}, nil
+		if ip4 := ip.To4(); ip4 != nil {
+			mask := net.CIDRMask(singleIPBits, 32)
+			return &net.IPNet{IP: ip4.Mask(mask), Mask: mask}, nil
+		}
+		return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}, nil
 	}
-
-	return nil, fmt.Errorf("unsupported network format: %s", input)
+	return nil, fmt.Errorf("invalid network: %q (expected CIDR like 192.168.1.0/24 or a single IP)", input)
 }
