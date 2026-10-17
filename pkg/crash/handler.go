@@ -258,7 +258,7 @@ func StartSentinel() bool {
 	wasUnclean := false
 
 	// Prüfen ob Sentinel-Datei existiert (= letzter Lauf war unsauber)
-	if _, err := os.Stat(sentinelFile); err == nil {
+	if sentinelInfo, err := os.Stat(sentinelFile); err == nil {
 		wasUnclean = true
 
 		// Lese Inhalt für Details
@@ -272,8 +272,10 @@ func StartSentinel() bool {
 			fmt.Printf("  Gestartet: %s\n", string(content))
 		}
 
-		// Prüfe ob es auch einen Crash-Report gibt
-		if _, err := os.Stat(crashLogFile); err == nil {
+		// Prüfe ob es einen Crash-Report aus dem letzten Lauf gibt. Das Crash-Log wird
+		// nur angehängt, nie gelöscht - es zählt nur, wenn es nach dem Start des letzten
+		// Laufs (Zeitpunkt der Sentinel-Datei) geschrieben wurde.
+		if logInfo, err := os.Stat(crashLogFile); err == nil && !logInfo.ModTime().Before(sentinelInfo.ModTime()) {
 			absPath, _ := filepath.Abs(crashLogFile)
 			fmt.Printf("  Crash-Report gefunden: %s\n", absPath)
 		} else {
