@@ -1,6 +1,9 @@
 package output
 
-import "fmt"
+import (
+	"fmt"
+	"unicode/utf8"
+)
 
 // TruncateConfig steuert das Truncation-Verhalten für Ausgaben
 // Gemäß DESIGN-PRINCIPLES.md: "Vollständigkeit vor Kürze"
@@ -22,28 +25,31 @@ func SetFullOutput(full bool) {
 
 // Truncate kürzt einen String auf maxLen Zeichen wenn TruncateConfig.Enabled
 // Respektiert das Design-Prinzip "Transparenz bei Modifikationen"
+// Gezählt wird in Zeichen (Runes), nicht in Bytes - sonst werden Umlaute zerschnitten
 func Truncate(s string, maxLen int) string {
-	if !TruncateConfig.Enabled || maxLen <= 0 || len(s) <= maxLen {
+	runes := []rune(s)
+	if !TruncateConfig.Enabled || maxLen <= 0 || len(runes) <= maxLen {
 		return s
 	}
 
 	// Mindestens 4 Zeichen für "…" oder "[+N]"
 	if maxLen < 4 {
-		return s[:maxLen]
+		return string(runes[:maxLen])
 	}
-
-	hidden := len(s) - maxLen + 1 // +1 für das "…"
 
 	if TruncateConfig.ShowInfo && maxLen >= 10 {
 		// Transparente Kürzung mit Info: "text…[+15]"
-		suffix := fmt.Sprintf("…[+%d]", hidden)
-		if len(suffix) < maxLen {
-			return s[:maxLen-len(suffix)] + suffix
+		// N ist die Anzahl der tatsächlich versteckten Zeichen
+		for keep := maxLen - 2; keep > 0; keep-- {
+			suffix := fmt.Sprintf("…[+%d]", len(runes)-keep)
+			if keep+utf8.RuneCountInString(suffix) <= maxLen {
+				return string(runes[:keep]) + suffix
+			}
 		}
 	}
 
 	// Einfache Kürzung mit Ellipsis
-	return s[:maxLen-1] + "…"
+	return string(runes[:maxLen-1]) + "…"
 }
 
 // TruncateMAC gibt MAC-Adressen IMMER vollständig zurück
