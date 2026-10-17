@@ -7,6 +7,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Fixed
+- **Watch mit kleinem `--max-threads` blieb hängen** - Bei `--max-threads 1` bis `4` wurde mindestens eine Thread-Art auf 0 abgerundet. Bei 1 lief der Scan gar nicht, bis 4 wurden Hostnamen nie aufgelöst. Jetzt bekommt jede Art mindestens einen Thread
+
 ### Changed
 - Code nach golangci-lint bereinigt (staticcheck, ineffassign), keine Verhaltensänderung
 - DEVELOPMENT.md: golangci-lint als Linter, Prüfung für alle Plattformen per `GOOS`

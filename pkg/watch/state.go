@@ -209,10 +209,11 @@ func CalculateThreads(netCIDR *net.IPNet, maxThreadsOverride int) ThreadConfig {
 	// If user specified max threads, scale all thread types proportionally
 	if maxThreadsOverride > 0 {
 		// Scale: 50% scan, 30% reachability, 20% DNS
+		// Mindestens 1 pro Art: Ein Semaphore mit Kapazität 0 blockiert für immer
 		return ThreadConfig{
-			Scan:         int(float64(maxThreadsOverride) * 0.50),
-			Reachability: int(float64(maxThreadsOverride) * 0.30),
-			DNS:          int(float64(maxThreadsOverride) * 0.20),
+			Scan:         Max(1, int(float64(maxThreadsOverride)*0.50)),
+			Reachability: Max(1, int(float64(maxThreadsOverride)*0.30)),
+			DNS:          Max(1, int(float64(maxThreadsOverride)*0.20)),
 		}
 	}
 
