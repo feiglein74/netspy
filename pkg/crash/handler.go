@@ -294,21 +294,3 @@ func StartSentinel() bool {
 func StopSentinel() {
 	_ = os.Remove(sentinelFile)
 }
-
-// CleanupOnSignal richtet Signal-Handler ein für sauberes Beenden
-// Gibt einen Channel zurück der bei Signal geschlossen wird
-func CleanupOnSignal() chan struct{} {
-	done := make(chan struct{})
-
-	sigChan := make(chan os.Signal, 1)
-	// Hinweis: signal.Notify ist in os/signal, muss importiert werden
-	// Dies wird in main.go gemacht
-
-	go func() {
-		<-sigChan
-		StopSentinel()
-		close(done)
-	}()
-
-	return done
-}
