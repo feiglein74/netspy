@@ -229,17 +229,25 @@ britisches Englisch.
 
 ## Bewusst nicht getestet
 
+Getestet ist die Logik (Parsen, Rechnen, Sortieren, Formatieren) in allen Paketen. Nicht
+getestet ist, was ein echtes Terminal, echtes Netz oder einen Prozess-Abbruch braucht:
+
 | Bereich | Begründung | Datum |
 |---|---|---|
-
-Noch offen, welche Bereiche hier landen und welche Tests bekommen, siehe TODO.md.
+| `pkg/watch`: TUI-Aufbau, Tastenbelegung, Modals (`tview.go`, `details.go`) | Braucht ein echtes Terminal; Logik dahinter (Filter, Sortierung, Netzeingabe, Port-Liste) ist getestet. Prüfen mit `--mode demo` | 2026-10-17 |
+| `pkg/watch`: Scan-Schleifen, Ping, DNS-Lookups, Port-Scan (`scanner.go`, `dns.go`) | Echter Netzverkehr, Ergebnis hängt vom Netz ab; Thread-Aufteilung ist getestet | 2026-10-17 |
+| `pkg/watch`: Zwischenablage, Netzwerk-Auswahl (`utils.go`) | Ruft System-Tools auf bzw. fragt interaktiv | 2026-10-17 |
+| `pkg/output`: Tabellen-Layout (`table_responsive.go`), Terminalgröße abfragen | Reine Bildschirmausgabe; Kürzung, Breitenstufen, JSON und CSV sind getestet | 2026-10-17 |
+| `pkg/crash`: `Handler`, `WrapGoroutine`, `SafeGo`, `resetTerminal` | Beenden den Prozess mit `os.Exit(1)` bzw. geben nur Escape-Codes aus; Crash-Log, Sentinel und `RecoverAndLog` sind getestet | 2026-10-17 |
+| `main.go`, `cmd.Execute`: Sentinel-Cleanup bei `--version` und Befehlsfehlern | Prozessende bzw. `os.Exit`; Sentinel-Ablauf selbst ist in `pkg/crash` getestet | 2026-10-17 |
+| `cmd`: `runScan`, `runWatch` und die Scan-Modi | Scannen echt; Netzeingabe und Standardwerte sind getestet | 2026-10-17 |
+| `pkg/discovery`: Abfrage von `arp`, `route`, `ping`, DNS, mDNS, NetBIOS, SSDP | Echter Netzverkehr bzw. System-Befehle; die Parser für deren Ausgaben sind getestet | 2026-10-17 |
 
 ## Regelstand
 
 Geprüft gegen: defaults.md v2.0.0 (2026-10-16)
 
 Noch nicht umgesetzt (steht in TODO.md):
-- Testlücken in `pkg/watch`, `pkg/output`, `pkg/crash`, `cmd` - Tests schreiben oder hier begründen
 - Doku-Konsolidierung (ältere Plattform- und Migrationsnotizen)
 - Commit-Stil: englische Präfixe (`feat:`, `fix:` …) mit deutscher Beschreibung, Entscheidung offen
 

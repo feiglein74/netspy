@@ -1,8 +1,8 @@
 # NetSpy TODO
 
-Zuletzt: golangci-lint v2 als Linter eingeführt, alle Findings behoben (0 auf Windows/Linux/macOS); Release 0.2.1 mit Scanner-Fix für Netze > /24
+Zuletzt: Testlücken geschlossen (Tests in allen Paketen, Rest in DEVELOPMENT.md begründet), dabei 7 Fehler gefunden und behoben (CHANGELOG → Unreleased)
 In Arbeit: –
-Als Nächstes: Testlücken schließen oder begründen
+Als Nächstes: Release 0.2.2, danach Doku konsolidieren
 
 > **Hinweis:** Dies ist die öffentliche TODO-Liste für GitHub.
 > Interne/private TODOs gehören in `TODO.private.md` (wird nicht committed).
@@ -10,10 +10,6 @@ Als Nächstes: Testlücken schließen oder begründen
 
 ## Aus der Defaults-Prüfung (2026-10-16)
 
-- [ ] **Testlücken schließen oder begründen**
-  - Ohne Tests: `pkg/watch`, `pkg/output`, `pkg/crash`, `cmd`
-  - Je Bereich: Tests schreiben oder in DEVELOPMENT.md → "Bewusst nicht getestet" mit Begründung
-  - Ohne Test sind auch die Fixes aus 0.2.0: `getVersion()` (führendes `v`), Sentinel-Cleanup bei `--version` / Befehlsfehler
 - [ ] **Doku konsolidieren**
   - `TODO.README.md`, `TVIEW_MIGRATION.md`, `CROSS_PLATFORM_NOTES.md`, `docs/CROSS_PLATFORM_*` (5 Dateien), `docs/PLATFORM_COMPATIBILITY.md`
   - Teilweise veraltet: `CROSS_PLATFORM_NOTES.md` beschreibt noch die Bubbletea-UI als Standard
