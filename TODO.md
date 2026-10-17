@@ -14,7 +14,6 @@ Als Nächstes: Testlücken schließen oder begründen
   - Ohne Tests: `pkg/watch`, `pkg/output`, `pkg/crash`, `cmd`
   - Je Bereich: Tests schreiben oder in DEVELOPMENT.md → "Bewusst nicht getestet" mit Begründung
   - Ohne Test sind auch die Fixes aus 0.2.0: `getVersion()` (führendes `v`), Sentinel-Cleanup bei `--version` / Befehlsfehler
-  - Platzhalter-Tests in `pkg/discovery/arp_{windows,darwin,linux}_test.go` bestehen nur aus `Skip("… ist in arp.go implementiert")` und prüfen nichts
 - [ ] **Doku konsolidieren**
   - `TODO.README.md`, `TVIEW_MIGRATION.md`, `CROSS_PLATFORM_NOTES.md`, `docs/CROSS_PLATFORM_*` (5 Dateien), `docs/PLATFORM_COMPATIBILITY.md`
   - Teilweise veraltet: `CROSS_PLATFORM_NOTES.md` beschreibt noch die Bubbletea-UI als Standard
