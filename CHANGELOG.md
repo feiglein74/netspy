@@ -10,6 +10,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 - **Watch mit kleinem `--max-threads` blieb hängen** - Bei `--max-threads 1` bis `4` wurde mindestens eine Thread-Art auf 0 abgerundet. Bei 1 lief der Scan gar nicht, bis 4 wurden Hostnamen nie aufgelöst. Jetzt bekommt jede Art mindestens einen Thread
 - **Gekürzte Spalten im Scan-Modus nannten in `[+N]` eine zu kleine Zahl** versteckter Zeichen, und Umlaute konnten mitten im Zeichen abgeschnitten werden. Es wird jetzt in Zeichen statt in Bytes gezählt
+- **CSV-Ausgabe verschob Spalten**, wenn ein Feld ein Komma enthielt (z.B. Hersteller "Apple, Inc."). Felder werden jetzt nach RFC 4180 in Anführungszeichen gesetzt
+- `scan` sortierte Ergebnisse textuell nach IP (`.10` vor `.2`), jetzt numerisch - gilt für Tabelle, JSON und CSV
 
 ### Changed
 - Code nach golangci-lint bereinigt (staticcheck, ineffassign), keine Verhaltensänderung

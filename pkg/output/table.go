@@ -1,8 +1,11 @@
 package output
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -21,9 +24,9 @@ func PrintResults(hosts []scanner.Host, format string) error {
 		}
 	}
 
-	// Nach IP-Adresse sortieren
+	// Nach IP-Adresse sortieren (numerisch, sonst stünde .10 vor .2)
 	sort.Slice(onlineHosts, func(i, j int) bool {
-		return onlineHosts[i].IP.String() < onlineHosts[j].IP.String()
+		return bytes.Compare(onlineHosts[i].IP.To16(), onlineHosts[j].IP.To16()) < 0
 	})
 
 	switch strings.ToLower(format) {
@@ -85,21 +88,17 @@ func printJSON(hosts []scanner.Host) error {
 }
 
 func printCSV(hosts []scanner.Host) error {
-	fmt.Println("IP,Hostname,RTT,MAC,Vendor,DeviceType,Ports")
+	// encoding/csv setzt Felder mit Komma oder Anführungszeichen in Quotes
+	// (Herstellernamen wie "Apple, Inc." würden sonst die Spalten verschieben)
+	w := csv.NewWriter(os.Stdout)
+	if err := w.Write([]string{"IP", "Hostname", "RTT", "MAC", "Vendor", "DeviceType", "Ports"}); err != nil {
+		return err
+	}
 	for _, host := range hosts {
-		hostname := host.Hostname
-		if hostname == "" {
-			hostname = ""
-		}
-
 		rtt := ""
 		if host.RTT > 0 {
 			rtt = fmt.Sprintf("%.2f", float64(host.RTT.Microseconds())/1000.0)
 		}
-
-		mac := host.MAC
-		vendor := host.Vendor
-		deviceType := host.DeviceType
 
 		ports := ""
 		if len(host.Ports) > 0 {
@@ -110,15 +109,18 @@ func printCSV(hosts []scanner.Host) error {
 			ports = strings.Join(portStrs, ";")
 		}
 
-		fmt.Printf("%s,%s,%s,%s,%s,%s,%s\n",
+		if err := w.Write([]string{
 			host.IP.String(),
-			hostname,
+			host.Hostname,
 			rtt,
-			mac,
-			vendor,
-			deviceType,
+			host.MAC,
+			host.Vendor,
+			host.DeviceType,
 			ports,
-		)
+		}); err != nil {
+			return err
+		}
 	}
-	return nil
+	w.Flush()
+	return w.Error()
 }
