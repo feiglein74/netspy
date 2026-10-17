@@ -1,8 +1,8 @@
 # NetSpy TODO
 
-Zuletzt: Testlücken geschlossen (Tests in allen Paketen, Rest in DEVELOPMENT.md begründet), dabei 7 Fehler gefunden und behoben (CHANGELOG → Unreleased)
+Zuletzt: Testlücken geschlossen (Tests in allen Paketen, Rest in DEVELOPMENT.md begründet), dabei 7 Fehler gefunden und behoben (Release 0.2.2)
 In Arbeit: –
-Als Nächstes: Release 0.2.2, danach Doku konsolidieren
+Als Nächstes: Doku konsolidieren
 
 > **Hinweis:** Dies ist die öffentliche TODO-Liste für GitHub.
 > Interne/private TODOs gehören in `TODO.private.md` (wird nicht committed).

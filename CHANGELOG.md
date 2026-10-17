@@ -7,6 +7,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-17
+
 ### Fixed
 - **Einzelne IP auf der Kommandozeile wurde abgelehnt** - `netspy scan 192.0.2.5` brach mit "invalid CIDR" ab, ebenso `watch`. Jetzt scannt `scan` mit einer einzelnen IP genau diesen Host, `watch` beobachtet ihr /24 (wie das Netzfeld in der TUI)
 - **Watch mit kleinem `--max-threads` blieb hängen** - Bei `--max-threads 1` bis `4` wurde mindestens eine Thread-Art auf 0 abgerundet. Bei 1 lief der Scan gar nicht, bis 4 wurden Hostnamen nie aufgelöst. Jetzt bekommt jede Art mindestens einen Thread
@@ -18,6 +20,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Changed
 - Code nach golangci-lint bereinigt (staticcheck, ineffassign), keine Verhaltensänderung
 - DEVELOPMENT.md: golangci-lint als Linter, Prüfung für alle Plattformen per `GOOS`
+- Tests für alle Pakete (u.a. ARP-Parser aller drei Plattformen, Watch-Logik, Ausgabe, Crash-Erkennung, Kommandozeile); bewusst nicht getestete Bereiche sind in DEVELOPMENT.md begründet
 
 ## [0.2.1] - 2026-10-16
 
@@ -162,7 +165,8 @@ Dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/):
 - **MINOR** - Neue Funktionen (rückwärtskompatibel)
 - **PATCH** - Bugfixes (rückwärtskompatibel)
 
-[Unreleased]: https://github.com/feiglein74/netspy/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/feiglein74/netspy/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/feiglein74/netspy/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/feiglein74/netspy/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/feiglein74/netspy/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/feiglein74/netspy/compare/v0.1.1...v0.1.2
