@@ -65,6 +65,8 @@ können sich inzwischen verschoben haben):
 | MITTEL | `pkg/watch/details.go` | 478-479 | Banner in Modal auf 30 Zeichen gekürzt |
 
 - [ ] Stellen einzeln prüfen: welche sind durch `--full-output` und `[+N]`-Hinweis inzwischen abgedeckt?
+  - `http.go` (Banner, Titel) und `vendor_learn.go` kürzen zusätzlich nach Bytes (`s[:47] + "..."`) und können
+    Umlaute zerschneiden - auf `output.Truncate` umstellen oder dort ebenfalls in Runes zählen
 - [ ] **ARP-Refresh-Limit** (50 IPs) transparent machen oder konfigurierbar
 - [ ] Konfigurationsoption für Truncation-Limits (optional, niedrige Priorität)
 
