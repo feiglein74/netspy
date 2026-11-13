@@ -133,6 +133,35 @@ var _ = Describe("Watch-Hilfsfunktionen", func() {
 		})
 	})
 
+	Describe("serviceURL", func() {
+		It("baut URLs für erkannte http-, https- und ssh-Dienste", func() {
+			url, ok := serviceURL("192.168.1.1", PortScanResult{Port: "8443", Status: "open", Service: "https"})
+			Expect(ok).To(BeTrue())
+			Expect(url).To(Equal("https://192.168.1.1:8443"))
+
+			url, ok = serviceURL("192.168.1.1", PortScanResult{Port: "2222", Status: "open", Service: "ssh"})
+			Expect(ok).To(BeTrue())
+			Expect(url).To(Equal("ssh://192.168.1.1:2222"))
+		})
+
+		It("verbindet nicht bei Vermutungen, laufender Erkennung oder geschlossenen Ports", func() {
+			_, ok := serviceURL("192.168.1.1", PortScanResult{Port: "443", Status: "open", Service: "https?"})
+			Expect(ok).To(BeFalse())
+			_, ok = serviceURL("192.168.1.1", PortScanResult{Port: "443", Status: "open", Service: "https", Probing: true})
+			Expect(ok).To(BeFalse())
+			_, ok = serviceURL("192.168.1.1", PortScanResult{Port: "80", Status: "closed", Service: "http"})
+			Expect(ok).To(BeFalse())
+			_, ok = serviceURL("192.168.1.1", PortScanResult{Port: "445", Status: "open", Service: "smb?"})
+			Expect(ok).To(BeFalse())
+		})
+
+		It("klammert IPv6-Adressen", func() {
+			url, ok := serviceURL("fe80::1", PortScanResult{Port: "80", Status: "open", Service: "http"})
+			Expect(ok).To(BeTrue())
+			Expect(url).To(Equal("http://[fe80::1]:80"))
+		})
+	})
+
 	Describe("matchesFilter", func() {
 		var (
 			w     *TviewApp

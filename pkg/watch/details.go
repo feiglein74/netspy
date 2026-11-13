@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"netspy/pkg/crash"
+	"netspy/pkg/discovery"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -26,6 +27,7 @@ type HostDetailsModal struct {
 	portsInput  *tview.InputField
 	portsTable  *tview.Table
 	scanButton  *tview.Button
+	footer      *tview.TextView
 	state       *DeviceState
 	ipStr       string
 	onClose     func()
@@ -43,7 +45,8 @@ type PortScanResult struct {
 	Service string
 	Banner  string
 	RTT     time.Duration
-	Index   int // Original-Position in der Eingabe
+	Index   int  // Original-Position in der Eingabe
+	Probing bool // Diensterkennung läuft noch
 }
 
 // Standard-Ports für Quick-Scan
@@ -114,17 +117,17 @@ func (m *HostDetailsModal) setupUI() {
 		SetTitleAlign(tview.AlignCenter)
 
 	// Footer mit Hinweisen
-	footer := tview.NewTextView().
+	m.footer = tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter).
-		SetText("[yellow]Tab[white]=Switch  [yellow]Enter[white]=Scan  [yellow]ESC[white]=Close")
+		SetTextAlign(tview.AlignCenter)
+	m.showFooterHelp()
 
 	// Haupt-Layout (proportional)
 	m.flex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(m.detailsView, 0, 2, false). // ~33% für Details
 		AddItem(portsFlex, 0, 3, true).      // ~50% für Port-Scan (mehr Platz für Ergebnisse)
-		AddItem(footer, 1, 0, false)         // 1 Zeile für Footer
+		AddItem(m.footer, 1, 0, false)       // 1 Zeile für Footer
 	m.flex.SetBorder(true).
 		SetBorderColor(tcell.ColorYellow).
 		SetTitle(fmt.Sprintf(" %s ", m.ipStr)).
@@ -133,24 +136,45 @@ func (m *HostDetailsModal) setupUI() {
 
 	// Keyboard-Handler
 	m.flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		focus := m.app.GetFocus()
+		if event.Key() != tcell.KeyEnter {
+			// Meldung einer vorigen Aktion ausblenden
+			m.showFooterHelp()
+		}
 		switch event.Key() {
 		case tcell.KeyEscape:
 			m.Close()
 			return nil
 		case tcell.KeyEnter:
-			// Enter startet Scan wenn nicht im Input-Feld
-			if m.app.GetFocus() != m.portsInput {
-				m.startPortScan()
+			// In der Tabelle: mit dem gewählten Port verbinden, sonst Scan starten
+			if focus == m.portsTable {
+				m.connectSelected()
 				return nil
 			}
-			// Im Input-Feld: auch Scan starten
 			m.startPortScan()
 			return nil
+		case tcell.KeyDown:
+			// Aus Eingabe/Button in die Ergebnis-Tabelle wechseln
+			if focus != m.portsTable {
+				m.focusTable()
+				return nil
+			}
+		case tcell.KeyUp:
+			// Von der ersten Tabellenzeile zurück ins Eingabefeld
+			if focus == m.portsTable {
+				if row, _ := m.portsTable.GetSelection(); row <= 1 {
+					m.app.SetFocus(m.portsInput)
+					return nil
+				}
+			}
 		case tcell.KeyTab:
-			// Tab wechselt zwischen Input und Button
-			if m.app.GetFocus() == m.portsInput {
+			// Tab wechselt reihum: Input → Button → Tabelle
+			switch focus {
+			case m.portsInput:
 				m.app.SetFocus(m.scanButton)
-			} else {
+			case m.scanButton:
+				m.focusTable()
+			default:
 				m.app.SetFocus(m.portsInput)
 			}
 			return nil
@@ -319,15 +343,12 @@ func (m *HostDetailsModal) startPortScan() {
 	// Scan in Goroutine
 	go func() {
 		defer crash.RecoverAndLog("watch.details.portScan")
-		results := m.scanPorts(ports)
+		m.scanPorts(ports)
 
+		// Alle Einzel-Updates sind vorher eingereiht (FIFO) - hier nur noch final sortieren
 		m.app.QueueUpdateDraw(func() {
-			m.scanMu.Lock()
-			m.scanResults = results
-			m.scanMu.Unlock()
-
-			m.updatePortsTable()
 			m.scanning = false
+			m.updatePortsTable()
 			m.scanButton.SetLabel("Scan")
 		})
 	}()
@@ -374,10 +395,9 @@ func parsePortList(text string) []string {
 	return ports
 }
 
-// scanPorts führt den eigentlichen Scan durch
-func (m *HostDetailsModal) scanPorts(ports []string) []PortScanResult {
-	var results []PortScanResult
-	var mu sync.Mutex
+// scanPorts führt den eigentlichen Scan durch.
+// Offene TCP-Ports erscheinen sofort, die Diensterkennung aktualisiert die Zeile danach.
+func (m *HostDetailsModal) scanPorts(ports []string) {
 	var wg sync.WaitGroup
 
 	for idx, port := range ports {
@@ -389,22 +409,51 @@ func (m *HostDetailsModal) scanPorts(ports []string) []PortScanResult {
 			result := m.scanSinglePort(p)
 			result.Index = index // Original-Position speichern
 
-			mu.Lock()
-			results = append(results, result)
-			mu.Unlock()
+			portNum, err := strconv.Atoi(p)
+			probe := err == nil && result.Status == "open"
+			result.Probing = probe
+			m.publishResult(result)
 
-			// UI sofort updaten
-			m.app.QueueUpdateDraw(func() {
-				m.scanMu.Lock()
-				m.scanResults = append(m.scanResults, result)
-				m.scanMu.Unlock()
-				m.updatePortsTable()
-			})
+			if !probe {
+				return
+			}
+			info := discovery.DetectService(m.ipStr, portNum, 2*time.Second)
+			result.Probing = false
+			if info.Detected {
+				result.Service = info.Name
+				result.Banner = info.Detail
+				if result.Banner == "" {
+					result.Banner = "-"
+				}
+			} else if result.Service != "-" {
+				// Nur aus der Portnummer geschlossen - als Vermutung kennzeichnen
+				result.Service += "?"
+			}
+			m.publishResult(result)
 		}(port, idx)
 	}
 
 	wg.Wait()
-	return results
+}
+
+// publishResult fügt ein Ergebnis ein oder ersetzt das mit gleichem Index und zeichnet die Tabelle neu
+func (m *HostDetailsModal) publishResult(result PortScanResult) {
+	m.app.QueueUpdateDraw(func() {
+		m.scanMu.Lock()
+		replaced := false
+		for i := range m.scanResults {
+			if m.scanResults[i].Index == result.Index {
+				m.scanResults[i] = result
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			m.scanResults = append(m.scanResults, result)
+		}
+		m.scanMu.Unlock()
+		m.updatePortsTable()
+	})
 }
 
 // scanSinglePort scannt einen einzelnen Port
@@ -441,9 +490,6 @@ func (m *HostDetailsModal) scanSinglePort(port string) PortScanResult {
 	result.Status = "open"
 	result.RTT = time.Since(start)
 
-	// Einfaches Banner Grabbing für bekannte Ports
-	result.Banner = m.grabBanner(conn, port)
-
 	return result
 }
 
@@ -465,30 +511,6 @@ func (m *HostDetailsModal) pingICMP() (time.Duration, bool) {
 	rtt := time.Since(start)
 
 	return rtt, err == nil
-}
-
-// grabBanner versucht ein Banner vom Service zu lesen
-func (m *HostDetailsModal) grabBanner(conn net.Conn, port string) string {
-	// Ohne Deadline könnte Read unbegrenzt blockieren - dann lieber kein Banner
-	if err := conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
-		return ""
-	}
-
-	buf := make([]byte, 256)
-	n, err := conn.Read(buf)
-	if err != nil || n == 0 {
-		return "-"
-	}
-
-	banner := strings.TrimSpace(string(buf[:n]))
-	// Nur erste Zeile, max 30 Zeichen
-	if idx := strings.Index(banner, "\n"); idx > 0 {
-		banner = banner[:idx]
-	}
-	if len(banner) > 30 {
-		banner = banner[:30] + "..."
-	}
-	return banner
 }
 
 // getServiceName gibt den bekannten Service-Namen für einen Port zurück
@@ -580,8 +602,12 @@ func (m *HostDetailsModal) updatePortsTable() {
 		// Zellen setzen
 		m.portsTable.SetCell(row, 0, tview.NewTableCell(result.Port).SetTextColor(tcell.ColorWhite))
 		m.portsTable.SetCell(row, 1, tview.NewTableCell(statusSymbol).SetTextColor(statusColor))
+		banner := result.Banner
+		if result.Probing {
+			banner = "…"
+		}
 		m.portsTable.SetCell(row, 2, tview.NewTableCell(result.Service).SetTextColor(tcell.ColorWhite))
-		m.portsTable.SetCell(row, 3, tview.NewTableCell(result.Banner).SetTextColor(tcell.ColorGray))
+		m.portsTable.SetCell(row, 3, tview.NewTableCell(banner).SetTextColor(tcell.ColorGray))
 		m.portsTable.SetCell(row, 4, tview.NewTableCell(rttStr).SetTextColor(tcell.ColorWhite))
 	}
 }

@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+- **Diensterkennung im Port-Scan der Host-Details** - Offene Ports werden aktiv abgefragt statt nur über die Portnummer benannt: Begrüßungs-Banner (SSH, FTP, SMTP, POP3, IMAP, VNC), TLS-Handshake mit Zertifikatsname, HTTP mit Server-Header und vollständigem Seitentitel. HTTPS wird auch auf ungewöhnlichen Ports erkannt. Nicht erkannte Dienste zeigen den Namen aus der Portnummer mit `?` als Vermutung
+- **Mit Port verbinden** - In den Host-Details mit ↓/↑ einen Port wählen, Enter öffnet erkannte http-, https- und ssh-Dienste mit dem Standardprogramm des Systems (`https://ip:port` im Browser, `ssh://ip:port` im Terminal)
+
+### Changed
+- Port-Scan-Ergebnisse werden nach Abschluss nach Status sortiert (offen zuerst) - war vorgesehen, griff aber nie
+- Banner im Port-Scan werden nicht mehr auf 30 Zeichen gekürzt
+
 ## [0.2.2] - 2026-10-17
 
 ### Fixed
