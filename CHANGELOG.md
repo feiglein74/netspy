@@ -14,6 +14,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Changed
 - Port-Scan-Ergebnisse werden nach Abschluss nach Status sortiert (offen zuerst) - war vorgesehen, griff aber nie
 - Banner im Port-Scan werden nicht mehr auf 30 Zeichen gekürzt
+- Abhängigkeiten aktualisiert (u.a. golang.org/x/net, x/sys, x/text, x/term, fsnotify, go-isatty, ginkgo); `sourcegraph/conc` entfällt
+- Release-Builds nutzen die neueste stabile Go-Version statt der Mindestversion aus `go.mod`, damit Sicherheits-Fixes der Standardbibliothek enthalten sind
 
 ## [0.2.2] - 2026-10-17
 

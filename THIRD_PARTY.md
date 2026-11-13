@@ -4,7 +4,7 @@ NetSpy baut auf der Arbeit anderer auf. Diese Datei listet alle Go-Module, die i
 ausgelieferten Binary enthalten sind, sowie die externen Datenquellen und Werkzeuge.
 Danke an alle Autorinnen und Autoren!
 
-Stand: NetSpy 0.2.0. Maßgeblich für eine konkrete Version sind `go.mod` / `go.sum` sowie
+Stand: Abhängigkeiten vom 2026-11-13 (nach 0.2.2). Maßgeblich für eine konkrete Version sind `go.mod` / `go.sum` sowie
 die SBOM im jeweiligen Release.
 
 ## Maschinenlesbare SBOM
@@ -31,25 +31,24 @@ GOOS=linux GOARCH=amd64 cyclonedx-gomod app -json -licenses -assert-licenses -ou
 | [github.com/spf13/cobra](https://github.com/spf13/cobra) | v1.10.2 | Apache-2.0 | CLI-Befehle und Shell-Completion | ✓ |
 | [github.com/spf13/viper](https://github.com/spf13/viper) | v1.21.0 | MIT | Konfiguration (`~/.netspy.yaml`) | ✓ |
 | [github.com/fatih/color](https://github.com/fatih/color) | v1.19.0 | MIT | Farbige CLI-Ausgabe | ✓ |
-| [golang.org/x/term](https://cs.opensource.google/go/x/term) | v0.47.0 | BSD-3-Clause | Terminal-Größe und -Modus | ✓ |
+| [golang.org/x/term](https://cs.opensource.google/go/x/term) | v0.48.0 | BSD-3-Clause | Terminal-Größe und -Modus | ✓ |
 | [github.com/gdamore/encoding](https://github.com/gdamore/encoding) | v1.0.1 | Apache-2.0 | Zeichensätze (über tcell) | |
-| [github.com/lucasb-eyer/go-colorful](https://github.com/lucasb-eyer/go-colorful) | v1.3.0 | MIT | Farbräume (über tcell) | |
+| [github.com/lucasb-eyer/go-colorful](https://github.com/lucasb-eyer/go-colorful) | v1.4.1 | MIT | Farbräume (über tcell) | |
 | [github.com/rivo/uniseg](https://github.com/rivo/uniseg) | v0.4.7 | MIT | Unicode-Textbreite (über tview/tcell) | |
-| [github.com/mattn/go-colorable](https://github.com/mattn/go-colorable) | v0.1.14 | MIT | ANSI-Farben unter Windows (über color) | |
-| [github.com/mattn/go-isatty](https://github.com/mattn/go-isatty) | v0.0.20 | MIT | Terminal-Erkennung (über color) | |
+| [github.com/mattn/go-colorable](https://github.com/mattn/go-colorable) | v0.1.16 | MIT | ANSI-Farben unter Windows (über color) | |
+| [github.com/mattn/go-isatty](https://github.com/mattn/go-isatty) | v0.0.24 | MIT | Terminal-Erkennung (über color) | |
 | [github.com/inconshreveable/mousetrap](https://github.com/inconshreveable/mousetrap) | v1.1.0 | Apache-2.0 | Explorer-Start-Erkennung, nur Windows (über cobra) | |
-| [github.com/spf13/pflag](https://github.com/spf13/pflag) | v1.0.10 | BSD-3-Clause | POSIX-Flags (über cobra) | |
+| [github.com/spf13/pflag](https://github.com/spf13/pflag) | v1.1.0 | BSD-3-Clause | POSIX-Flags (über cobra) | |
 | [github.com/spf13/afero](https://github.com/spf13/afero) | v1.15.0 | Apache-2.0 | Dateisystem-Abstraktion (über viper) | |
 | [github.com/spf13/cast](https://github.com/spf13/cast) | v1.10.0 | MIT | Typumwandlung (über viper) | |
-| [github.com/fsnotify/fsnotify](https://github.com/fsnotify/fsnotify) | v1.9.0 | BSD-3-Clause | Datei-Überwachung (über viper) | |
-| [github.com/go-viper/mapstructure/v2](https://github.com/go-viper/mapstructure) | v2.4.0 | MIT | Config-Mapping (über viper) | |
-| [github.com/pelletier/go-toml/v2](https://github.com/pelletier/go-toml) | v2.2.4 | MIT | TOML-Parser (über viper) | |
-| [go.yaml.in/yaml/v3](https://github.com/yaml/go-yaml) | v3.0.5 | MIT und Apache-2.0 | YAML-Parser (über viper) | |
+| [github.com/fsnotify/fsnotify](https://github.com/fsnotify/fsnotify) | v1.10.1 | BSD-3-Clause | Datei-Überwachung (über viper) | |
+| [github.com/go-viper/mapstructure/v2](https://github.com/go-viper/mapstructure) | v2.5.0 | MIT | Config-Mapping (über viper) | |
+| [github.com/pelletier/go-toml/v2](https://github.com/pelletier/go-toml) | v2.4.3 | MIT | TOML-Parser (über viper) | |
+| [go.yaml.in/yaml/v3](https://github.com/yaml/go-yaml) | v3.0.6 | MIT und Apache-2.0 | YAML-Parser (über viper) | |
 | [github.com/subosito/gotenv](https://github.com/subosito/gotenv) | v1.6.0 | MIT | `.env`-Parser (über viper) | |
-| [github.com/sagikazarmark/locafero](https://github.com/sagikazarmark/locafero) | v0.11.0 | MIT | Config-Dateisuche (über viper) | |
-| [github.com/sourcegraph/conc](https://github.com/sourcegraph/conc) | v0.3.1-0.20240121214520-5f936abd7ae8 | MIT | Nebenläufigkeit (über viper) | |
-| [golang.org/x/sys](https://cs.opensource.google/go/x/sys) | v0.49.0 | BSD-3-Clause | Systemaufrufe (über color, tcell, term) | |
-| [golang.org/x/text](https://cs.opensource.google/go/x/text) | v0.38.0 | BSD-3-Clause | Zeichensatz-Umwandlung (über tcell, viper) | |
+| [github.com/sagikazarmark/locafero](https://github.com/sagikazarmark/locafero) | v0.12.0 | MIT | Config-Dateisuche (über viper) | |
+| [golang.org/x/sys](https://cs.opensource.google/go/x/sys) | v0.50.0 | BSD-3-Clause | Systemaufrufe (über color, tcell, term) | |
+| [golang.org/x/text](https://cs.opensource.google/go/x/text) | v0.44.0 | BSD-3-Clause | Zeichensatz-Umwandlung (über tcell, viper) | |
 
 Dazu kommt die [Go-Standardbibliothek](https://go.dev/) (BSD-3-Clause).
 
@@ -59,7 +58,7 @@ Diese Pakete werden nicht in die Binary eingebaut.
 
 | Modul | Version | Lizenz | Zweck |
 |---|---|---|---|
-| [github.com/onsi/ginkgo/v2](https://github.com/onsi/ginkgo) | v2.33.1 | MIT | BDD-Test-Framework |
+| [github.com/onsi/ginkgo/v2](https://github.com/onsi/ginkgo) | v2.34.0 | MIT | BDD-Test-Framework |
 | [github.com/onsi/gomega](https://github.com/onsi/gomega) | v1.44.0 | MIT | Matcher für Tests |
 
 ## Externe Datenquellen
