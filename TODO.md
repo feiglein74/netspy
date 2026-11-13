@@ -58,7 +58,6 @@ können sich inzwischen verschoben haben):
 | MITTEL | `pkg/output/table_responsive.go` | 122-183 | DeviceType automatisch auf 16-23 Zeichen gekürzt |
 | MITTEL | `pkg/output/table_responsive.go` | 191-204 | HTTP-Banner + Ports automatisch gekürzt |
 | MITTEL | `pkg/discovery/vendor_learn.go` | 177-202 | Vendor-Name automatisch auf 25 Zeichen gekürzt |
-| MITTEL | `pkg/watch/details.go` | 478-479 | Banner in Modal auf 30 Zeichen gekürzt |
 
 - [ ] Stellen einzeln prüfen: welche sind durch `--full-output` und `[+N]`-Hinweis inzwischen abgedeckt?
   - `http.go` (Banner, Titel) und `vendor_learn.go` kürzen zusätzlich nach Bytes (`s[:47] + "..."`) und können
@@ -66,10 +65,56 @@ können sich inzwischen verschoben haben):
 - [ ] **ARP-Refresh-Limit** (50 IPs) transparent machen oder konfigurierbar
 - [ ] Konfigurationsoption für Truncation-Limits (optional, niedrige Priorität)
 
+## Roadmap: Vom Scanner zum Wächter (Wettbewerbsvergleich 2026-11-13)
+
+Vergleich mit Fing, NetAlertX, WatchYourLAN, nmap, Advanced IP Scanner: größte Lücke ist,
+dass netspy nichts über Neustarts hinweg weiß und niemanden benachrichtigt.
+Grundlage ist bereits da: `watch.DeviceState` hat `FirstSeen`, `LastSeen`, `FlapCount` usw.
+
+Ist-Stand „neue Geräte“: Geräte, die nach dem ersten Scan auftauchen, werden farbig markiert
+(`pkg/watch/tview.go`, `FirstSeenScan`) – aber nur für 2 Scans, nur innerhalb des laufenden Prozesses,
+ohne Log/Benachrichtigung, und `deviceStates` ist nach IP geschlüsselt (neue MAC auf alter IP fällt
+vermutlich nicht als neu auf – prüfen).
+
+### Phase 1 – Bekannte Geräte (Persistenz) · Aufwand: ~2–3 Tage
+- [ ] Gerätespeicher `~/.netspy/known_hosts.json` (Schlüssel: MAC; Felder: erste/letzte Sichtung,
+      letzte IP, Hostname, Vendor, eigener Name, Notiz, „vertraut“-Markierung)
+  - Pro Netz trennen (CIDR), Schreiben atomar (temp + rename), Laden beim Start von watch
+  - Randomisierte/private MACs (bereits erkannt) gesondert behandeln: nicht als „neu“ melden, sondern Hinweis zeigen
+  - Geräte ohne MAC (ICMP-Modus, geroutete Netze): Schlüssel IP, transparent als „unsicher“ kennzeichnen
+- [ ] TUI: Markierung „NEU“ für nie zuvor gesehene Geräte (über Neustarts hinweg, nicht nur pro Lauf),
+      bleibt bis zur Bestätigung (z. B. „als bekannt markieren“) statt nach 2 Scans zu verschwinden
+- [ ] MAC-Wechsel auf gleicher IP erkennen und als neues Gerät behandeln
+- [ ] TUI: Gerät benennen / als vertraut markieren im Host-Detail (`Enter`)
+- [ ] Spalten/Filter: `name=`, `new`, `known`; „zuletzt gesehen“ für aktuell offline bekannte Geräte
+- [ ] Opt-out-Flag `--no-store` (Default = speichern, transparent im Header angezeigt)
+
+### Phase 2 – Benachrichtigungen · Aufwand: ~2 Tage
+- [ ] Ereignisse: neues Gerät, Gerät offline (nach Schwelle, z. B. `--offline-after 5m`), wieder online, IP-Wechsel einer MAC
+- [ ] Kanäle (opt-in per Flag/Config): generischer Webhook (JSON), ntfy, Kommando ausführen (`--on-event cmd`)
+- [ ] Event-Log in der TUI (eigenes Panel oder Overlay) + `~/.netspy/events.log`
+- [ ] Entprellen: Flapping-Geräte nicht bei jedem Wechsel melden
+- (ersetzt den früheren Punkt „Alarmierung bei offline gehenden Geräten“)
+
+### Phase 3 – Headless-Betrieb · Aufwand: ~1–2 Tage
+- [ ] `netspy watch --headless`: ohne TUI, Events als Text- oder JSON-Zeilen auf stdout (für systemd, Docker, Pi)
+- [ ] Beispiel-systemd-Unit und Dockerfile in `docs/`
+- [ ] Konfigurationsdatei vervollständigen (siehe Abschnitt Konfiguration) – nötig für Kanäle und Schwellen
+
+### Phase 4 – Bessere Geräteerkennung · Aufwand: ~2–4 Tage, optional
+- [ ] SSDP/UPnP-Discovery (Modellname, Hersteller von TVs, Routern, Druckern, Sonos …)
+- [ ] mDNS-Service-Typen auswerten (`_airplay`, `_ipp`, `_googlecast` …) für Gerätetyp
+- [ ] HTTP-Titel/Banner in die Typ-Heuristik einbeziehen
+
+### Kleinere Ergänzungen
+- [ ] Wake-on-LAN für bekannte Geräte aus dem Host-Detail
+- [ ] Verbindungsaktionen für weitere Dienste im Host-Detail (Enter auf Port) – je Plattform entscheiden:
+      RDP (3389), VNC (5900), SMB (445, Freigabe im Finder/Explorer); SSH mit Benutzername?
+      (http, https, ssh per URL über den Standard-Handler gibt es bereits)
+
 ## Features
 
 - [ ] Export der Watch-Ergebnisse
-- [ ] Alarmierung bei offline gehenden Geräten
 - [ ] Web-UI für den Watch-Modus
 - [ ] Redraw der Tabelle bei wachsender Tabelle, Flaps-Spalte falsch – stammt aus der ANSI-UI, prüfen ob mit tview noch relevant
 
