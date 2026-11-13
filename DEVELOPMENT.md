@@ -157,12 +157,28 @@ go mod tidy
 **Bei jeder Änderung an Abhängigkeiten [THIRD_PARTY.md](THIRD_PARTY.md) nachziehen**
 (Versionen, Lizenzen, neue oder entfallene Module). Welche Module tatsächlich in der Binary
 stecken: `go version -m <binary>`. Die Liste unterscheidet sich je Plattform
-(z.B. `mousetrap` nur unter Windows).
+(z.B. `mousetrap` nur unter Windows). Prüfen: `./scripts/check-third-party.sh`
+(vergleicht beide Tabellen mit `go.mod` für Windows, Linux und macOS).
+
+### Regelmäßige Aktualisierung
+
+| Baustein | Wann | Was |
+|---|---|---|
+| Dependabot (`.github/dependabot.yml`) | montags | Ein gebündelter PR für Go-Module, einer für GitHub Actions |
+| CI (`.github/workflows/ci.yml`) | jeder Push auf `main`, jeder PR | Tests und `go vet` auf Linux, macOS, Windows; golangci-lint für alle drei Plattformen; govulncheck; `check-third-party.sh` |
+| CI-Wochenlauf | montags 06:00 UTC | Derselbe Lauf gegen `main` mit aktuellem Go - findet neue Lücken in Modulen **und** in der Standardbibliothek, auch ohne Code-Änderung. Schlägt er fehl, schickt GitHub eine Mail |
+| Release-Workflow | Tag `v*` | Baut mit der neuesten stabilen Go-Version (`go-version: stable`), damit Fixes der Standardbibliothek in den Binaries landen; SBOM und Lizenztexte entstehen dabei neu |
+
+Ablauf bei einem Dependabot-PR: CI abwarten. Meldet `THIRD_PARTY.md aktuell` eine
+Abweichung, auf dem PR-Branch die Tabelle anpassen (bei neuen Modulen Lizenz und Zweck
+eintragen), dann mergen. Schlägt nur der Wochenlauf bei govulncheck an und betrifft die
+Lücke die Standardbibliothek, reicht ein neues Release (baut mit gepatchtem Go); lokal Go
+aktualisieren.
 
 ## Release
 
 1. `CHANGELOG.md` pflegen, `Version` in `cmd/version.go` auf die neue Version setzen
-2. Tests und Linting, committen, pushen
+2. Tests und Linting, committen, pushen, CI auf `main` grün abwarten
 3. Tag `vX.Y.Z` pushen → `.github/workflows/release.yml` baut 6 Plattformen
    (windows/linux/darwin × amd64/arm64)
 4. Pro Plattform entsteht ein ZIP (Binary, `vendor_learned.txt`, `LICENSE`,

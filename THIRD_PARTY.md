@@ -76,5 +76,8 @@ Diese Dienste ruft NetSpy zur Laufzeit ab.
 |---|---|---|
 | [Go](https://go.dev/) | BSD-3-Clause | Compiler und Toolchain |
 | [cyclonedx-gomod](https://github.com/CycloneDX/cyclonedx-gomod) | Apache-2.0 | SBOM-Erzeugung im Release |
+| [golangci-lint](https://github.com/golangci/golangci-lint) | GPL-3.0 | Linting (lokal und in der CI, nicht in der Binary) |
+| [govulncheck](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck), [govulncheck-action](https://github.com/golang/govulncheck-action) | BSD-3-Clause | Prüfung auf bekannte Sicherheitslücken in der CI |
+| [Dependabot](https://docs.github.com/de/code-security/dependabot) | – (GitHub-Dienst) | Wöchentliche Update-PRs für Module und Actions |
 | [vhs](https://github.com/charmbracelet/vhs) | MIT | Aufnahme von `docs/demo.gif` |
-| GitHub Actions: [checkout](https://github.com/actions/checkout), [setup-go](https://github.com/actions/setup-go), [upload-artifact](https://github.com/actions/upload-artifact), [download-artifact](https://github.com/actions/download-artifact), [action-gh-release](https://github.com/softprops/action-gh-release) | MIT | Release-Pipeline |
+| GitHub Actions: [checkout](https://github.com/actions/checkout), [setup-go](https://github.com/actions/setup-go), [upload-artifact](https://github.com/actions/upload-artifact), [download-artifact](https://github.com/actions/download-artifact), [action-gh-release](https://github.com/softprops/action-gh-release) | MIT | Release- und CI-Pipeline |

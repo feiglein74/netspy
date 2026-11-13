@@ -1,0 +1,32 @@
+# Wöchentliche Update-PRs für Go-Module und GitHub Actions.
+# Updates werden je Ökosystem zu einem PR gebündelt; die CI prüft jeden PR.
+# Bei Änderungen an Modulen der Binary meldet die CI, falls THIRD_PARTY.md nachgezogen werden muss.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Europe/Berlin
+    groups:
+      go-modules:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Europe/Berlin
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore
+      include: scope

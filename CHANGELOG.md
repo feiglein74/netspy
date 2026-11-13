@@ -15,6 +15,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Port-Scan-Ergebnisse werden nach Abschluss nach Status sortiert (offen zuerst) - war vorgesehen, griff aber nie
 - Banner im Port-Scan werden nicht mehr auf 30 Zeichen gekürzt
 - Abhängigkeiten aktualisiert (u.a. golang.org/x/net, x/sys, x/text, x/term, fsnotify, go-isatty, ginkgo); `sourcegraph/conc` entfällt
+- **CI und regelmäßige Aktualisierung** - Neuer Workflow `ci.yml`: Tests und `go vet` auf Linux, macOS und Windows, golangci-lint für alle drei Plattformen, govulncheck und eine Prüfung, ob `THIRD_PARTY.md` zu `go.mod` passt (`scripts/check-third-party.sh`); läuft bei Push, PR und wöchentlich. Dependabot erzeugt wöchentlich gebündelte Update-PRs für Go-Module und GitHub Actions
 - Release-Builds nutzen die neueste stabile Go-Version statt der Mindestversion aus `go.mod`, damit Sicherheits-Fixes der Standardbibliothek enthalten sind
 
 ## [0.2.2] - 2026-10-17

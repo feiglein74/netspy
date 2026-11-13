@@ -1,0 +1,96 @@
+name: CI
+
+# Prüft jeden Push auf main und jeden Pull Request (auch die von Dependabot).
+# Der wöchentliche Lauf findet neue Sicherheitslücken, auch wenn sich am Code nichts ändert -
+# schlägt er fehl, verschickt GitHub eine Benachrichtigung.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 6 * * 1' # Montags 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+  lint:
+    name: Lint (alle Plattformen)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+
+      # Mit der aktuellen Go-Version bauen, sonst bricht der Linter bei neuerem go.mod ab
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+
+      - name: Lint
+        run: |
+          for os in linux darwin windows; do
+            echo "== GOOS=$os"
+            GOOS=$os golangci-lint run ./...
+          done
+
+  vulncheck:
+    name: Sicherheitslücken (govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-input: stable
+          check-latest: true
+
+  third-party:
+    name: THIRD_PARTY.md aktuell
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+
+      - name: Modul-Tabellen mit go.mod vergleichen
+        run: ./scripts/check-third-party.sh

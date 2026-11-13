@@ -25,9 +25,6 @@ Als Nächstes: Doku konsolidieren
 
 - [ ] **Code Coverage Reporting** (Ziel: > 80 %)
 - [ ] **gofmt Pre-Commit Hook**
-- [ ] **Tests in CI** - GitHub-Actions-Workflow für `go test`, `go vet` und `golangci-lint` bei Push und PR
-  (golangci-lint dort für alle drei Plattformen, siehe DEVELOPMENT.md → Tests & Linting)
-  (Release-Builds für alle Plattformen gibt es bereits, siehe `.github/workflows/release.yml`)
 
 ## Konfiguration
 
